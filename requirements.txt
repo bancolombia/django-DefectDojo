@@ -83,6 +83,7 @@ netaddr==0.8.0
 vulners==2.0.10
 fontawesomefree==6.4.0
 azure-devops==7.1.0b3
+
 #New Dependencies
 MarkupSafe==2.0
 prompt-toolkit==3.0.20
@@ -91,7 +92,7 @@ inflection==0.5.1
 requests-toolbelt==0.10.1
 smmap==4.0.0
 wcwidth==0.2.5
-pyOpenSSL==21.0.0
+#pyOpenSSL==21.0.0
 kombu==5.2.3
 python-jose==3.3.0
 six==1.16.0
