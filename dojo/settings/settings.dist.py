@@ -955,6 +955,7 @@ DJANGO_MIDDLEWARE_CLASSES = [
     "auditlog.middleware.AuditlogMiddleware",
     "crum.CurrentRequestUserMiddleware",
     "dojo.request_cache.middleware.RequestCacheMiddleware",
+    "csp.middleware.CSPMiddleware",
 ]
 
 MIDDLEWARE = DJANGO_MIDDLEWARE_CLASSES
@@ -1705,6 +1706,10 @@ LOGGING = {
         },
     },
 }
+# Content Security Policy
+CSP_IMG_SRC = ("'self'")
+CSP_STYLE_SRC = ("'self'")
+CSP_SCRIPT_SRC = ("'self'")
 
 # override filter to ensure sensitive variables are also hidden when DEBUG = True
 DEFAULT_EXCEPTION_REPORTER_FILTER = "dojo.settings.exception_filter.CustomExceptionReporterFilter"
