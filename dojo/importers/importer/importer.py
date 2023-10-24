@@ -148,14 +148,12 @@ class DojoDefaultImporter(object):
                         group_names_to_findings_dict[name] = [item]
 
             if hasattr(item, "unsaved_req_resp") and len(item.unsaved_req_resp) > 0:
-                threading.Thread(target=importer_utils.handle_unsaved_req, args=(item)).start()
+                async_importer_utils = threading.Thread(target=importer_utils.handle_unsaved_req, args=(item))
+                async_importer_utils.start()
 
             if item.unsaved_request is not None and item.unsaved_response is not None:
-                threading.Thread(target=importer_utils.handle_unsaved_req_and_response, args=(item)).start()
-
-            importer_utils.chunk_endpoints_and_disperse(item, test, item.unsaved_endpoints)
-            if endpoints_to_add:
-                importer_utils.chunk_endpoints_and_disperse(item, test, endpoints_to_add)
+                async_importer_utils_req_res = threading.Thread(target=importer_utils.handle_unsaved_req_and_response, args=(item))
+                async_importer_utils_req_res.start()
 
             if item.unsaved_tags:
                 item.tags = item.unsaved_tags
@@ -181,14 +179,16 @@ class DojoDefaultImporter(object):
             else:
                 logger.info('Saving pushing to jira')
                 item.save(push_to_jira=push_to_jira)
+                
+            importer_utils.chunk_endpoints_and_disperse(item, test, item.unsaved_endpoints)
+            if endpoints_to_add:
+                importer_utils.chunk_endpoints_and_disperse(item, test, endpoints_to_add)
            
         sync= kwargs.get("sync", False)
                 
         if not sync:
             logger.debug(f'ASYNC: Saving {len(items_to_save)} findings')
-            ignore_conflicts = True
-            async_saving = threading.Thread(target=Finding.objects.abulk_create, args=(items_to_save, ignore_conflicts))
-            async_saving.start()
+            Finding.objects.abulk_create(items_to_save, ignore_conflicts=True)
         else:
             logger.debug(f'SYNC: Saving {len(items_to_save)} findings')
             Finding.objects.bulk_create(items_to_save, ignore_conflicts=True)
@@ -211,7 +211,7 @@ class DojoDefaultImporter(object):
                 )
                 for finding in new_findings
             ]
-        if not sync: async_saving.join()
+
         return new_findings
 
     def close_old_findings(
