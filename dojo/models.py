@@ -2129,6 +2129,8 @@ class Test_Import_Finding_Action(TimeStampedModel):
 
 
 class Finding(models.Model):
+    
+    id = models.BigAutoField(primary_key=True)
 
     title = models.CharField(max_length=511,
                              verbose_name=_('Title'),

@@ -16,10 +16,11 @@ from dojo.models import (
     Test_Import_Finding_Action,
     Endpoint_Status,
     Vulnerability_Id,
+    BurpRawRequestResponse
 )
 import json
 import logging
-
+import base64
 
 logger = logging.getLogger(__name__)
 
@@ -267,3 +268,22 @@ def adjust_date_format(obj):
         date_str = datetime_str[:10]  # Extract date (YYYY-MM-DD)
         obj["fields"]["date"] = date_str
     return obj
+
+def handle_unsaved_req(item):
+    for req_resp in item.unsaved_req_resp:
+        burp_rr = BurpRawRequestResponse(
+            finding=item,
+            burpRequestBase64=base64.b64encode(req_resp["req"].encode("utf-8")),
+            burpResponseBase64=base64.b64encode(req_resp["resp"].encode("utf-8")),
+        )
+        burp_rr.clean()
+        burp_rr.save()
+        
+def handle_unsaved_req_and_response(item):
+    burp_rr = BurpRawRequestResponse(
+        finding=item,
+        burpRequestBase64=base64.b64encode(item.unsaved_request.encode()),
+        burpResponseBase64=base64.b64encode(item.unsaved_response.encode()),
+    )
+    burp_rr.clean()
+    burp_rr.save()
