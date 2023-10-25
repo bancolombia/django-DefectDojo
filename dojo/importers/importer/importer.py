@@ -198,8 +198,7 @@ class DojoDefaultImporter(object):
             if is_finding_groups_enabled() and group_by:
                 saved_item_from_groups.save()
             else:
-                if push_to_jira:
-                    saved_item_from_groups.save(push_to_jira=push_to_jira)
+                saved_item_from_groups.save(push_to_jira=push_to_jira)
                 
             if is_finding_groups_enabled() and group_by:
                 # If finding groups are enabled, group all findings by group name
