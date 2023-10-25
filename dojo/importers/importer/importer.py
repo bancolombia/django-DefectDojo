@@ -153,8 +153,9 @@ class DojoDefaultImporter(object):
             saved_items.append(item)
             item.found_by.add(item.test.test_type)
 
-        
         for saved_item_from_groups in saved_items:
+            
+            saved_item_from_groups.post_proccesing_in_celery_task()
             
             if saved_item_from_groups.unsaved_files:
                 for unsaved_file in saved_item_from_groups.unsaved_files:

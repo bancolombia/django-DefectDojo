@@ -3014,17 +3014,18 @@ class Finding(models.Model):
                 self.static_finding = True
 
         logger.debug("Saving finding of id " + str(self.id) + " dedupe_option:" + str(dedupe_option) + " (self.pk is %s)", "None" if self.pk is None else "not None")
-        # super(Finding, self).save(*args, **kwargs)
 
-        # self.found_by.add(self.test.test_type)
-
+        return self
+    
+    def post_proccesing_in_celery_task(self, dedupe_option=True, rules_option=True, product_grading_option=True,
+             issue_updater_option=True, push_to_jira=False, user=None, *args, **kwargs):
+        from dojo.finding import helper as finding_helper
         # only perform post processing (in celery task) if needed. this check avoids submitting 1000s of tasks to celery that will do nothing
         if dedupe_option or issue_updater_option or product_grading_option or push_to_jira:
             finding_helper.post_process_finding_save(self, dedupe_option=dedupe_option, rules_option=rules_option, product_grading_option=product_grading_option,
                 issue_updater_option=issue_updater_option, push_to_jira=push_to_jira, user=user, *args, **kwargs)
         else:
             logger.debug('no options selected that require finding post processing')
-        return self
 
     # Check if a mandatory field is empty. If it's the case, fill it with "no <fieldName> given"
     def clean(self):
