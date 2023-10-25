@@ -13,10 +13,11 @@ import dojo.notifications.helper as notifications_helper
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.utils import timezone
-from dojo.models import FileUpload, Finding, Test, Test_Import, Test_Type
+from dojo.models import BurpRawRequestResponse, FileUpload, Finding, Test, Test_Import, Test_Type
 from dojo.tools.factory import get_parser
+from multiprocessing import Process
 import logging
-import threading
+import time
 
 
 logger = logging.getLogger(__name__)
@@ -136,30 +137,26 @@ class DojoDefaultImporter(object):
             if service:
                 item.service = service
 
-            items_to_save.append(item)
+            items_to_save.append(item.save_proccesing_for_bulk_create(dedupe_option=True))
+           
+        sync= kwargs.get("sync", False)
+                
+        if not sync:
+            Finding.objects.abulk_create(items_to_save, ignore_conflicts=True)
+        else:
+            Finding.objects.bulk_create(items_to_save, ignore_conflicts=True)
+            
+        for saved_item in items_to_save:
+            item = Finding.objects.get(hash_code=saved_item.hash_code)
+            item.found_by.add(item.test.test_type)
 
-            if is_finding_groups_enabled() and group_by:
-                # If finding groups are enabled, group all findings by group name
-                name = finding_helper.get_group_by_group_name(item, group_by)
-                if name is not None:
-                    if name in group_names_to_findings_dict:
-                        group_names_to_findings_dict[name].append(item)
-                    else:
-                        group_names_to_findings_dict[name] = [item]
 
-            if hasattr(item, "unsaved_req_resp") and len(item.unsaved_req_resp) > 0:
-                async_importer_utils = threading.Thread(target=importer_utils.handle_unsaved_req, args=(item))
-                async_importer_utils.start()
-
-            if item.unsaved_request is not None and item.unsaved_response is not None:
-                async_importer_utils_req_res = threading.Thread(target=importer_utils.handle_unsaved_req_and_response, args=(item))
-                async_importer_utils_req_res.start()
-
-            if item.unsaved_tags:
-                item.tags = item.unsaved_tags
-
-            if item.unsaved_files:
-                for unsaved_file in item.unsaved_files:
+        saved_items = Finding.objects.all()
+        
+        for saved_item_from_groups in saved_items:
+            
+            if saved_item_from_groups.unsaved_files:
+                for unsaved_file in saved_item_from_groups.unsaved_files:
                     data = base64.b64decode(unsaved_file.get("data"))
                     title = unsaved_file.get("title", "<No title>")
                     file_upload, file_upload_created = FileUpload.objects.get_or_create(
@@ -167,34 +164,53 @@ class DojoDefaultImporter(object):
                     )
                     file_upload.file.save(title, ContentFile(data))
                     file_upload.save()
-                    item.files.add(file_upload)
-
-            importer_utils.handle_vulnerability_ids(item)
-
-            new_findings.append(item)
-            # to avoid pushing a finding group multiple times, we push those outside of the loop
-            if is_finding_groups_enabled() and group_by:
-                logger.info('Saving normally')
-                item.save()
-            else:
-                logger.info('Saving pushing to jira')
-                item.save(push_to_jira=push_to_jira)
+                    saved_item_from_groups.files.add(file_upload)
+            
+            if hasattr(saved_item_from_groups, "unsaved_req_resp") and len(saved_item_from_groups.unsaved_req_resp) > 0:
+                for req_resp in saved_item_from_groups.unsaved_req_resp:
+                    burp_rr = BurpRawRequestResponse(
+                        finding=saved_item_from_groups,
+                        burpRequestBase64=base64.b64encode(req_resp["req"].encode("utf-8")),
+                        burpResponseBase64=base64.b64encode(req_resp["resp"].encode("utf-8")),
+                    )
+                    burp_rr.clean()
+                    burp_rr.save()
+            
+            if saved_item_from_groups.unsaved_request is not None and saved_item_from_groups.unsaved_response is not None:
+                burp_rr = BurpRawRequestResponse(
+                    finding=saved_item_from_groups,
+                    burpRequestBase64=base64.b64encode(saved_item_from_groups.unsaved_request.encode()),
+                    burpResponseBase64=base64.b64encode(saved_item_from_groups.unsaved_response.encode()),
+                )
+                burp_rr.clean()
+                burp_rr.save()
                 
-            importer_utils.chunk_endpoints_and_disperse(item, test, item.unsaved_endpoints)
+            importer_utils.chunk_endpoints_and_disperse(saved_item_from_groups, test, saved_item_from_groups.unsaved_endpoints)
             if endpoints_to_add:
-                importer_utils.chunk_endpoints_and_disperse(item, test, endpoints_to_add)
-           
-        sync= kwargs.get("sync", False)
-                
-        if not sync:
-            logger.debug(f'ASYNC: Saving {len(items_to_save)} findings')
-            Finding.objects.abulk_create(items_to_save, ignore_conflicts=True)
-        else:
-            logger.debug(f'SYNC: Saving {len(items_to_save)} findings')
-            Finding.objects.bulk_create(items_to_save, ignore_conflicts=True)
+                importer_utils.chunk_endpoints_and_disperse(saved_item_from_groups, test, endpoints_to_add)
 
+            if saved_item_from_groups.unsaved_tags:
+                saved_item_from_groups.tags = saved_item_from_groups.unsaved_tags
+
+            importer_utils.handle_vulnerability_ids(saved_item_from_groups)
+                
+            if is_finding_groups_enabled() and group_by:
+                saved_item_from_groups.save()
+            else:
+                if push_to_jira:
+                    saved_item_from_groups.save(push_to_jira=push_to_jira)
+                
+            if is_finding_groups_enabled() and group_by:
+                # If finding groups are enabled, group all findings by group name
+                name = finding_helper.get_group_by_group_name(saved_item_from_groups, group_by)
+                if name is not None:
+                    if name in group_names_to_findings_dict:
+                        group_names_to_findings_dict[name].append(saved_item_from_groups)
+                    else:
+                        group_names_to_findings_dict[name] = [saved_item_from_groups]
+                        
         for group_name, findings in group_names_to_findings_dict.items():
-            threading.Thread(target=finding_helper.add_findings_to_auto_group, args=(group_name, findings, group_by, create_finding_groups_for_all_findings), kwargs=kwargs).start()
+            Process(target=finding_helper.add_findings_to_auto_group, args=(group_name, findings, group_by, create_finding_groups_for_all_findings), kwargs=kwargs).start()
             if push_to_jira:
                 if findings[0].finding_group is not None:
                     jira_helper.push_to_jira(findings[0].finding_group)
@@ -209,10 +225,10 @@ class DojoDefaultImporter(object):
                         finding,
                     ],
                 )
-                for finding in new_findings
+                for finding in saved_items
             ]
 
-        return new_findings
+        return saved_items
 
     def close_old_findings(
         self, test, scan_date_time, user, push_to_jira=None, service=None, close_old_findings_product_scope=False
