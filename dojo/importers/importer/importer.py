@@ -146,12 +146,13 @@ class DojoDefaultImporter(object):
         else:
             Finding.objects.bulk_create(items_to_save, ignore_conflicts=True)
             
+        saved_items = []
+        
         for saved_item in items_to_save:
             item = Finding.objects.get(hash_code=saved_item.hash_code)
+            saved_items.append(item)
             item.found_by.add(item.test.test_type)
 
-
-        saved_items = Finding.objects.all()
         
         for saved_item_from_groups in saved_items:
             
