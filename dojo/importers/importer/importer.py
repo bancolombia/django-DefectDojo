@@ -149,7 +149,7 @@ class DojoDefaultImporter(object):
         saved_items = []
         
         for saved_item in items_to_save:
-            item = Finding.objects.get(hash_code=saved_item.hash_code)
+            item = Finding.objects.get(hash_code=saved_item.hash_code, created=saved_item.created)
             saved_items.append(item)
             item.found_by.add(item.test.test_type)
 
