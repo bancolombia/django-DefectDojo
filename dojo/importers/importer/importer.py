@@ -97,7 +97,6 @@ class DojoDefaultImporter(object):
         new_findings = []
         items = parsed_findings
         logger.debug("starting import of %i items.", len(items) if items else 0)
-        i = 0
         group_names_to_findings_dict = {}
 
         for item in items:
@@ -134,7 +133,7 @@ class DojoDefaultImporter(object):
             if service:
                 item.service = service
 
-            item.save(dedupe_option=False)
+            item.save(dedupe_option=False, user=user)
 
             if is_finding_groups_enabled() and group_by:
                 # If finding groups are enabled, group all findings by group name
@@ -162,7 +161,7 @@ class DojoDefaultImporter(object):
                     burpResponseBase64=base64.b64encode(item.unsaved_response.encode()),
                 )
                 burp_rr.clean()
-                burp_rr.save()
+                burp_rr.save()                 
 
             importer_utils.chunk_endpoints_and_disperse(item, test, item.unsaved_endpoints)
             if endpoints_to_add:
@@ -190,7 +189,7 @@ class DojoDefaultImporter(object):
                 item.save()
             else:
                 item.save(push_to_jira=push_to_jira)
-
+        
         for group_name, findings in group_names_to_findings_dict.items():
             finding_helper.add_findings_to_auto_group(
                 group_name, findings, group_by, create_finding_groups_for_all_findings, **kwargs
@@ -214,6 +213,7 @@ class DojoDefaultImporter(object):
             ]
         return new_findings
 
+    
     def close_old_findings(
         self, test, scan_date_time, user, push_to_jira=None, service=None, close_old_findings_product_scope=False
     ):
