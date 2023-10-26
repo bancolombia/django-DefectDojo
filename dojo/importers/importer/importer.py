@@ -211,7 +211,9 @@ class DojoDefaultImporter(object):
                         group_names_to_findings_dict[name] = [saved_item_from_groups]
                         
         for group_name, findings in group_names_to_findings_dict.items():
-            Process(target=finding_helper.add_findings_to_auto_group, args=(group_name, findings, group_by, create_finding_groups_for_all_findings), kwargs=kwargs).start()
+            finding_helper.add_findings_to_auto_group(
+                group_name, findings, group_by, create_finding_groups_for_all_findings, **kwargs
+            )
             if push_to_jira:
                 if findings[0].finding_group is not None:
                     jira_helper.push_to_jira(findings[0].finding_group)
