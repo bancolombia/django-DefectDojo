@@ -133,8 +133,8 @@ v2_api.register(r'findings', FindingViewSet, basename='finding')
 v2_api.register(r'jira_configurations', JiraInstanceViewSet, basename="jira_configurations")  # backwards compatibility
 v2_api.register(r'jira_instances', JiraInstanceViewSet, basename="jira_instance")
 v2_api.register(r'jira_finding_mappings', JiraIssuesViewSet)
-v2_api.register(r'jira_product_configurations', JiraProjectViewSet)  # backwards compatibility
-v2_api.register(r'jira_projects', JiraProjectViewSet)
+v2_api.register(r'jira_product_configurations', JiraProjectViewSet, basename="jira_product_configurations")  # backwards compatibility
+v2_api.register(r'jira_projects', JiraProjectViewSet, basename="jira_project")
 v2_api.register(r'products', ProductViewSet)
 v2_api.register(r'product_types', ProductTypeViewSet)
 v2_api.register(r'dojo_groups', DojoGroupViewSet)
