@@ -60,8 +60,8 @@ steps:
       python manage.py makemigrations dojo
       python manage.py migrate
 
-      python manage.py test unittests -v 3 --keepdb --no-input --tag broken && true
-      coverage run --source='dojo' manage.py test unittests -v 3 --keepdb --no-input --exclude-tag broken
+      # python manage.py test unittests -v 3 --keepdb --no-input --failfast --shuffle --tag="non-parallel"
+      coverage run --source='dojo' manage.py test unittests -v 3 --keepdb --no-input --failfast --shuffle --tag="non-parallel"
       coverage xml
     displayName: "Unit test"
 
