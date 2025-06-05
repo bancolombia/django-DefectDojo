@@ -32,36 +32,42 @@ class FindingExclusion(models.Model):
                                           on_delete=models.CASCADE)
     reviewed_at = models.DateTimeField(null=True, blank=True)
     reason = models.CharField(max_length=200, blank=True)
-    status = models.CharField(max_length=8, choices=STATUS_CHOICES, blank=True, default="Pending")
-    final_status = models.CharField(choices=[("Accepted", "Accepted"), ("Rejected", "Rejected")], blank=True, null=True)
+    status = models.CharField(
+        max_length=8, choices=STATUS_CHOICES, blank=True, default="Pending")
+    final_status = models.CharField(
+        choices=[("Accepted", "Accepted"), ("Rejected", "Rejected")], blank=True, null=True)
     created_by = models.ForeignKey("Dojo_User",
                                    null=True,
                                    blank=True,
                                    on_delete=models.CASCADE,
                                    related_name="dojo_user_created")
     reviewed_by = models.ForeignKey("Dojo_User",
-                                   null=True,
-                                   blank=True,
-                                   on_delete=models.CASCADE,
-                                   related_name="dojo_user_reviewed")
+                                    null=True,
+                                    blank=True,
+                                    on_delete=models.CASCADE,
+                                    related_name="dojo_user_reviewed")
     accepted_by = models.ForeignKey("Dojo_User",
-                                   null=True,
-                                   blank=True,
-                                   on_delete=models.CASCADE,
-                                   related_name="dojo_user_accepted")
+                                    null=True,
+                                    blank=True,
+                                    on_delete=models.CASCADE,
+                                    related_name="dojo_user_accepted")
     rejected_by = models.ForeignKey("Dojo_User",
-                                   null=True,
-                                   blank=True,
-                                   on_delete=models.CASCADE,
-                                   related_name="dojo_user_rejected")
+                                    null=True,
+                                    blank=True,
+                                    on_delete=models.CASCADE,
+                                    related_name="dojo_user_rejected")
     practice = models.CharField(max_length=50, null=True, blank=True)
-    
+
     class Meta:
         db_table = "dojo_finding_exlusion"
 
 
 class FindingExclusionDiscussion(models.Model):
-    finding_exclusion = models.ForeignKey("FindingExclusion", on_delete=models.CASCADE, related_name='discussions')
+    finding_exclusion = models.ForeignKey(
+        "FindingExclusion",
+        on_delete=models.CASCADE,
+        related_name='discussions'
+    )
     author = models.ForeignKey("Dojo_User", on_delete=models.CASCADE)
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
@@ -69,10 +75,29 @@ class FindingExclusionDiscussion(models.Model):
 
     def __str__(self):
         return f"Discussion by {self.author.username} on {self.created_at}"
-    
+
     class Meta:
         db_table = "dojo_finding_exclusion_discussion"
-        
+
+
+class FindingExclusionStatusHistorical(models.Model):
+    finding_exclusion = models.ForeignKey(
+        'FindingExclusion', on_delete=models.CASCADE, related_name='historical'
+    )
+    last_status = models.CharField(
+        max_length=8,
+        choices=FindingExclusion.STATUS_CHOICES,
+        default="Pending"
+    )
+    new_status = models.CharField(
+        max_length=8,
+        choices=FindingExclusion.STATUS_CHOICES,
+        default="Pending"
+    )
+    change_date = models.DateTimeField(auto_now_add=True)
+    user = models.ForeignKey(
+        "Dojo_User", on_delete=models.SET_NULL, null=True, blank=True)
+
 
 admin.site.register(FindingExclusion)
 admin.site.register(FindingExclusionDiscussion)
