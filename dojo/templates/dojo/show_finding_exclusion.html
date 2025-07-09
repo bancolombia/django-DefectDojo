@@ -290,6 +290,20 @@
 
         <div class="panel panel-default">
             <div class="panel-heading">
+                <h4>Status History <span class="pull-right"><a rel="noopener noreferrer" data-toggle="collapse" href="#vuln_hist"><i
+                        class="glyphicon glyphicon-chevron-up"></i></a></span></h4>
+            </div>
+            <div id="vuln_hist" class="panel-body">
+                {% for record in finding_exclusion.historical.all %}
+                    {{ record.to_html_log|safe }}
+                {% empty %}
+                    <p>There are no recent changes in the status yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="panel panel-default">
+            <div class="panel-heading">
                 <h4>Discussion <span class="pull-right"><a rel="noopener noreferrer" data-toggle="collapse" href="#vuln_disc"><i
                         class="glyphicon glyphicon-chevron-up"></i></a></span></h4>
             </div>

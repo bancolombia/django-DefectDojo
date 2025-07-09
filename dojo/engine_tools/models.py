@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib import admin
 from django.utils.translation import gettext as _
+from django.utils.safestring import mark_safe
 
 import uuid
 
@@ -57,6 +58,45 @@ class FindingExclusion(models.Model):
                                     on_delete=models.CASCADE,
                                     related_name="dojo_user_rejected")
     practice = models.CharField(max_length=50, null=True, blank=True)
+    
+    product_type = models.ForeignKey("Product_Type",
+                                     null=True,
+                                     blank=True,
+                                     on_delete=models.DO_NOTHING,
+                                     related_name="product_type")
+    
+    product = models.ForeignKey("Product",
+                                     null=True,
+                                     blank=True,
+                                     on_delete=models.DO_NOTHING,
+                                     related_name="product")
+    
+    engagement = models.ForeignKey("Engagement",
+                                     null=True,
+                                     blank=True,
+                                     on_delete=models.DO_NOTHING,
+                                     related_name="engagement")
+
+    def save(self, *args, **kwargs):
+        is_update = self.pk is not None
+
+        if is_update:
+            try:
+                original = FindingExclusion.objects.get(pk=self.pk)
+            except FindingExclusion.DoesNotExist:
+                original = None
+        else:
+            original = None
+
+        super().save(*args, **kwargs)
+
+        if original and original.status != self.status:
+            FindingExclusionStatusHistorical.objects.create(
+                finding_exclusion=self,
+                last_status=original.status,
+                new_status=self.status,
+                user=self.status_updated_by
+            )
 
     class Meta:
         db_table = "dojo_finding_exlusion"
@@ -96,7 +136,45 @@ class FindingExclusionStatusHistorical(models.Model):
     )
     change_date = models.DateTimeField(auto_now_add=True)
     user = models.ForeignKey(
-        "Dojo_User", on_delete=models.SET_NULL, null=True, blank=True)
+        "Dojo_User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    class Meta:
+        ordering = ["-change_date"]
+
+    def to_html_log(self) -> str:
+        icon = "🔁"
+        STATUS_COLOR = {
+            "Pending": "#1B30DE",
+            "Accepted": "#096C11",
+            "Rejected": "#d11d38",
+            "Expired": "#d11d38"
+        }
+        DEFAULT_COLOR = "#b97a0c"
+
+        return mark_safe(f'''
+        <div class = "d-flex align-items-start p-2 text-light rounded"
+             style = "margin-bottom: 10px" >
+            <code style="color: black">
+                <span class="me-2">{icon}</span>
+                <strong>{self.change_date.strftime('%Y-%m-%d %H:%M')}</strong>
+                Status changed from
+                <span class="pass_fail Pass"
+                      style="background-color: {STATUS_COLOR.get(self.last_status, DEFAULT_COLOR)}">
+                    {self.last_status}
+                </span>
+                to
+                <span class="pass_fail Pass"
+                      style="background-color: {STATUS_COLOR.get(self.new_status, DEFAULT_COLOR)}">
+                    {self.new_status}
+                </span>
+                by 👤<strong>{self.user}</strong>
+            </code>
+        </div>
+        ''')
 
 
 admin.site.register(FindingExclusion)
