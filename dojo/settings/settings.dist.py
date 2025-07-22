@@ -2175,6 +2175,9 @@ LOGGING = {
         "json": {
             "()": "json_log_formatter.JSONFormatter",
         },
+        "sql_with_trace": {
+            "format": "[%(asctime)s] %(levelname)s [%(name)s] %(message)s | From: %(origin)s",
+        },
     },
     "filters": {
         "require_debug_false": {
@@ -2183,8 +2186,17 @@ LOGGING = {
         "require_debug_true": {
             "()": "django.utils.log.RequireDebugTrue",
         },
+        "sql_trace": {
+        "()": "dojo.logfilters.SQLTraceFilter",
+        },
     },
     "handlers": {
+        "console_sql": {
+            "level": "DEBUG",
+            "class": "logging.StreamHandler",
+            "formatter": "sql_with_trace",
+            "filters": ["sql_trace"],
+        },
         "mail_admins": {
             "level": "ERROR",
             "filters": ["require_debug_false"],
@@ -2200,6 +2212,11 @@ LOGGING = {
         },
     },
     "loggers": {
+        "django.db.backends": {
+            'level': str(LOG_LEVEL),
+            'handlers': ['console_sql'],
+            'propagate': False,
+        },
         "django.request": {
             "handlers": ["mail_admins", "console"],
             "level": str(LOG_LEVEL),
