@@ -58,24 +58,6 @@ class FindingExclusion(models.Model):
                                     on_delete=models.CASCADE,
                                     related_name="dojo_user_rejected")
     practice = models.CharField(max_length=50, null=True, blank=True)
-    
-    product_type = models.ForeignKey("Product_Type",
-                                     null=True,
-                                     blank=True,
-                                     on_delete=models.DO_NOTHING,
-                                     related_name="product_type")
-    
-    product = models.ForeignKey("Product",
-                                     null=True,
-                                     blank=True,
-                                     on_delete=models.DO_NOTHING,
-                                     related_name="product")
-    
-    engagement = models.ForeignKey("Engagement",
-                                     null=True,
-                                     blank=True,
-                                     on_delete=models.DO_NOTHING,
-                                     related_name="engagement")
 
     def save(self, *args, **kwargs):
         is_update = self.pk is not None
