@@ -8,4 +8,5 @@ urlpatterns = [
     re_path(r"^dashboard_v1$", views.dashboard, name="dashboard_v1"),
     re_path(r"^dashboard$", views.dashboard_v2, name="dashboard"),
     re_path(r"^support$", views.support, name="support"),
+    re_path(r"^all_findings_frontend$", views.all_findings_frontend, name="all_findings_frontend"),
 ]
