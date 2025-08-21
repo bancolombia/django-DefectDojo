@@ -69,8 +69,8 @@ env = environ.FileAwareEnv(
     DD_WHITENOISE=(bool, False),
     DD_TRACK_MIGRATIONS=(bool, True),
     DD_SECURE_PROXY_SSL_HEADER=(bool, False),
-    DD_THROTTLE_ANON=(str, "0/secod"),
-    DD_THROTTLE_USER=(str, "1000/secod"),
+    DD_THROTTLE_ANON=(str, "1000/second"),
+    DD_THROTTLE_USER=(str, "1000/second"),
     DD_TEST_RUNNER=(str, "django.test.runner.DiscoverRunner"),
     DD_URL_PREFIX=(str, ""),
     DD_ROOT=(str, root("dojo")),
@@ -99,8 +99,7 @@ env = environ.FileAwareEnv(
     DD_CELERY_PASS_MODEL_BY_ID=(str, True),
     DD_CELERY_CRON_SCHEDULE=(str, "* * * * *"),
     DD_CELERY_CRON_SCHEDULE_EXPIRE_PERMISSION_KEY=(str, "* * * * *"),
-    # Every day at 3:00 AM
-    DD_CELERY_CRON_SCHEDULE_DUPE_DELETE=(int, 3),
+    DD_CELERY_CRON_SCHEDULE_DUPE_DELETE=(int, 1),
     DD_FOOTER_VERSION=(str, ""),
     # models should be passed to celery by ID, default is False (for now)
     DD_FORCE_LOWERCASE_TAGS=(bool, True),
@@ -255,6 +254,7 @@ env = environ.FileAwareEnv(
     DD_SLA_NOTIFY_POST_BREACH=(int, 7),
     # Use business day's to calculate SLA's and age instead of calendar days
     DD_SLA_BUSINESS_DAYS=(bool, False),
+    DD_SLA_FREEZE_DAYS=(int, 0),  # Number of days to freeze SLA's
     # maximum number of result in search as search can be an expensive operation
     DD_SEARCH_MAX_RESULTS=(int, 100),
     DD_SIMILAR_FINDINGS_MAX_RESULTS=(int, 25),
@@ -269,6 +269,7 @@ env = environ.FileAwareEnv(
     DD_JIRA_EXTRA_ISSUE_TYPES=(str, ""),
     # if you want to keep logging to the console but in json format, change this here to 'json_console'
     DD_LOGGING_HANDLER=(str, "console"),
+    DD_ENABLE_SQL_LOGGING=(bool, False),
     # If true, drf-spectacular will load CSS & JS from default CDN, otherwise from static resources
     DD_DEFAULT_SWAGGER_UI=(bool, False),
     DD_ALERT_REFRESH=(bool, True),
@@ -471,15 +472,16 @@ env = environ.FileAwareEnv(
         }
     }),
     
-    # Finding exclusion - request expiration days
+    # Finding exclusion - request expiration
     DD_FINDING_EXCLUSION_EXPIRATION_DAYS=(int, 30),
-    DD_CHECK_EXPIRING_FINDINGEXCLUSION_DAYS=(int, 1),
-    DD_CHECK_NEW_FINDINGS_TO_EXCLUSION_LIST_DAYS=(int, 1),
+    DD_CHECK_EXPIRING_FINDINGEXCLUSION=(int, 12),
+    DD_CHECK_NEW_FINDINGS_TO_EXCLUSION_LIST=(int, 5),
     
     # tags for filter to finding exclusion
-    DD_FINDING_EXCLUSION_FILTER_TAGS=(str, ""),
-    DD_BLACKLIST_FILTER_TAGS=(str, ""),
-    
+    DD_FINDING_EXCLUSION_FILTER_TAGS=(str, "tag1,tag2"),
+    DD_PRIORITY_FILTER_TAGS=(str, ""),
+    DD_TAGS_EXCLUDE_PRACTICE_FILTER=(list, []),
+
     # contact types AUTHORIZED FOR RISK ACCEPTANCE
     DD_CONTACT_TYPES_AUTHORIZED_RISK_ACCEPTANCE=(list, [
         "team_manager",
@@ -516,13 +518,9 @@ env = environ.FileAwareEnv(
     DD_PROVIDERS_CYBERSECURITY_EMAIL=(dict, {}),
     DD_PRIORIZATION_FIELD_WEIGHTS=(dict, {}),
     
-    # Twistlock
-    DD_TWISTLOCK_API_URL=(str, ""),
-    DD_TWISTLOCK_ACCESS_KEY=(str, ""),
-    DD_TWISTLOCK_SECRET_KEY=(str, ""),
-    
     # Priorization
-    DD_CELERY_CRON_CHECK_PRIORIZATION=(str, "0 0 1 1,4,7,10 *"),
+    DD_CELERY_CRON_CHECK_PRIORIZATION=(str, "0 7 * * 0"),
+
     # Host IA recommendation
     DD_HOST_IA_RECOMMENDATION=(str, "http://localhost:3000"),
     DD_LOGO_URL=(str, ""),
@@ -549,6 +547,10 @@ env = environ.FileAwareEnv(
     DD_USE_DB_POOL=(bool, False),
     DD_STATEMENT_TIMEOUT=(str, "10000"),
     DD_STATEMENT_TIMEOUT_REPLICA=(str, "10000"),
+
+    # Risk Score
+    DD_BUCKET_NAME_RISK_SCORE=(str, ""),
+    DD_PATH_FILE_RISK_SCORE=(str, ""),
 )
 
 
@@ -575,12 +577,14 @@ def generate_url(scheme, double_slashes, user, password, host, port, path, param
     return "".join(result_list)
 
 
+AWS_REGION = env("AWS_REGION", default="us-east-1")
+
+
 def get_secret(secret_name):
-    region_name = env("AWS_REGION")
 
     # Create a Secrets Manager client
     session = boto3.session.Session()
-    client = session.client(service_name="secretsmanager", region_name=region_name)
+    client = session.client(service_name="secretsmanager", region_name=AWS_REGION)
 
     try:
         get_secret_value_response = client.get_secret_value(SecretId=secret_name)
@@ -714,6 +718,10 @@ USE_DB_POOL = env("DD_USE_DB_POOL")
 STATEMENT_TIMEOUT = env("DD_STATEMENT_TIMEOUT")
 STATEMENT_TIMEOUT_REPLICA = env("DD_STATEMENT_TIMEOUT_REPLICA")
 
+# Risk score
+BUCKET_NAME_RISK_SCORE = env("DD_BUCKET_NAME_RISK_SCORE")
+PATH_FILE_RISK_SCORE = env("DD_PATH_FILE_RISK_SCORE")
+
 if STATEMENT_TIMEOUT:
     if "OPTIONS" not in DATABASES["default"].keys():
         DATABASES["default"]["OPTIONS"] = {}
@@ -741,15 +749,9 @@ if USE_DB_POOL:
 if os.getenv("DD_USE_SECRETS_MANAGER") == "true":
     secret_engine_backend = get_secret(env("DD_PROVIDER_SECRET"))
     PROVIDER_TOKEN = secret_engine_backend["tokenRiskAcceptanceApi"]
-    # Twistlock API
-    TWISTLOCK_ACCESS_KEY = secret_engine_backend["prismaAccessKey"]
-    TWISTLOCK_SECRET_KEY = secret_engine_backend["prismaSecretKey"]
 else:
     PROVIDER_TOKEN = env("DD_PROVIDER_TOKEN")
-    TWISTLOCK_ACCESS_KEY = env("DD_TWISTLOCK_ACCESS_KEY")
-    TWISTLOCK_SECRET_KEY = env("DD_TWISTLOCK_SECRET_KEY")
     
-TWISTLOCK_API_URL = env('DD_TWISTLOCK_API_URL')
 # Track migrations through source control rather than making migrations locally
 if env("DD_TRACK_MIGRATIONS"):
     MIGRATION_MODULES = {"dojo": "dojo.db_migrations"}
@@ -1009,6 +1011,7 @@ SLA_NOTIFY_PRE_BREACH = env("DD_SLA_NOTIFY_PRE_BREACH")
 SLA_NOTIFY_POST_BREACH = env("DD_SLA_NOTIFY_POST_BREACH")
 # Use business days to calculate SLA's and age of a finding instead of calendar days
 SLA_BUSINESS_DAYS = env("DD_SLA_BUSINESS_DAYS")
+SLA_FREEZE_DAYS = env("DD_SLA_FREEZE_DAYS")
 
 
 SEARCH_MAX_RESULTS = env("DD_SEARCH_MAX_RESULTS")
@@ -1618,8 +1621,8 @@ CELERY_PASS_MODEL_BY_ID = env("DD_CELERY_PASS_MODEL_BY_ID")
 CELERY_CRON_SCHEDULE = env("DD_CELERY_CRON_SCHEDULE")
 CELERY_CRON_SCHEDULE_DUPE_DELETE = env("DD_CELERY_CRON_SCHEDULE_DUPE_DELETE")
 CELERY_CRON_SCHEDULE_EXPIRE_PERMISSION_KEY = env("DD_CELERY_CRON_SCHEDULE_EXPIRE_PERMISSION_KEY")
-CELERY_EXPIRING_FINDINGEXCLUSION_DAYS = env("DD_CHECK_EXPIRING_FINDINGEXCLUSION_DAYS")
-CELERY_NEW_FINDINGS_TO_EXCLUSION_LIST_DAYS = env("DD_CHECK_NEW_FINDINGS_TO_EXCLUSION_LIST_DAYS")
+CELERY_EXPIRING_FINDINGEXCLUSION = env("DD_CHECK_EXPIRING_FINDINGEXCLUSION")
+CELERY_NEW_FINDINGS_TO_EXCLUSION_LIST = env("DD_CHECK_NEW_FINDINGS_TO_EXCLUSION_LIST")
 CELERY_CRON_CHECK_PRIORIZATION = env("DD_CELERY_CRON_CHECK_PRIORIZATION")
 REGEX_VALIDATION_NAME = env("DD_REGEX_VALIDATION_NAME")
 
@@ -1637,7 +1640,7 @@ CELERY_BEAT_SCHEDULE = {
     },
     "dedupe-delete": {
         "task": "dojo.tasks.async_dupe_delete",
-        "schedule": crontab(hour=CELERY_CRON_SCHEDULE_DUPE_DELETE, minute=0),
+        "schedule": timedelta(minutes=CELERY_CRON_SCHEDULE_DUPE_DELETE),
     },
     "flush_auditlog": {
         "task": "dojo.tasks.flush_auditlog",
@@ -1674,16 +1677,15 @@ CELERY_BEAT_SCHEDULE = {
         },
     "check_expiring_findingexclusions": {
         'task': 'dojo.engine_tools.helpers.check_expiring_findingexclusions',
-        'schedule': timedelta(days=CELERY_EXPIRING_FINDINGEXCLUSION_DAYS),
+        'schedule': crontab(hour=CELERY_EXPIRING_FINDINGEXCLUSION, minute=0),
     },
     "check_new_findings_to_exclusion_list": {
         'task': 'dojo.engine_tools.helpers.check_new_findings_to_exclusion_list',
-        'schedule': timedelta(days=CELERY_NEW_FINDINGS_TO_EXCLUSION_LIST_DAYS),
+        'schedule': crontab(hour=CELERY_NEW_FINDINGS_TO_EXCLUSION_LIST, minute=0),
     },
     "notification_webhook_status_cleanup": {
         "task": "dojo.notifications.helper.webhook_status_cleanup",
         "schedule": timedelta(minutes=1),
-
     },
     "check_finding_priorization": {
         "task": "dojo.engine_tools.helpers.check_priorization",
@@ -1691,7 +1693,8 @@ CELERY_BEAT_SCHEDULE = {
             minute=CELERY_CRON_CHECK_PRIORIZATION.split()[0],
             hour=CELERY_CRON_CHECK_PRIORIZATION.split()[1],
             day_of_month=CELERY_CRON_CHECK_PRIORIZATION.split()[2],
-            month_of_year=CELERY_CRON_CHECK_PRIORIZATION.split()[3],    
+            month_of_year=CELERY_CRON_CHECK_PRIORIZATION.split()[3],
+            day_of_week=CELERY_CRON_CHECK_PRIORIZATION.split()[4]
         )
     },
     "trigger_evaluate_pro_proposition": {
@@ -2158,6 +2161,7 @@ JIRA_WEBHOOK_ALLOW_FINDING_GROUP_REOPEN = env("DD_JIRA_WEBHOOK_ALLOW_FINDING_GRO
 # See http://docs.djangoproject.com/en/dev/topics/logging for
 # more details on how to customize your logging configuration.
 LOGGING_HANDLER = env("DD_LOGGING_HANDLER")
+ENABLE_SQL_LOGGING = env("DD_ENABLE_SQL_LOGGING")
 
 LOG_LEVEL = env("DD_LOG_LEVEL")
 if not LOG_LEVEL:
@@ -2193,12 +2197,14 @@ LOGGING = {
         },
     },
     "handlers": {
-        "console_sql": {
-            "level": "DEBUG",
-            "class": "logging.StreamHandler",
-            "formatter": "sql_with_trace",
-            "filters": ["sql_trace"],
-        },
+        **({
+            "console_sql": {
+                "level": "DEBUG",
+                "class": "logging.StreamHandler",
+                "formatter": "sql_with_trace",
+                "filters": ["sql_trace"],
+            }
+        } if ENABLE_SQL_LOGGING else {}),
         "mail_admins": {
             "level": "ERROR",
             "filters": ["require_debug_false"],
@@ -2214,11 +2220,13 @@ LOGGING = {
         },
     },
     "loggers": {
+      **({
         "django.db.backends": {
             'level': str(LOG_LEVEL),
             'handlers': ['console_sql'],
             'propagate': False,
-        },
+        }
+        } if ENABLE_SQL_LOGGING else {}),
         "django.request": {
             "handlers": ["mail_admins", "console"],
             "level": str(LOG_LEVEL),
@@ -2422,7 +2430,8 @@ COMPLIANCE_FILTER_RISK = env("DD_COMPLIANCE_FILTER_RISK")
 # Engine Tools 
 FINDING_EXCLUSION_EXPIRATION_DAYS = env("DD_FINDING_EXCLUSION_EXPIRATION_DAYS")
 FINDING_EXCLUSION_FILTER_TAGS = env("DD_FINDING_EXCLUSION_FILTER_TAGS")
-BLACKLIST_FILTER_TAGS = env("DD_BLACKLIST_FILTER_TAGS")
+PRIORITY_FILTER_TAGS = env("DD_PRIORITY_FILTER_TAGS")
+TAGS_EXCLUDE_PRACTICE_FILTER = env("DD_TAGS_EXCLUDE_PRACTICE_FILTER")
 # Contacts_types_permissions
 CONTACT_TYPES_AUTHORIZED_RISK_ACCEPTANCE = env("DD_CONTACT_TYPES_AUTHORIZED_RISK_ACCEPTANCE")
 # exclusive permission

@@ -1,7 +1,6 @@
 from enum import Enum
 import re
 import base64
-import json
 import contextlib
 import datetime
 import logging
@@ -43,7 +42,7 @@ from dojo.models import (
     ExclusivePermission,
     GeneralSettings)
 
-from dojo.utils import get_file_images, get_full_url, get_system_setting, prepare_for_view
+from dojo.utils import get_file_images, get_full_url, get_system_setting, prepare_for_view, calculate_severity_priority
 
 logger = logging.getLogger(__name__)
 
@@ -302,7 +301,9 @@ def finding_sla(finding):
     if not enforce_sla:
         return ""
 
-    severity = finding.severity
+    severity = calculate_severity_priority(finding.tags, finding.priority)
+    if severity == "Unknown":
+        severity = finding.severity
     find_sla = finding.sla_days_remaining()
     status = "green"
 
@@ -837,6 +838,10 @@ def finding_display_status(finding, event="view"):
     html_render = template_object.render(context_object)
     return html_render
 
+@register.filter
+def priority_display_status(finding):
+    return calculate_severity_priority(finding.tags, finding.priority)
+
 
 @register.filter
 def cwe_url(cwe):
@@ -1228,7 +1233,7 @@ def permission_view_findings(user):
         "USERS_PERMISSION_VIEW_FINDINGS",
         "all"
     )
-    if value == "all" or user in value:
+    if "all" in value or user in value:
         return True
     return False
 
