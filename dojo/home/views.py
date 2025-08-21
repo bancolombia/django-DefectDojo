@@ -168,6 +168,31 @@ def support(request: HttpRequest) -> HttpResponse:
     return render(request, "dojo/support.html", {})
 
 
+def all_findings_frontend(request: HttpRequest) -> HttpResponse:
+    """Vista para mostrar todos los findings usando el frontend"""
+    page_name = 'All Findings'
+    role = Role.objects.get(id=Roles.Maintainer)
+    user = request.user.id
+    cookie_csrftoken = get_token(request)
+    cookie_sessionid = request.COOKIES.get('sessionid', '')
+
+    product = request.GET.get('product', '')
+    base_params = f"?csrftoken={cookie_csrftoken}&sessionid={cookie_sessionid}"
+
+    mf_frontend_defect_dojo_params_all_findings = "&view={product}"
+
+    add_breadcrumb(title=page_name, top_level=not len(request.GET), request=request)
+    return render(request, 'dojo/all_findings.html', {
+        'name': page_name,
+        'mf_frontend_defect_dojo_url': settings.MF_FRONTEND_DEFECT_DOJO_URL,
+        'mf_frontend_defect_dojo_path': settings.MF_FRONTEND_DEFECT_DOJO_PATH.get("all_findings", ""),
+        'mf_frontend_defect_dojo_params': mf_frontend_defect_dojo_params,
+        'mf_frontend_defect_dojo_params_all_findings': mf_frontend_defect_dojo_params_all_findings,
+        'role': role,
+        'user': user,
+    })
+
+
 def get_severities_all(findings) -> dict[str, int]:
     severities_all = findings.values("severity").annotate(count=Count("severity")).order_by()
     return defaultdict(lambda: 0, {s["severity"]: s["count"] for s in severities_all})
