@@ -763,6 +763,14 @@
                                                 <span class="caret"></span>
                                             </a>
                                             <ul class="dropdown-menu">
+                                                {% if "Metrics_Panel_Admin"|has_role_permission %}
+                                                <li>
+                                                    <a rel="noopener noreferrer" href="{% url 'all_findings_frontend' %}?product={{ product_tab.product.id }}">
+                                                        <i class="fa-solid fa-rectangle-list"></i>
+                                                        {% trans "View new all findings" %}
+                                                    </a>
+                                                </li>
+                                                {% endif %}
                                                 <li>
                                                     <a rel="noopener noreferrer" href="{% url 'product_open_findings' product_tab.product.id %}">
                                                         <i class="fa-solid fa-rectangle-list"></i>
