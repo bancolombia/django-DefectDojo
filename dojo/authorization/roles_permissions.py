@@ -65,7 +65,7 @@ class Permissions(IntEnum):
     Risk_Unaccept = 1214
     Risk_Acceptance_Bulk = 1215
     Risk_Acceptance_Refresh_Permission_key = 1216
-    
+
     Test_View = 1302
     Test_Add = 1303
     Test_Edit = 1306
@@ -146,10 +146,10 @@ class Permissions(IntEnum):
     Credential_Add = 2703
     Credential_Edit = 2706
     Credential_Delete = 2707
-    
+
     Metrics_DevSecOps = 2709
     Metrics_Panel_Admin = 2710
-    Metrics_Scan_Cycle = 2711  
+    Metrics_Scan_Cycle = 2711
 
     Transfer_Finding_View = 2801
     Transfer_Finding_Edit = 2802
@@ -168,6 +168,8 @@ class Permissions(IntEnum):
     General_Settings_Edit = 3002
     General_Settings_Add = 3003
     General_Settings_Delete = 3004
+
+    All_Findings_View = 3101
 
     @classmethod
     def has_value(cls, value):
@@ -244,7 +246,7 @@ class Permissions(IntEnum):
             Permissions.Component_Edit,
             Permissions.Component_Delete,
         }
-    
+
     @classmethod
     def get_transfer_finding_permissions(cls):
         return {
@@ -550,6 +552,7 @@ def get_roles_with_permissions():
             Permissions.General_Settings_Edit,
             Permissions.General_Settings_Add,
             Permissions.General_Settings_Delete,
+            Permissions.All_Findings_View
         },
         Roles.Owner: {
             Permissions.Product_Type_Add_Product,
