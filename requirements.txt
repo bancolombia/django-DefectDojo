@@ -8,7 +8,7 @@ defusedxml==0.7.1
 django_celery_results==2.5.1
 django-auditlog==2.3.0
 django-dbbackup==4.1.0
-django-environ==0.11.2
+django-environ==0.12.0
 django-filter==24.2
 django-imagekit==5.0.0
 # This library is very outdated, but is a pillar of DefectDojo
