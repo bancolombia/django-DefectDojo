@@ -131,7 +131,7 @@ python3-openid==3.2.0
 certifi==2025.1.31
 PyNaCl==1.5.0
 charset-normalizer==3.4.1
-xmlschema==2.5.1
+xmlschema==4.1.0
 sqlparse==0.5.3
 cffi==1.17.1
 gitdb==4.0.12
