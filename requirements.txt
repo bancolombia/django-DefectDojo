@@ -150,7 +150,7 @@ argon2-cffi-bindings==21.2.0
 isodate==0.7.2
 pyOpenSSL==25.0.0
 oauthlib==3.2.2
-rpds-py==0.24.0
+rpds-py==0.27.1
 s3transfer==0.11.4
 setuptools==78.1.1
 referencing==0.36.2
