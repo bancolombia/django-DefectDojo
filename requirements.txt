@@ -92,7 +92,7 @@ opentelemetry-util-http==0.57b0
 opentelemetry-exporter-otlp==1.36.0
 opentelemetry-exporter-otlp-proto-common==1.36.0
 opentelemetry-exporter-otlp-proto-grpc==1.36.0
-opentelemetry-exporter-otlp-proto-http==1.36.0
+opentelemetry-exporter-otlp-proto-http==1.37.0
 opentelemetry-instrumentation-wsgi==0.57b0
 opentelemetry-proto==1.36.0
 opentelemetry-semantic-conventions==0.57b0
