@@ -116,7 +116,7 @@ attrs==25.1.0
 idna==3.10
 importlib-metadata==8.7.0
 packaging==25.0
-pysaml2==7.5.0
+pysaml2==7.5.3
 click-repl==0.3.0
 pycparser==2.23
 multidict==6.6.4
