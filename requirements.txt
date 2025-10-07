@@ -13,7 +13,7 @@ django-auditlog==3.3.0
 django-dbbackup==4.3.0
 django-csp==4.0
 django-environ==0.12.0
-django-filter==25.1
+django-filter==25.2
 django-imagekit==5.0.0
 django-multiselectfield==1.0.1
 django-polymorphic==4.1.0
