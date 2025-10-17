@@ -87,7 +87,7 @@ watchdog==6.0.0 # only needed for development, but would require some docker ref
 azure-devops==7.1.0b4
 backoff==2.2.1
 opentelemetry-sdk==1.36.0
-opentelemetry-api==1.36.0
+opentelemetry-api==1.38.0
 opentelemetry-util-http==0.57b0
 opentelemetry-exporter-otlp==1.36.0
 opentelemetry-exporter-otlp-proto-common==1.36.0
