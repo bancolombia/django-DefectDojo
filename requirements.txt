@@ -91,7 +91,7 @@ opentelemetry-api==1.39.0
 opentelemetry-util-http==0.60b0
 opentelemetry-exporter-otlp==1.39.0
 opentelemetry-exporter-otlp-proto-common==1.39.0
-opentelemetry-exporter-otlp-proto-grpc==1.39.0
+opentelemetry-exporter-otlp-proto-grpc==1.39.1
 opentelemetry-exporter-otlp-proto-http==1.39.0
 opentelemetry-instrumentation-wsgi==0.60b0
 opentelemetry-proto==1.39.0
