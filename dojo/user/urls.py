@@ -26,6 +26,7 @@ urlpatterns = [
     re_path(r"^user/(?P<uid>\d+)/add_product_member$", views.add_product_member, name="add_product_member_user"),
     re_path(r"^user/(?P<uid>\d+)/add_group_member$", views.add_group_member, name="add_group_member_user"),
     re_path(r"^user/(?P<uid>\d+)/edit_permissions$", views.edit_permissions, name="edit_user_permissions"),
+    re_path(r"^user/csrf$", views.csrf, name="csrf"),
 ]
 if settings.FORGOT_PASSWORD:
     urlpatterns.extend([

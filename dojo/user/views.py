@@ -27,6 +27,7 @@ from django.utils.timezone import now
 from django.utils.translation import gettext as _
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes
+from django.views.decorators.csrf import ensure_csrf_cookie
 
 from dojo.authorization.authorization_decorators import user_is_configuration_authorized
 from dojo.authorization.roles_permissions import Permissions
@@ -678,3 +679,12 @@ class DojoPasswordResetView(PasswordResetView):
 
 class DojoForgotUsernameView(PasswordResetView):
     form_class = DojoForgotUsernameForm
+
+
+
+from django.views.decorators.http import require_GET
+
+@require_GET
+@ensure_csrf_cookie
+def csrf(request):
+    return JsonResponse({"detail": "CSRF cookie set"})
