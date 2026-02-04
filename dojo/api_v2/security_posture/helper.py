@@ -20,7 +20,7 @@ def calculate_priority(findings):
     return round(sum_priority, 3)
 
 def is_in_hacking_continuous(test, data):
-    is_in_hacking_continuous = (  
+    is_in_hacking_continuous = (
         set(test.tags.all().values_list("name", flat=True)) & 
         (set(GeneralSettings.get_value("HACKING_CONTINUOUS_TAGS", [])))
     )
@@ -70,7 +70,12 @@ def get_security_posture(engagement: Engagement, engagement_name: str):
         tags.extend(test.tags.all().values_list("name", flat=True))
 
     data["adoption_devsecops"] = adoption_devsecops_include(tags)
-    active_finding = Finding.objects.filter(test__engagement=engagement, active=True, duplicate=False, risk_accepted= False).only("id", "severity", "priority", "tags")
+    active_finding = Finding.objects.filter(test__engagement=engagement, active=True, duplicate=False, risk_accepted= False).only(
+        "id",
+        "severity",
+        "priority",
+        "tags"
+    )
     data["counter_active_findings"] = active_finding.distinct().count() 
     data["counter_findings_by_priority"] = {
         "very_critical": 0,
@@ -79,7 +84,7 @@ def get_security_posture(engagement: Engagement, engagement_name: str):
         "medium_low": 0,
         "unknown": 0,
     }
-    data["counter_findings_by_severity"] = { 
+    data["counter_findings_by_severity"] = {
         "critical": 0,
         "high": 0,
         "medium": 0,
