@@ -30,6 +30,7 @@ from dojo.models import (
     Test,
     GeneralSettings,
     Risk_Acceptance,
+    Input,
 )
 
 def check_field_permissions(request, post_model, post_pk):
@@ -1200,3 +1201,40 @@ class UserHasPermissionSendEmail(permissions.BasePermission):
                     request.user,
                     Permissions.Risk_Acceptance_Send_Email,)
         return False
+
+
+class UserHasInputPermission(permissions.BasePermission):
+    # Permission checks for related objects (like notes or metadata) can be moved
+    # into a seperate class, when the legacy authorization will be removed.
+    path_input_post = re.compile(r"^/api/v2/pentesting/$")
+    path_input = re.compile(r"^/api/v2/pentesting/\d+/$")
+
+    def has_permission(self, request, view):
+        if UserHasInputPermission.path_input_post.match(
+            request.path,
+        ) or UserHasInputPermission.path_input.match(request.path):
+            return check_post_permission(
+                request, Input, "input_id", Permissions.Input_Add,
+            )
+        # related object only need object permission
+        return True
+
+    def has_object_permission(self, request, view, obj):
+        if UserHasInputPermission.path_input_post.match(
+            request.path,
+        ) or UserHasInputPermission.path_input.match(request.path):
+            return check_object_permission(
+                request,
+                obj,
+                Permissions.Input_View,
+                Permissions.Input_Edit,
+                Permissions.Input_Delete,
+            )
+        return check_object_permission(
+            request,
+            obj,
+            Permissions.Input_View,
+            Permissions.Input_Edit,
+            Permissions.Input_Edit,
+            Permissions.Input_Edit,
+        )

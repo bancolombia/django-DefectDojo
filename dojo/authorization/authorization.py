@@ -29,7 +29,8 @@ from dojo.models import (
     TransferFinding,
     Test,
     TransferFindingFinding,
-    Risk_Acceptance
+    Risk_Acceptance,
+    Input,
 )
 from dojo.engine_tools.models import FindingExclusion
 from dojo.request_cache import cache_for_request
@@ -52,6 +53,30 @@ def user_has_permission(user, obj, permission):
 
     if user.is_superuser:
         return True
+    
+    if isinstance(obj, Input):
+        # Global roles are only relevant for Inputs
+        if user_has_global_permission(user, permission):
+            return True
+        # Check if the user is the owner of the Input
+        if obj.owner == user:
+            if permission in [
+                Permissions.Input_View,
+                Permissions.Input_Edit,
+                Permissions.Input_Delete,
+            ]:
+                return True
+        if inputs := obj.inputengagement_set.exists():
+            if obj := inputs.first().product:
+                return user_has_permission(
+                    user, obj, Permissions.Product_View,
+                )
+            elif obj := inputs.first().engagement:
+                return user_has_permission(
+                    user, obj, Permissions.Engagement_View,
+                )
+             
+        return False
 
     if isinstance(obj, Product_Type | Product):
         # Global roles are only relevant for product types, products and their

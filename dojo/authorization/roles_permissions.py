@@ -175,6 +175,11 @@ class Permissions(IntEnum):
     General_Settings_Add = 3003
     General_Settings_Delete = 3004
 
+    Input_View = 4001
+    Input_Edit = 4002
+    Input_Add = 4003
+    Input_Delete = 4004
+
     @classmethod
     def has_value(cls, value):
         try:
