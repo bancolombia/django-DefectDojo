@@ -125,7 +125,7 @@ steps:
           "files": [
             {
               "pattern": "$(Build.ArtifactStagingDirectory)/$(DefinitionName).zip",
-              "target": "$(artifactory.RepositoryPath)/$(DefinitionName)/$(Build.BuildNumber)/"
+              "target": "$(artifactory.RepositoryPath)/$(DefinitionName)/$(Build.BuildNumber)_$(System.JobAttempt)/"
             }
           ]
         }
