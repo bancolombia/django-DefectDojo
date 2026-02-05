@@ -1387,9 +1387,16 @@ class Product(models.Model):
         engagement_list = []
         for engagement_dict in engagements.values("id", "name", "product_id", "status", "engagement_type", "build_id"):
             findings = Finding.objects.filter(test__engagement__id=engagement_dict["id"], active=True, risk_status__in=["Risk Active", "Risk Expired"])
-            engagement_dict.update({"findings": list(
-                findings.values("id", "title", "cve", "severity", "description", "active",
-                                "verified", "risk_status", "risk_accepted", "accepted_by"))})
+            findings_list = list(findings.values("id", "title", "cve", "severity", "description", "active",
+                                                "verified", "risk_status", "risk_accepted", "accepted_by", "tags", "priority"))
+            for finding in findings_list:
+                try:
+                    finding_obj = findings.get(id=finding["id"])
+                    finding["tags"] = [tag.name for tag in getattr(finding_obj.tags, "tags", [])]
+                    finding["priority_classification"] = finding_obj.priority_classification
+                except Exception:
+                    finding["tags"] = []
+            engagement_dict.update({"findings": findings_list})
             engagement_list.append(engagement_dict)
         return engagement_list
 
@@ -3319,13 +3326,13 @@ class Finding(models.Model):
         priorization_weights = settings.PRIORIZATION_FIELD_WEIGHTS
         if tags:
             if any(tag in tags for tag in settings.PRIORITY_FILTER_TAGS.split(",")):
-                priority = round(float(priority), 2)
+                priority = float(priority)
 
                 RISK_PROFILES = [
-                    ("Very Critical", priorization_weights.get("RP_Very_Critical", None)),
-                    ("Critical", priorization_weights.get("RP_Critical", None)),
-                    ("High", priorization_weights.get("RP_High", None)),
                     ("Medium Low", priorization_weights.get("RP_Medium_Low", None)),
+                    ("High", priorization_weights.get("RP_High", None)),
+                    ("Critical", priorization_weights.get("RP_Critical", None)),
+                    ("Very Critical", priorization_weights.get("RP_Very_Critical", None)),
                 ]
 
                 for label, rp in RISK_PROFILES:
