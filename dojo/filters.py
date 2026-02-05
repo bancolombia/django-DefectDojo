@@ -313,7 +313,7 @@ class FindingPriorityFilter(MultipleChoiceFilter):
                     if self.RP_HIGH:
                         lower, upper = map(float, self.RP_HIGH.split("-"))
                         combined_query |= Q(
-                            priority_rounded__gte=lower, 
+                            priority_rounded__gt=lower, 
                             priority_rounded__lte=upper, 
                             tags__name__in=self.tags_priority
                         )
@@ -321,7 +321,7 @@ class FindingPriorityFilter(MultipleChoiceFilter):
                     if self.RP_CRITICAL:
                         lower, upper = map(float, self.RP_CRITICAL.split("-"))
                         combined_query |= Q(
-                            priority_rounded__gte=lower, 
+                            priority_rounded__gt=lower, 
                             priority_rounded__lte=upper, 
                             tags__name__in=self.tags_priority
                         )
@@ -329,7 +329,7 @@ class FindingPriorityFilter(MultipleChoiceFilter):
                     if self.RP_VERY_CRITICAL:
                         lower, upper = map(float, self.RP_VERY_CRITICAL.split("-"))
                         combined_query |= Q(
-                            priority_rounded__gte=lower, 
+                            priority_rounded__gt=lower, 
                             priority_rounded__lte=upper,
                             tags__name__in=self.tags_priority
                         )
@@ -340,7 +340,7 @@ class FindingPriorityFilter(MultipleChoiceFilter):
             return (
                 qs.annotate(
                     priority_rounded=Case(
-                        When(priority__isnull=False, then=Round("priority", 2)),
+                        When(priority__isnull=False, then=Round("priority", 10)),
                         default=Value(Decimal("0.00")),
                         output_field=DecimalField(max_digits=10, decimal_places=2),
                     )

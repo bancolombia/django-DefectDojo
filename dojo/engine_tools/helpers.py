@@ -472,7 +472,7 @@ def update_finding_prioritization_per_cve(
                 else (Q(severity=severity) & Q(cve=vulnerability_id) & ~Q(cve=None))
             )
         else:
-            priority_cve_severity_filter = (Q(cve=vulnerability_id) & ~Q(cve=None)) | (
+            priority_cve_severity_filter = (Q(severity=severity) & Q(cve=vulnerability_id) & ~Q(cve=None)) | (
                 Q(vuln_id_from_tool=vulnerability_id) & ~Q(vuln_id_from_tool=None)
             )
     else:
