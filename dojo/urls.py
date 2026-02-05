@@ -127,6 +127,7 @@ from dojo.security_posture.urls import urlpatterns as security_posture_urls_view
 from dojo.api_v2.notifications.urls import urlpatterns as notifications_email_urls
 from dojo.api_v2.alerts.urls import urlpatterns as alert_urls
 from dojo.api_v2.ia_recommendation.urls import urlpatterns as ia_recommendation_urls
+from dojo.api_v2.user.urls import urlpatterns as user_api_urls 
 
 from dojo.utils import get_system_setting
 
@@ -299,6 +300,7 @@ urlpatterns += api_v2_urls
 urlpatterns += survey_urls
 urlpatterns += alert_urls 
 urlpatterns += ia_recommendation_urls 
+urlpatterns += user_api_urls
 
 if hasattr(settings, "DJANGO_METRICS_ENABLED"):
     if settings.DJANGO_METRICS_ENABLED:

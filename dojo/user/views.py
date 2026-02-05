@@ -680,11 +680,3 @@ class DojoPasswordResetView(PasswordResetView):
 class DojoForgotUsernameView(PasswordResetView):
     form_class = DojoForgotUsernameForm
 
-
-
-from django.views.decorators.http import require_GET
-
-@require_GET
-@ensure_csrf_cookie
-def csrf(request):
-    return JsonResponse({"detail": "CSRF cookie set"})
