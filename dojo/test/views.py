@@ -87,6 +87,10 @@ from dojo.utils import (
     process_tag_notifications,
     redirect_to_return_url_or_else,
 )
+from dojo.engine_tools.helpers import (
+    calculate_priority_epss_kev_finding,
+    get_severity_risk_map,
+)
 
 logger = logging.getLogger(__name__)
 parse_logger = logging.getLogger("dojo")
@@ -537,6 +541,19 @@ class AddFindingView(View):
             finding.save()
             # Save and add new endpoints
             finding_helper.add_endpoints(finding, context["form"])
+            severity_risk_map = get_severity_risk_map()
+            (
+                priority,
+                _,
+                _,
+                _,
+                _,
+                _,
+                _,
+            ) = calculate_priority_epss_kev_finding(
+                finding, severity_risk_map, None, None, None
+            )
+            finding.priority = priority
             # Save the finding at the end and return
             finding.save()
 
