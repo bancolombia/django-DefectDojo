@@ -31,8 +31,7 @@ import dojo.finding.helper as finding_helper
 import dojo.jira_link.helper as jira_helper
 from dojo.authorization.authorization import (
     user_has_permission,
-    user_has_permission_or_403,
-    user_has_global_permission)
+    user_has_permission_or_403,)
 from dojo.authorization.authorization_decorators import user_is_authorized
 from dojo.authorization.roles_permissions import Permissions
 from dojo.filters import (
@@ -100,7 +99,6 @@ from dojo.models import (
     Test,
     Test_Import,
     Test_Type,
-    ExclusivePermission,
 )
 from dojo.product.queries import (
     get_authorized_global_groups_for_product,
@@ -137,6 +135,10 @@ from dojo.utils import (
     queryset_check,
     sum_by_severity_level,
     validate_group_role
+)
+from dojo.engine_tools.helpers import (
+    calculate_priority_epss_kev_finding,
+    get_severity_risk_map,
 )
 
 logger = logging.getLogger(__name__)
@@ -1467,6 +1469,19 @@ class AdHocFindingView(View):
             finding.save()
             # Save and add new endpoints
             finding_helper.add_endpoints(finding, context["form"])
+            severity_risk_map = get_severity_risk_map()
+            (
+                priority,
+                _,
+                _,
+                _,
+                _,
+                _,
+                _,
+            ) = calculate_priority_epss_kev_finding(
+                finding, severity_risk_map, None, None, None
+            )
+            finding.priority = priority
             # Save the finding at the end and return
             finding.save()
 
