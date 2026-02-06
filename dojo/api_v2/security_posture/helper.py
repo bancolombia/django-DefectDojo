@@ -70,12 +70,12 @@ def get_security_posture(engagement: Engagement, engagement_name: str):
         tags.extend(test.tags.all().values_list("name", flat=True))
 
     data["adoption_devsecops"] = adoption_devsecops_include(tags)
-    active_finding = Finding.objects.filter(test__engagement=engagement, active=True, duplicate=False, risk_accepted= False).only(
-        "id",
-        "severity",
-        "priority",
-        "tags"
-    )
+    active_finding = engagement.get_all_finding_active.only(
+            "id",
+            "severity",
+            "priority",
+            "tags"
+        ) 
     data["counter_active_findings"] = active_finding.distinct().count() 
     data["counter_findings_by_priority"] = {
         "very_critical": 0,
