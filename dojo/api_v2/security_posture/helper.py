@@ -2,7 +2,7 @@ import logging
 from django.utils import timezone
 from dojo.models import GeneralSettings
 from dojo.api_v2.utils import http_response
-from dojo.models import Engagement
+from dojo.models import Engagement, Finding
 logger = logging.getLogger(__name__)
 
 def calculate_posture(result):
@@ -71,11 +71,11 @@ def get_security_posture(engagement: Engagement, engagement_name: str):
 
     data["adoption_devsecops"] = adoption_devsecops_include(tags)
     active_finding = engagement.get_all_finding_active.only(
-        "id",
-        "severity",
-        "priority",
-        "tags"
-    )
+            "id",
+            "severity",
+            "priority",
+            "tags"
+        ) 
     data["counter_active_findings"] = active_finding.distinct().count() 
     data["counter_findings_by_priority"] = {
         "very_critical": 0,
