@@ -128,6 +128,7 @@ from dojo.api_v2.notifications.urls import urlpatterns as notifications_email_ur
 from dojo.api_v2.alerts.urls import urlpatterns as alert_urls
 from dojo.api_v2.ia_recommendation.urls import urlpatterns as ia_recommendation_urls
 from dojo.api_v2.user.urls import urlpatterns as user_api_urls 
+from dojo.pentesting.urls import urlpatterns as pentesting_urls_view
 
 from dojo.utils import get_system_setting
 
@@ -295,6 +296,7 @@ urlpatterns += manager_cache_urls
 urlpatterns += metrics_general_urls
 urlpatterns += security_posture_urls
 urlpatterns += security_posture_urls_view
+urlpatterns += pentesting_urls_view 
 urlpatterns += notifications_email_urls
 urlpatterns += api_v2_urls
 urlpatterns += survey_urls
