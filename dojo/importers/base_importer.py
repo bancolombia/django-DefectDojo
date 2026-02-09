@@ -874,9 +874,9 @@ class BaseImporter(ImporterOptions):
             )
 
     @app.task
-    def update_priority_epss_kev(self, findings: list[Finding]) -> None:
+    def update_priority_epss_kev(finding_ids: list[int]) -> None:
         """
-        Get priority, EPSS score and KEV status update for a list of findings
+        Get priority, EPSS score and KEV status update for a list of finding ids
         """
         df_risk_score = None
         epss_dict = None
@@ -892,8 +892,13 @@ class BaseImporter(ImporterOptions):
             )
             return
 
-        if not findings:
+        if not finding_ids:
             logger.info("IMPORT_SCAN: No findings to update Priority, EPSS, KEV")
+            return
+
+        findings = list(Finding.objects.filter(id__in=finding_ids))
+        if not findings:
+            logger.info("IMPORT_SCAN: No findings found for provided ids")
             return
 
         logger.info(
