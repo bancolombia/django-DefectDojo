@@ -141,7 +141,8 @@ class DefaultReImporter(BaseImporter, DefaultReImporterOptions):
         # Update the test progress to reflect that the import has completed
         logger.debug("REIMPORT_SCAN: Updating Test progress")
         self.update_test_progress()
-        self.update_priority_epss_kev.apply_async(args=[self, new_findings])
+        finding_ids = [finding.id for finding in new_findings]
+        BaseImporter.update_priority_epss_kev.apply_async(args=[finding_ids])
         logger.debug("REIMPORT_SCAN: Done")
         return (
             self.test,
