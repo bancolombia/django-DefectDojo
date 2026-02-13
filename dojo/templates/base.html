@@ -1085,7 +1085,7 @@
                                             </li>
                                             <li>
                                                 {% if "ENABLE_SCOPE"|general_settings_get_value:"False" %}
-                                                    <a rel="noopener noreferrer" href="{% url 'pentesting_view' %}" aria-expanded="false" aria-label="Scope">
+                                                    <a rel="noopener noreferrer" href="{% url 'pentesting_view' product_tab.porduct.id %}" aria-expanded="false" aria-label="Scope">
                                                         <i class="fa-solid fa-shield-halved fa-fw"></i>
                                                         <span>{% trans "Scope" %}</span>
                                                         <span class="glyphicon arrow"></span>
