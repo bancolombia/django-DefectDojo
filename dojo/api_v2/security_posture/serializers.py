@@ -102,6 +102,7 @@ class ProductSecurityPostureSerializer(serializers.Serializer):
     product_name = serializers.CharField()
     severity_product = serializers.CharField(required=False, allow_null=True)
     adoption_devsecops = serializers.ListField(child=serializers.CharField())
+    active_engagements = serializers.IntegerField()
     total_active_findings = serializers.IntegerField()
     counter_findings_by_priority = EngagementProritySerializer()
     counter_findings_by_severity = EngagementSeveritySerializer()

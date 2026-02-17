@@ -151,31 +151,34 @@ def get_product_security_posture(product: Product, product_name: str):
     data["is_in_hacking_continuos"] = False 
     data["details"] = []
     data["events_active_hacking"] = {"status": False, "events": []}
-    
+     
+    active_engagements = 0    
     result = 0
-    
     adoption_devsecops_product = []
     for engagement in product.engagement_set.all():
-        engagement_posture = get_security_posture(engagement, None)
-        data["total_active_findings"] += engagement_posture.get("counter_active_findings", 0)
-        adoption_devsecops_product.extend(engagement_posture.get("adoption_devsecops", []))
-        
-        for severity, count in engagement_posture.get("counter_findings_by_severity", {}).items():
-            data["counter_findings_by_severity"][severity] += count
-        for priority, count in engagement_posture.get("counter_findings_by_priority", {}).items():
-            data["counter_findings_by_priority"][priority] += count
-        
-        is_in_hacking_continuos = engagement_posture.get("is_in_hacking_continuos", False)
-        if is_in_hacking_continuos:
-            data["is_in_hacking_continuos"] = True
-        events_active_hacking = engagement_posture.get("events_active_hacking", {"status": False, "events": []})
-        if events_active_hacking.get("status", False):
-            data["events_active_hacking"]["status"] = True
-            data["events_active_hacking"]["events"].extend(events_active_hacking.get("events", []))
+        if engagement.active:
+            active_engagements += 1
+            engagement_posture = get_security_posture(engagement, None)
+            data["total_active_findings"] += engagement_posture.get("counter_active_findings", 0)
+            adoption_devsecops_product.extend(engagement_posture.get("adoption_devsecops", []))
             
-        result += engagement_posture.get("result", 0)
+            for severity, count in engagement_posture.get("counter_findings_by_severity", {}).items():
+                data["counter_findings_by_severity"][severity] += count
+            for priority, count in engagement_posture.get("counter_findings_by_priority", {}).items():
+                data["counter_findings_by_priority"][priority] += count
+            
+            is_in_hacking_continuos = engagement_posture.get("is_in_hacking_continuos", False)
+            if is_in_hacking_continuos:
+                data["is_in_hacking_continuos"] = True
+            events_active_hacking = engagement_posture.get("events_active_hacking", {"status": False, "events": []})
+            if events_active_hacking.get("status", False):
+                data["events_active_hacking"]["status"] = True
+                data["events_active_hacking"]["events"].extend(events_active_hacking.get("events", []))
+                
+            result += engagement_posture.get("result", 0)
             
     data["adoption_devsecops"] = list(set(adoption_devsecops_product))
-    data["result"] = round(result/len(product.engagement_set.all()), 3) if product.engagement_set.exists() else 0
+    data["active_engagements"] = active_engagements
+    data["result"] = round(result/active_engagements) if result > 0.0 else 0.0
     data["status"] = calculate_posture(data["result"])
     return data
