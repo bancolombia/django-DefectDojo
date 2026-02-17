@@ -161,17 +161,22 @@ def rules_for_direct_acceptance(
     Returns:
         status_permission (dict): Dictionary of status permission of user on risk_acceptance
     """
+
+    status_permission = {
+        "status" : "Failed",
+        "message": "Cannot perform action",
+        "number_of_acceptors_required": 1
+    }
+
+    if risk_acceptance.long_term_acceptance:
+        return status_permission
+
     number_of_acceptors_required = (
         settings.RULE_RISK_PENDING_ACCORDING_TO_CRITICALITY.get(finding.get_severity_related_to_priority())
         .get("type_contacts")
         .get(get_product_type_prefix_key(product_type.name)).get("number_acceptors")
     )
 
-    status_permission = {
-        "status" : "Failed",
-        "message": "Cannot perform action",
-        "number_of_acceptors_required": number_of_acceptors_required
-    }
 
     if (
         user.is_superuser is True
