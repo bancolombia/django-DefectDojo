@@ -1083,7 +1083,8 @@
                                                     
                                                 </ul>
                                             </li>
-                                            <li>
+                                        {% endif %}
+                                        <li>
                                                 {% if "ENABLE_SCOPE"|general_settings_get_value:"False" %}
                                                     <a rel="noopener noreferrer" href="{% url 'pentesting_view' %}" aria-expanded="false" aria-label="Scope">
                                                         <i class="fa-solid fa-shield-halved fa-fw"></i>
@@ -1092,9 +1093,7 @@
                                                     </a>
                                                 {% endif %}
                                             <ul class="nav nav-second-level">
-                                            </li>
-                                        {% endif %}
-                                    
+                                        </li>
                                     </ul>
                                 </div>
                             </div>
