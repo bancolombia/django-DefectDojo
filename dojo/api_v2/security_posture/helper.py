@@ -1,4 +1,5 @@
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from django.utils import timezone
 from dojo.models import GeneralSettings
 from dojo.api_v2.utils import http_response
@@ -115,6 +116,11 @@ def get_security_posture(engagement: Engagement, engagement_name: str):
     return data
 
 
+def _process_engagement(engagement):
+    """Helper function to process a single engagement in parallel"""
+    return get_security_posture(engagement, None)
+
+
 def get_product_security_posture(product: Product, product_name: str):
     """Returns security posture information for a product with all its engagements"""
     data = {}
@@ -155,10 +161,16 @@ def get_product_security_posture(product: Product, product_name: str):
     active_engagements = 0    
     result = 0
     adoption_devsecops_product = []
-    for engagement in product.engagement_set.all():
-        if engagement.active:
+    
+    active_engagements_list = [eng for eng in product.engagement_set.all() if eng.active]
+    
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_engagement = {executor.submit(_process_engagement, eng): eng for eng in active_engagements_list}
+
+        for future in as_completed(future_to_engagement):
+            engagement_posture = future.result()
+                
             active_engagements += 1
-            engagement_posture = get_security_posture(engagement, None)
             data["total_active_findings"] += engagement_posture.get("counter_active_findings", 0)
             adoption_devsecops_product.extend(engagement_posture.get("adoption_devsecops", []))
             
@@ -178,7 +190,6 @@ def get_product_security_posture(product: Product, product_name: str):
             result += engagement_posture.get("result", 0)
             
     data["adoption_devsecops"] = list(set(adoption_devsecops_product))
-    data["active_engagements"] = active_engagements
-    data["result"] = round(result/active_engagements) if result > 0.0 else 0.0
+    data["result"] = round(result/active_engagements, 3) if result > 0.0 else 0.0
     data["status"] = calculate_posture(data["result"])
     return data

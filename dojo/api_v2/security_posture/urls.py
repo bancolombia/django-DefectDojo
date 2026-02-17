@@ -4,7 +4,7 @@ from dojo.api_v2.security_posture.views import SecurityPosture, ProductSecurityP
 # Manager cache url
 
 urlpatterns = [
-    path("api/v2/security_posture",
+    path("api/v2/security_posture/engagement",
          SecurityPosture.as_view(),
          name='security_posture'),
     path("api/v2/security_posture/product",
