@@ -25,7 +25,7 @@ class SecurityPostureAPITest(TestCase):
         token = Token.objects.get(user__username="admin")
         self.client = APIClient()
         self.client.credentials(HTTP_AUTHORIZATION="Token " + token.key)
-        self.url = reverse('security_posture')
+        self.url = reverse('engagement_security_posture')
         
         # Create test data
         self.product_type = Product_Type.objects.get(id=1)
@@ -76,7 +76,7 @@ class SecurityPostureAPITest(TestCase):
         
         self.setup_general_settings()
         
-        self.url = reverse('security_posture')
+        self.url = reverse('engagement_security_posture')
 
     def setup_general_settings(self):
         """Configure GeneralSettings for tests"""

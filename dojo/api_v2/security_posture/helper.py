@@ -45,7 +45,7 @@ def adoption_devsecops_include(tags):
     tags = list(set(tags))
     return [tag for tag in tags if tag in GeneralSettings.get_value("DEVSECOPS_ADOPTION_INCLUDE_TAGS", ["engine_iac", "engine_container"])]
 
-def get_security_posture(engagement: Engagement, engagement_name: str):
+def get_engagement_security_posture(engagement: Engagement, engagement_name: str):
     data = {} 
     try:
         if isinstance(engagement, Engagement):
@@ -118,7 +118,7 @@ def get_security_posture(engagement: Engagement, engagement_name: str):
 
 def _process_engagement(engagement):
     """Helper function to process a single engagement in parallel"""
-    return get_security_posture(engagement, None)
+    return get_engagement_security_posture(engagement, None)
 
 
 def get_product_security_posture(product: Product, product_name: str):

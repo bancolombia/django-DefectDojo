@@ -4,8 +4,8 @@ from dojo.security_posture import views
 urlpatterns = [
     re_path(
         r"^engagement/security_posture/$",
-        views.security_posture_view,
-        name="security_posture_view"
+        views.engagement_security_posture_view,
+        name="engagement_security_posture_view"
     ),
     re_path(
         r"^product/security_posture/$",
