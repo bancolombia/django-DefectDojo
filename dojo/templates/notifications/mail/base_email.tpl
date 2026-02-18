@@ -303,7 +303,7 @@
 						<td class="proton-td" colspan="10" style="">
 							<div class="proton-divider"></div>
 							<center>
-								<span style="color: #000000"> © 2025 DevSecOps Team</span>
+								<span style="color: #000000"> © {% now "Y" %} DevSecOps Team</span>
 							</center>
 							<div class="proton-margin-bottom"></div>
 						</td>
