@@ -3232,6 +3232,14 @@ class TransferFindingFindingsDetailSerializer(serializers.Serializer):
     related_finding = serializers.IntegerField(required=False)
 
 
+class TransferFindingToNotesSerializer(serializers.Serializer):
+    transfer_finding_id = serializers.PrimaryKeyRelatedField(
+        queryset=TransferFinding.objects.all(), many=False, allow_null=True,
+    )
+    notes = NoteSerializer(many=True)
+
+
+
 class TransferFindingFindingsUpdateSerializer(serializers.Serializer):
     engagement_id = serializers.IntegerField(required=False)
     findings = serializers.DictField(child=TransferFindingFindingsDetailSerializer())
