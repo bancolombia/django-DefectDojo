@@ -67,6 +67,7 @@ from dojo.engagement.queries import get_authorized_engagements
 from dojo.engagement.services import close_engagement, reopen_engagement
 from dojo.api_v2.api_error import ApiError
 from dojo.api_v2.utils import http_response
+from dojo.filters import ProductFilter, ProductFilterWithoutObjectLookups, ProductTypeFilter
 from dojo.filters import (
     ApiAppAnalysisFilter,
     ApiCredentialsFilter,
@@ -2148,9 +2149,49 @@ class ProductViewSet(
         data = report_generate(request, product, options)
         report = serializers.ReportGenerateSerializer(data)
         return Response(report.data)
+    
+       
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="id",
+                type=OpenApiTypes.INT,
+                description="Product Type Id",
+                required=True,
+            ),],
+        responses={status.HTTP_200_OK: serializers.ProductOfProductTypes},
+    )
+    @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated],)
+    def get_products_name(self, request):
+        pk = request.query_params.get("id")
+        paginator = self.pagination_class()
+        data = Product.objects.filter(prod_type=pk).values("id", "name")
+        paginated_data = paginator.paginate_queryset(data, request)
+        serializer = serializers.ProductOfProductTypes(paginated_data, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
 
-# Authorization: object-based
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="id",
+                type=OpenApiTypes.INT,
+                description="Product Id",
+                required=True,
+            ),],
+        responses={status.HTTP_200_OK: serializers.ProductContactsSerializer},
+    )
+    @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated],)
+    def get_description_product(self, request):
+        """
+        Returns a list of products with their contacts.
+        """
+        pid = request.query_params.get("product_id")
+        product = get_object_or_404(Product, id=pid)
+        serializer = serializers.ProductContactsSerializer(product)
+        return http_response.ok(data=serializer.data)
+
+
 @extend_schema_view(**schema_with_prefetch())
 class ProductMemberViewSet(
     PrefetchDojoModelViewSet,
