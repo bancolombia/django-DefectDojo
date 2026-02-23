@@ -45,10 +45,24 @@ class RiskAcceptanceEngagementViewSet(prefetch.PrefetchListMixin,
     filterset_fields = [
         "id",
         "owner",
-        "engagement",
         "product",
     ] 
     pagination_class = LimitOffsetPagination
+
+    def post(self, request, *args, **kwargs):
+        try:
+            serializer = RiskAcceptanceEngagementSerializer(request)
+            serializer.is_valid(raise_exception=True)
+            instance = serializer.save()
+            return http_response.ok(
+                message="Long Risk acceptance Created Successfully",
+                data=RiskAcceptanceEngagementSerializer(instance).data
+            )
+        except Exception as e:
+            logger.error(f"Validation error on POST long risk acceptance object")
+            return http_response.error(
+                message="Validation error occurred. ", data=serializer.errors)
+
 
 @extend_schema(tags=["long_risk_acceptance"])
 class RiskAcceptanceExclusionRuleViewSet(prefetch.PrefetchListMixin,
@@ -61,6 +75,5 @@ class RiskAcceptanceExclusionRuleViewSet(prefetch.PrefetchListMixin,
     filter_backends = (DjangoFilterBackend,)
     filterset_fields = [
         "id",
-        "engagement",
     ]
     pagination_class = LimitOffsetPagination
