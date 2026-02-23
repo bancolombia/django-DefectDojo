@@ -492,7 +492,7 @@
           <tr>
               <td style="width: 150px;"><strong>Security Posture</strong></td>
                   <td>
-                      <a href="security_posture/product?product_id={{prod.id}}" class="has-popover" data-trigger="hover" data-placement="right" data-container="body" data-original-title="Details security posture">
+                        <a href="{% url 'product_security_posture_view' %}?product_id={{ prod.id }}" class="has-popover" data-trigger="hover" data-placement="right" data-container="body" data-original-title="Details security posture">
                       <span style="background-color: #FF7F41;" class="pass_fail Pass">View Details</span></a>
                   </td>
           </tr>
