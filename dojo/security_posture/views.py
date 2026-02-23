@@ -22,7 +22,7 @@ def engagement_security_posture_view(request: HttpRequest) -> HttpResponse:
     add_breadcrumb(title=page_name, top_level=not len(request.GET), request=request)
     return render(request, 'dojo/generic_view.html', {
         'actions': page_name,
-        'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/secure/product/safety-position{base_params}",  
+        'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/secure/engagement/safety-position{base_params}",  
         'user': user})
 
 
@@ -40,5 +40,5 @@ def product_security_posture_view(request: HttpRequest) -> HttpResponse:
     add_breadcrumb(title=page_name, top_level=not len(request.GET), request=request)
     return render(request, 'dojo/generic_view.html', {
         'actions': page_name,
-        'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/secure/product/safety-position/product{base_params}",  
+        'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/secure/product/safety-position{base_params}",  
         'user': user})
