@@ -1,3 +1,4 @@
+import os
 import base64
 import logging
 import mimetypes
@@ -29,7 +30,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.generics import GenericAPIView
-from rest_framework.parsers import MultiPartParser
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import DjangoModelPermissions, IsAuthenticated 
 from rest_framework.response import Response
 from rest_framework.authtoken.views import ObtainAuthToken
@@ -66,6 +67,7 @@ from dojo.engagement.queries import get_authorized_engagements
 from dojo.engagement.services import close_engagement, reopen_engagement
 from dojo.api_v2.api_error import ApiError
 from dojo.api_v2.utils import http_response
+from dojo.filters import ProductFilter, ProductFilterWithoutObjectLookups, ProductTypeFilter
 from dojo.filters import (
     ApiAppAnalysisFilter,
     ApiCredentialsFilter,
@@ -2147,9 +2149,49 @@ class ProductViewSet(
         data = report_generate(request, product, options)
         report = serializers.ReportGenerateSerializer(data)
         return Response(report.data)
+    
+       
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="id",
+                type=OpenApiTypes.INT,
+                description="Product Type Id",
+                required=True,
+            ),],
+        responses={status.HTTP_200_OK: serializers.ProductOfProductTypes},
+    )
+    @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated],)
+    def get_products_name(self, request):
+        pk = request.query_params.get("id")
+        paginator = self.pagination_class()
+        data = Product.objects.filter(prod_type=pk).values("id", "name")
+        paginated_data = paginator.paginate_queryset(data, request)
+        serializer = serializers.ProductOfProductTypes(paginated_data, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
 
-# Authorization: object-based
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="id",
+                type=OpenApiTypes.INT,
+                description="Product Id",
+                required=True,
+            ),],
+        responses={status.HTTP_200_OK: serializers.ProductContactsSerializer},
+    )
+    @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated],)
+    def get_description_product(self, request):
+        """
+        Returns a list of products with their contacts.
+        """
+        pid = request.query_params.get("product_id")
+        product = get_object_or_404(Product, id=pid)
+        serializer = serializers.ProductContactsSerializer(product)
+        return http_response.ok(data=serializer.data)
+
+
 @extend_schema_view(**schema_with_prefetch())
 class ProductMemberViewSet(
     PrefetchDojoModelViewSet,
@@ -3583,6 +3625,116 @@ class TransferFindingViewSet(prefetch.PrefetchListMixin,
         NotificationTransferFinding.transfer_finding_remove(transfer_finding)
         super().destroy(request, pk)
         return http_response.no_content(message="TransferFinding Deleted")
+    
+
+    @action(
+            methods=["POST"],
+            detail=True,
+            parser_classes=[MultiPartParser, FormParser]
+    )
+    def upload_file(self, request, pk=None):
+        transfer_finding = get_object_or_404(TransferFinding, id=pk)
+        if "file" not in request.FILES:
+            return http_response.bad_request(message="File not found")
+        uploaded_file = request.FILES["file"]
+        transfer_finding.path = uploaded_file
+        transfer_finding.save()
+        return http_response.ok(message="File uploaded succesfully")
+    
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="transfer_finding_id",
+                type=OpenApiTypes.INT,
+                description="Transfer Finding id",
+                required=True,
+            ),
+        ],
+    )
+    @action(detail=False, methods=["get"], url_path="download_file")
+    def download_file(self, request, *args, **kwargs):
+        """
+        GET /.../download_file/?transfer_finding_id=<id>
+        Returns the file attached to the given Transfer Finding as a downloadable response.
+        """
+        transfer_finding_id = request.query_params.get("transfer_finding_id") or request.query_params.get("transfer_finding_id")
+        if not transfer_finding_id:
+            return http_response.error(message="Missing 'transfer_finding_id' query parameter.", data=None)
+
+        transfer_finding_obj = get_object_or_404(TransferFinding, pk=transfer_finding_id)
+
+        file = transfer_finding_obj.path
+        if not file:
+            raise ApiError.not_found(contex="File not fonud")
+
+        try:
+            file_handle = file.open("rb")
+        except Exception as e:
+            raise ApiError.internal_server_error(contex="Unable to open file: " + str(e))
+
+        filename = os.path.basename(file.name)
+        content_type, _ = mimetypes.guess_type(filename)
+        response = FileResponse(
+            file_handle,
+            as_attachment=True,
+            filename=filename,
+            content_type=content_type or "application/octet-stream"
+            )
+        return response
+    
+    @extend_schema(
+        methods=["GET"],
+        responses={
+            status.HTTP_200_OK: serializers.TransferFindingToNotesSerializer,
+        },
+    )
+    @extend_schema(
+        methods=["POST"],
+        request=serializers.AddNewNoteOptionSerializer,
+        responses={status.HTTP_201_CREATED: serializers.NoteSerializer},
+    )
+    @action(detail=True, methods=["get", "post"])
+    def notes(self, request, pk=None):
+        transfer_finding = self.get_object()
+        if request.method == "POST":
+            new_note = serializers.AddNewNoteOptionSerializer(
+                data=request.data,
+            )
+            if new_note.is_valid():
+                entry = new_note.validated_data["entry"]
+                private = new_note.validated_data.get("private", False)
+                note_type = new_note.validated_data.get("note_type", None)
+            else:
+                return Response(
+                    new_note.errors, status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            notes = transfer_finding.note.filter(note_type=note_type).first()
+            if notes and note_type and note_type.is_single:
+                return Response("Only one instance of this note_type allowed on an engagement.", status=status.HTTP_400_BAD_REQUEST)
+
+            author = request.user
+            note = Notes(
+                entry=entry,
+                author=author,
+                private=private,
+                note_type=note_type,
+            )
+            note.save()
+            transfer_finding.note.add(note)
+
+            serialized_note = serializers.NoteSerializer(
+                {"author": author, "entry": entry, "private": private},
+            )
+            return Response(
+                serialized_note.data, status=status.HTTP_201_CREATED,
+            )
+        notes = transfer_finding.note.all()
+
+        serialized_notes = serializers.TransferFindingToNotesSerializer(
+            {"engagement_id": transfer_finding, "notes": notes},
+        )
+        return Response(serialized_notes.data, status=status.HTTP_200_OK)
 
 
 class TransferFindingFindingsViewSet(prefetch.PrefetchListMixin,

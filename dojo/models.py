@@ -2760,7 +2760,7 @@ class Finding(models.Model):
                                         on_delete=models.CASCADE)
     unique_id_from_tool = models.CharField(null=True,
                                            blank=True,
-                                           max_length=1000,
+                                           max_length=2000,
                                            verbose_name=_("Unique ID from tool"),
                                            help_text=_("Vulnerability technical id from the source tool. Allows to track unique vulnerabilities over time across subsequent scans."))
     vuln_id_from_tool = models.CharField(null=True,
@@ -3837,6 +3837,7 @@ class TransferFinding(models.Model):
                              verbose_name=_('Owner'), help_text=_("The person that Owner the Tranfer finding"))
 
     notes = models.CharField(max_length=2500, editable=True, blank=True)
+    note = models.ManyToManyField(Notes, blank=True, editable=False)
 
     class Meta:
 

@@ -1072,6 +1072,23 @@ class ProductTypeSerializer(serializers.ModelSerializer):
         model = Product_Type
         fields = "__all__"
 
+class ProductOfProductTypes(serializers.ModelSerializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+
+    class Meta:
+        model = Product 
+        fields = ["id", "name"]
+
+class ProductContactsSerializer(serializers.ModelSerializer):
+    product_manager = UserStubSerializer(read_only=True)
+    technical_contact = UserStubSerializer(read_only=True)
+    team_manager = UserStubSerializer(read_only=True)
+
+    class Meta:
+        model = Product
+        fields = ["product_manager", "technical_contact" , "team_manager"]
+
 
 class EngagementSerializer(serializers.ModelSerializer):
     tags = TagListSerializerField(required=False)
@@ -3230,6 +3247,14 @@ class TransferFindingUpdateSerializer(serializers.ModelSerializer):
 class TransferFindingFindingsDetailSerializer(serializers.Serializer):
     risk_status = serializers.CharField()
     related_finding = serializers.IntegerField(required=False)
+
+
+class TransferFindingToNotesSerializer(serializers.Serializer):
+    transfer_finding_id = serializers.PrimaryKeyRelatedField(
+        queryset=TransferFinding.objects.all(), many=False, allow_null=True,
+    )
+    notes = NoteSerializer(many=True)
+
 
 
 class TransferFindingFindingsUpdateSerializer(serializers.Serializer):
