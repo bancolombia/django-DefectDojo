@@ -2,7 +2,6 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 class RiskAcceptanceEngagement(models.Model):
-    engagement = models.ForeignKey("Engagement", on_delete=models.CASCADE, null=True, blank=True)
     product = models.ForeignKey(
         "Product", null=True, blank=True, on_delete=models.CASCADE
     )

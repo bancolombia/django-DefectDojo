@@ -77,3 +77,18 @@ class RiskAcceptanceExclusionRuleViewSet(prefetch.PrefetchListMixin,
         "id",
     ]
     pagination_class = LimitOffsetPagination
+
+
+    def post(self, request, *args, **kwargs):
+        try:
+            serializer = RiskAcceptanceExclusionRuleSerializer(request)
+            serializer.is_valid(raise_exception=True)
+            instance = serializer.save()
+            return http_response.ok(
+                message="Long Risk acceptance Rules Created Successfully",
+                data=RiskAcceptanceExclusionRuleSerializer(instance).data
+            )
+        except Exception as e:
+            logger.error(f"Validation error on POST long risk acceptance Rules")
+            return http_response.error(
+                message="Validation error occurred. ", data=serializer.errors)

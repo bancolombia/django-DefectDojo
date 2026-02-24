@@ -1254,7 +1254,6 @@ class Product(models.Model):
         help_text=_("Disable SLA breach notifications if configured in the global settings"))
     async_updating = models.BooleanField(default=False,
                                             help_text=_("Findings under this Product or SLA configuration are asynchronously being updated"))
-
     class Meta:
         ordering = ("name",)
         indexes = [
@@ -1633,6 +1632,7 @@ class Engagement(models.Model):
 
     tags = TagField(blank=True, force_lowercase=True, help_text=_("Add tags that help describe this engagement. Choose from the list or add new tags. Press Enter key to add."))
     inherited_tags = TagField(blank=True, force_lowercase=True, help_text=_("Internal use tags sepcifically for maintaining parity with product. This field will be present as a subset in the tags field"))
+    long_risk_acceptances = models.ForeignKey(RiskAcceptanceEngagement, on_delete=models.CASCADE, null=True, blank=True)
 
     class Meta:
         ordering = ["-target_start"]
