@@ -1,8 +1,9 @@
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from django.utils import timezone
 from dojo.models import GeneralSettings
 from dojo.api_v2.utils import http_response
-from dojo.models import Engagement, Finding
+from dojo.models import Engagement, Finding, Product
 logger = logging.getLogger(__name__)
 
 def calculate_posture(result):
@@ -44,8 +45,7 @@ def adoption_devsecops_include(tags):
     tags = list(set(tags))
     return [tag for tag in tags if tag in GeneralSettings.get_value("DEVSECOPS_ADOPTION_INCLUDE_TAGS", ["engine_iac", "engine_container"])]
 
-
-def get_security_posture(engagement: Engagement, engagement_name: str):
+def get_engagement_security_posture(engagement: Engagement, engagement_name: str):
     data = {} 
     try:
         if isinstance(engagement, Engagement):
@@ -112,5 +112,84 @@ def get_security_posture(engagement: Engagement, engagement_name: str):
 
 
     data["result"] = calculate_priority(active_finding)
+    data["status"] = calculate_posture(data["result"])
+    return data
+
+
+def _process_engagement(engagement):
+    """Helper function to process a single engagement in parallel"""
+    return get_engagement_security_posture(engagement, None)
+
+
+def get_product_security_posture(product: Product, product_name: str):
+    """Returns security posture information for a product with all its engagements"""
+    data = {}
+    try:
+        if isinstance(product, Product):
+            pass
+        elif isinstance(product_name, Product):
+            product = product_name
+    except Product.DoesNotExist:
+        return http_response.not_found(
+            message="Product not found", data={})
+
+    data["product_id"] = product.id
+    data["product_name"] = product.name
+    data["severity_product"] = product.business_criticality
+    data["total_active_findings"] = 0
+    
+    data["counter_findings_by_severity"] = {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "unknown": 0,
+    }
+    data["counter_findings_by_priority"] = {
+        "very_critical": 0,
+        "critical": 0,
+        "high": 0,
+        "medium_low": 0,
+        "unknown": 0,
+    }
+    
+    data["is_in_hacking_continuos"] = False 
+    data["details"] = []
+    data["events_active_hacking"] = {"status": False, "events": []}
+     
+    active_engagements = 0    
+    result = 0
+    adoption_devsecops_product = []
+    
+    active_engagements_list = [eng for eng in product.engagement_set.all() if eng.active]
+    
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_engagement = {executor.submit(_process_engagement, eng): eng for eng in active_engagements_list}
+
+        for future in as_completed(future_to_engagement):
+            engagement_posture = future.result()
+                
+            active_engagements += 1
+            data["total_active_findings"] += engagement_posture.get("counter_active_findings", 0)
+            adoption_devsecops_product.extend(engagement_posture.get("adoption_devsecops", []))
+            
+            for severity, count in engagement_posture.get("counter_findings_by_severity", {}).items():
+                data["counter_findings_by_severity"][severity] += count
+            for priority, count in engagement_posture.get("counter_findings_by_priority", {}).items():
+                data["counter_findings_by_priority"][priority] += count
+            
+            is_in_hacking_continuos = engagement_posture.get("is_in_hacking_continuos", False)
+            if is_in_hacking_continuos:
+                data["is_in_hacking_continuos"] = True
+            events_active_hacking = engagement_posture.get("events_active_hacking", {"status": False, "events": []})
+            if events_active_hacking.get("status", False):
+                data["events_active_hacking"]["status"] = True
+                data["events_active_hacking"]["events"].extend(events_active_hacking.get("events", []))
+                
+            result += engagement_posture.get("result", 0)
+            
+    data["adoption_devsecops"] = list(set(adoption_devsecops_product))
+    data["result"] = round(result/active_engagements, 3) if result > 0.0 else 0.0
     data["status"] = calculate_posture(data["result"])
     return data
