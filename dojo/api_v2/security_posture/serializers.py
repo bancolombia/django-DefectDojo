@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from dojo.models import Engagement
+from dojo.models import Engagement, Product
 
 class EngagementRequestSecuritypostureSerializer(serializers.Serializer):
     engagement_name = serializers.SlugRelatedField(
@@ -56,6 +56,53 @@ class EngagementSecuritypostureSerializer(serializers.Serializer):
     severity_product = serializers.CharField(required=False, allow_null=True)
     adoption_devsecops = serializers.ListField(child=serializers.CharField())
     counter_active_findings = serializers.IntegerField()
+    counter_findings_by_priority = EngagementProritySerializer()
+    counter_findings_by_severity = EngagementSeveritySerializer()
+    is_in_hacking_continuos = serializers.BooleanField(default=False)
+    events_active_hacking = EngagementEventsSerializer()
+    result = serializers.FloatField()
+    status = serializers.CharField()
+
+
+# Product Security Posture Serializers
+class ProductRequestSecurityPostureSerializer(serializers.Serializer):
+    product_id = serializers.PrimaryKeyRelatedField(
+        queryset=Product.objects.all(), many=False, required=False, allow_null=True,
+    )
+    product_name = serializers.SlugRelatedField(
+        slug_field='name',
+        queryset=Product.objects.all(),
+        required=False,
+        allow_null=True
+    )
+
+    def validate(self, data):
+        product_id = data.get('product_id')
+        product_name = data.get('product_name')
+        
+        if not product_id and not product_name:
+            raise serializers.ValidationError(
+                "Either product_id or product_name must be provided")
+        
+        return data
+
+
+class EngagementSummarySerializer(serializers.Serializer):
+    engagement_id = serializers.IntegerField()
+    engagement_name = serializers.CharField()
+    status = serializers.CharField(required=False, allow_null=True)
+    target_start = serializers.DateField(required=False, allow_null=True)
+    target_end = serializers.DateField(required=False, allow_null=True)
+    counter_active_findings = serializers.IntegerField()
+    adoption_devsecops = serializers.ListField(child=serializers.CharField())
+
+
+class ProductSecurityPostureSerializer(serializers.Serializer):
+    product_id = serializers.IntegerField()
+    product_name = serializers.CharField()
+    severity_product = serializers.CharField(required=False, allow_null=True)
+    adoption_devsecops = serializers.ListField(child=serializers.CharField())
+    total_active_findings = serializers.IntegerField()
     counter_findings_by_priority = EngagementProritySerializer()
     counter_findings_by_severity = EngagementSeveritySerializer()
     is_in_hacking_continuos = serializers.BooleanField(default=False)
