@@ -1,4 +1,4 @@
-from dojo.api_v2.pentesting.models import Input
+from dojo.api_v2.scope.models import Input
 from django_filters import rest_framework as filters
 
 class InputFilter(filters.FilterSet):

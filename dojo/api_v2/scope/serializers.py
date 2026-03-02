@@ -1,8 +1,12 @@
+import logging
 from django.db import transaction
 from rest_framework import serializers
 from dojo.models import Engagement, Product, Dojo_User
-from dojo.api_v2.pentesting.models import InputSecret, InputFile, Input, InputEngagement
+from dojo.api_v2.scope.models import InputSecret, InputFile, Input, InputEngagement
 from dojo.utils import dojo_crypto_encrypt, prepare_for_view
+
+logger = logging.getLogger(__name__)
+
 
 # ...existing code...
 class InputSecretSerializer(serializers.ModelSerializer):
@@ -96,8 +100,8 @@ class ScopeSecretSerializers(serializers.Serializer):
     type = serializers.ChoiceField(choices=CHOICES, required=True)
     owner = serializers.PrimaryKeyRelatedField(queryset=Dojo_User.objects.all(), required=False)
     url = serializers.CharField(required=False, allow_null=True, allow_blank=True)
-    key = serializers.CharField(required=True)
-    secret = serializers.CharField(required=True)
+    key = serializers.CharField(required=False)
+    secret = serializers.CharField(required=False)
     status = serializers.BooleanField(default=True, required=False)
     
     def create(self, validated_data):
@@ -107,20 +111,19 @@ class ScopeSecretSerializers(serializers.Serializer):
                 description=validated_data.get('description', ""),
                 owner=owner,
                 url=validated_data.get("url", None),
-                type=validated_data['type']
+                type=validated_data["type"]
             )
             input_engagement_instance = InputEngagement.objects.create(
-                engagement=validated_data.get('engagement', None),
-                product=validated_data.get('product', None),
+                engagement=validated_data.get("engagement"),
+                product=validated_data.get("product"),
                 input=input_instance
             )
-            if key := validated_data.get('key'):
-                InputSecret.objects.create(
-                    input=input_instance,
-                    key=dojo_crypto_encrypt(key),
-                    secret=dojo_crypto_encrypt(validated_data['secret']),
-                    status=validated_data['status']
-                )
+            InputSecret.objects.create(
+                input=input_instance,
+                key=dojo_crypto_encrypt(validated_data.get("key", None)),
+                secret=dojo_crypto_encrypt(validated_data.get("secret", None)),
+                status=validated_data.get("status")
+            )
         return input_engagement_instance 
 
 class InputBasicSerializer(serializers.ModelSerializer):
@@ -145,14 +148,15 @@ class InputEngagementSerializer(serializers.ModelSerializer):
 
         try:
             serializer = None
-            if input_obj.type == "secret":
+            if hasattr(input_obj, "inputsecret"):
                 secret = InputSecret.objects.get(input=input_obj)
                 serializer =  InputSecretSerializer(secret).data
-            else: 
+            else:
                 f = InputFile.objects.get(input=input_obj)
                 serializer =  InputFileSerializer(f).data
             return serializer
-        except InputSecret.DoesNotExist:
+        except Exception as e:
+            logger.error(f"Scope {str(e)}, input_id = {input_obj.id}")
             return InputBasicSerializer(input_obj).data
 
 class InputSerializer(serializers.Serializer):
@@ -175,6 +179,7 @@ class InputSerializer(serializers.Serializer):
         instance.save()
         return instance
     
+     
     def update_input_engagement(self, instance, input_engagements):
         if input_engagements:
             for input_engagement in input_engagements:

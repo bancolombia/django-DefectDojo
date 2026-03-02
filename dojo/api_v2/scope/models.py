@@ -27,6 +27,6 @@ class InputFile(models.Model):
 
 class InputSecret(models.Model):
     input = models.OneToOneField(Input, on_delete=models.CASCADE)
-    key = models.CharField(max_length=255)
-    secret = models.TextField()
+    key = models.CharField(max_length=255, null=True, blank=True)
+    secret = models.TextField(null=True, blank=True)
     status = models.BooleanField(default=True)
