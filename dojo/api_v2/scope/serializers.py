@@ -148,8 +148,6 @@ class InputEngagementSerializer(serializers.ModelSerializer):
 
         try:
             serializer = None
-            if input_obj.type == "string":
-                pass
             if hasattr(input_obj, "inputsecret"):
                 secret = InputSecret.objects.get(input=input_obj)
                 serializer =  InputSecretSerializer(secret).data
