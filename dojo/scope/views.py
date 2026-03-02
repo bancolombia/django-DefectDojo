@@ -9,8 +9,8 @@ from dojo.authorization.authorization_decorators import user_is_authorized
 
 
 @dojo_ratelimit_view()
-def pentesting_view(request: HttpRequest, product_id) -> HttpResponse:
-    page_name = ('pentesting')
+def scope_view(request: HttpRequest, product_id) -> HttpResponse:
+    page_name = ('scope')
     user = request.user.id
     cookie_csrftoken = get_token(request)
     cookie_sessionid = request.COOKIES.get('sessionid', '')

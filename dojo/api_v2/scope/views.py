@@ -5,9 +5,9 @@ from rest_framework.decorators import action
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction, IntegrityError
-from dojo.api_v2.pentesting.filter import InputFilter
-from dojo.api_v2.pentesting.models import InputSecret, InputFile, Input, InputEngagement
-from dojo.api_v2.pentesting.serializers import *
+from dojo.api_v2.scope.filter import InputFilter
+from dojo.api_v2.scope.models import InputSecret, InputFile, Input 
+from dojo.api_v2.scope.serializers import *
 from dojo.api_v2.views import DojoModelViewSet
 from dojo.api_v2.utils import http_response
 from dojo.authorization.roles_permissions import Permissions
@@ -172,7 +172,7 @@ class ScopeViewSet(prefetch.PrefetchListMixin,
             )
         return response
 
-@extend_schema(tags=["pentesting"])
+@extend_schema(tags=["scope"])
 class InputSecretViewSet(prefetch.PrefetchListMixin,
                              prefetch.PrefetchRetrieveMixin,
                              DojoModelViewSet):
@@ -182,7 +182,7 @@ class InputSecretViewSet(prefetch.PrefetchListMixin,
     serializer_class = InputSecretSerializer 
     filter_backends = (DjangoFilterBackend,)
 
-@extend_schema(tags=["pentesting"])
+@extend_schema(tags=["scope"])
 class InputFileViewSet(prefetch.PrefetchListMixin,
                              prefetch.PrefetchRetrieveMixin,
                              DojoModelViewSet):

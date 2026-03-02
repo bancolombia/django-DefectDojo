@@ -1206,8 +1206,8 @@ class UserHasPermissionSendEmail(permissions.BasePermission):
 class UserHasInputPermission(permissions.BasePermission):
     # Permission checks for related objects (like notes or metadata) can be moved
     # into a seperate class, when the legacy authorization will be removed.
-    path_input_post = re.compile(r"^/api/v2/pentesting/$")
-    path_input = re.compile(r"^/api/v2/pentesting/\d+/$")
+    path_input_post = re.compile(r"^/api/v2/scope/$")
+    path_input = re.compile(r"^/api/v2/scope/\d+/$")
 
     def has_permission(self, request, view):
         if UserHasInputPermission.path_input_post.match(
