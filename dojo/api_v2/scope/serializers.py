@@ -4,6 +4,9 @@ from rest_framework import serializers
 from dojo.models import Engagement, Product, Dojo_User
 from dojo.api_v2.scope.models import InputSecret, InputFile, Input, InputEngagement
 from dojo.utils import dojo_crypto_encrypt, prepare_for_view
+from drf_spectacular.utils import extend_schema_field
+import dojo.authorization.helper as authorization_helper
+
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +38,7 @@ class InputSecretSerializer(serializers.ModelSerializer):
             "secret",
             "status"
         ]
+    
 
 class InputFileSerializer(serializers.ModelSerializer):
     class Meta:
@@ -168,6 +172,7 @@ class InputSerializer(serializers.Serializer):
     input_engagement = InputEngagementSerializer(source="inputengagement_set", many=True)
     created = serializers.DateTimeField(read_only=True)
     updated = serializers.DateTimeField(read_only=True)
+    permissions = serializers.SerializerMethodField(read_only=True, allow_null=True)
     
     def update(self, instance, validated_data):
         engagements = validated_data.pop('inputengagement_set', [])
@@ -198,3 +203,8 @@ class InputSerializer(serializers.Serializer):
             "url",
             "created",
             "updated"]
+
+
+    @extend_schema_field(serializers.ListField())
+    def get_permissions(self, obj):
+        return authorization_helper.get_permissions(obj)

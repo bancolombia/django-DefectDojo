@@ -342,6 +342,14 @@ class Permissions(IntEnum):
             Permissions.Product_API_Scan_Configuration_Edit,
             Permissions.Product_API_Scan_Configuration_Delete,
         }
+    
+    @classmethod
+    def get_input_permissions(cls):
+        return {
+            Permissions.Input_Add,
+            Permissions.Input_Delete,
+            Permissions.Input_Edit,
+        }
 
     @classmethod
     def get_credential_permissions(cls):
