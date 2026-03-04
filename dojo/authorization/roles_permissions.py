@@ -462,6 +462,10 @@ def get_roles_with_permissions():
             Permissions.Credential_Edit,
             Permissions.Finding_Code_Review,
             Permissions.Finding_Add_Recommendation,
+            Permissions.Input_View,
+            Permissions.Input_Edit,
+            Permissions.Input_Add,
+            Permissions.Input_Delete
         },
         Roles.Maintainer: {
             Permissions.Product_Type_Add_Product,
@@ -573,6 +577,10 @@ def get_roles_with_permissions():
             Permissions.General_Settings_Edit,
             Permissions.General_Settings_Add,
             Permissions.General_Settings_Delete,
+            Permissions.Input_View,
+            Permissions.Input_Edit,
+            Permissions.Input_Add,
+            Permissions.Input_Delete
         },
         Roles.Owner: {
             Permissions.Product_Type_Add_Product,
@@ -662,6 +670,10 @@ def get_roles_with_permissions():
             Permissions.Credential_Delete,
             Permissions.Finding_Code_Review,
             Permissions.Finding_Add_Recommendation,
+            Permissions.Input_View,
+            Permissions.Input_Edit,
+            Permissions.Input_Add,
+            Permissions.Input_Delete
         },
         Roles.Developer: {
             Permissions.Product_Type_View,
@@ -689,6 +701,10 @@ def get_roles_with_permissions():
             Permissions.Transfer_Finding_Finding_Add,
             Permissions.Risk_Acceptance_Refresh_Permission_key,
             Permissions.Finding_Add_Recommendation,
+            Permissions.Input_View,
+            Permissions.Input_Edit,
+            Permissions.Input_Add,
+            Permissions.Input_Delete
 
         },
         Roles.Leader: {
@@ -729,6 +745,10 @@ def get_roles_with_permissions():
             Permissions.Metrics_Panel_Admin,
             Permissions.Metrics_Scan_Cycle,
             Permissions.Finding_Add_Recommendation,
+            Permissions.Input_View,
+            Permissions.Input_Edit,
+            Permissions.Input_Add,
+            Permissions.Input_Delete
         },
         Roles.Cibersecurity: {
             Permissions.Product_Type_View,
@@ -759,6 +779,10 @@ def get_roles_with_permissions():
             Permissions.Transfer_Finding_View,
             Permissions.Transfer_Finding_Finding_View,
             Permissions.Transfer_Finding_Finding_Add,
+            Permissions.Input_View,
+            Permissions.Input_Edit,
+            Permissions.Input_Add,
+            Permissions.Input_Delete
         },
         Roles.Risk: {
             Permissions.Product_Type_View,
@@ -784,7 +808,11 @@ def get_roles_with_permissions():
             Permissions.Metrics_Panel_Admin,
             Permissions.Metrics_Scan_Cycle,
             Permissions.Risk_Acceptance_Send_Email,
-            Permissions.Risk_Acceptance_Refresh_Permission_key
+            Permissions.Risk_Acceptance_Refresh_Permission_key,
+            Permissions.Input_View,
+            Permissions.Input_Edit,
+            Permissions.Input_Add,
+            Permissions.Input_Delete
         },
     }
 

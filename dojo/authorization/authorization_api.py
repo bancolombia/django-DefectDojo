@@ -40,11 +40,8 @@ def user_has_permission(user, obj):
     if role is None:
 
         if isinstance(obj, Input):
-            for input_engagement in obj.inputengagement_set.all():
-                members = get_members(user, input_engagement.product)
-                if members:
-                    return Permissions.get_input_permissions()
-
+            if user == obj.owner:
+                return Permissions.get_input_permissions()
         elif isinstance(obj, Finding):
             members = get_members(user, obj)
             if members:
