@@ -798,23 +798,23 @@ def parser_ia_recommendation(ia_recommendation: dict = {}):
     context = {}
     try:
         if recomendations := ia_recommendation["data"].get("recommendations", ""):
-            markdown_code = "\n###✅ Recomendaciones\n"
+            markdown_code = "\n###✅ Recommendations\n"
             markdown_code += recomendations + "\n"
 
         if mitigations := ia_recommendation["data"].get("mitigations", ""):
-            markdown_code += "\n###🛠️ Mitigación\n"
+            markdown_code += "\n###🛠️ Mitigation\n"
             markdown_code += mitigations + "\n"
 
         if files_to_fix := ia_recommendation["data"].get("files_to_fix", ""):
-            markdown_code += "\n###📌 Archivos a corregir\n"
+            markdown_code += "\n###📌 Files to be corrected\n"
             markdown_code += "```" + files_to_fix + "```"
 
         if umbral := ia_recommendation["data"].get("umbral", ""):
-            markdown_code += "\n###📈 Umbral\n"
+            markdown_code += "\n###📈 Threshold\n"
             markdown_code += "```" + umbral + "```"
 
         if decision := ia_recommendation["data"].get("decision", ""):
-            markdown_code += "\n###🚦Decisión\n"
+            markdown_code += "\n###🚦Decision\n"
             markdown_code += "```" + decision + "```"
 
         if error := ia_recommendation["data"].get("error", ""):

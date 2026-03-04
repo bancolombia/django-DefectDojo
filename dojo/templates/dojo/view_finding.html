@@ -511,9 +511,15 @@
                         {% endif %}
                         {% if finding|enable_button:"IA_RECOMMENDATION" %}
                         <td title="IA Recommendation">
+                            {% if finding.is_mitigated %}
+                            <button class="btn btn-primary" disabled="True"  data-fid-recommendation={{finding.id}} id="id_button_ia_recommendation">
+                                🤖
+                            </button>
+                            {% else %}
                             <button class="btn btn-primary" data-fid-recommendation={{finding.id}} id="id_button_ia_recommendation">
                                 🤖
                             </button>
+                            {% endif %}
                       
                         </td>
                         {% endif %}
