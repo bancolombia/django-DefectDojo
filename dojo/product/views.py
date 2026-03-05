@@ -318,6 +318,9 @@ def view_product(request, pid):
     total = critical + high + medium + low + info
 
     product_tab = Product_Tab(prod, title=_("Product"), tab="overview")
+
+    add_breadcrumb(parent=prod, top_level=False, request=request)
+
     return render(request, "dojo/view_product_details.html", {
         "prod": prod,
         "product_tab": product_tab,

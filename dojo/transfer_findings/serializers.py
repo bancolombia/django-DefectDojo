@@ -1,6 +1,7 @@
+from crum import get_current_user
 from rest_framework import serializers
 from dojo.authorization.roles_permissions import Permissions
-from dojo.models import TransferFinding, Finding, TransferFindingFinding
+from dojo.models import TransferFinding, Finding, TransferFindingFinding, Product, Product_Type, Engagement
 from dojo.authorization.authorization import user_has_permission, user_has_global_permission
 from dojo.authorization.exclusive_permissions import user_has_exclusive_permission
 
@@ -76,9 +77,16 @@ class TransferFindingFindingSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class TransferFindingCreateSerializer(serializers.ModelSerializer):
+    owner = serializers.CharField(required=False)
     class Meta:
         model = TransferFinding
-        fields = '__all__'
+        fields = "__all__"
+    
+    def create(self, validate_data) :
+        if validate_data.get("owner") is None:
+            user = get_current_user()
+            validate_data["owner"] = user
+        return super().create(validate_data)
 
 class TransferFindingSerializer(serializers.ModelSerializer):
 

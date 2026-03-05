@@ -71,10 +71,11 @@ def check_patch_permission(request, post_model, patch_pk, patch_permission):
 
 def check_post_permission(request, post_model, post_pk, post_permission):
     if request.method == "POST":
-        if request.data.get(post_pk) is None:
+        obj_id = request.data.get(post_pk) or request.query_params.get(post_pk)
+        if obj_id is None:
             msg = f"Unable to check for permissions: Attribute '{post_pk}' is required"
             raise ParseError(msg)
-        obj = get_object_or_404(post_model, pk=request.data.get(post_pk))
+        obj = get_object_or_404(post_model, pk=obj_id)
         return user_has_permission(request.user, obj, post_permission)
     return True
 
@@ -1208,13 +1209,18 @@ class UserHasInputPermission(permissions.BasePermission):
     # into a seperate class, when the legacy authorization will be removed.
     path_input_post = re.compile(r"^/api/v2/scope/$")
     path_input = re.compile(r"^/api/v2/scope/\d+/$")
+    path_input_post_secret = re.compile(r"^/api/v2/scope/create_scope_secret/$")
+    path_input_post_file = re.compile(r"^/api/v2/scope/create_scope_file/$")
 
     def has_permission(self, request, view):
-        if UserHasInputPermission.path_input_post.match(
-            request.path,
-        ) or UserHasInputPermission.path_input.match(request.path):
+        if (
+            UserHasInputPermission.path_input_post.match(request.path,) or
+            UserHasInputPermission.path_input.match(request.path) or
+            UserHasInputPermission.path_input_post_secret.match(request.path) or
+            UserHasInputPermission.path_input_post_file.match(request.path)
+        ):
             return check_post_permission(
-                request, Input, "input_id", Permissions.Input_Add,
+                request, Product, "product", Permissions.Product_View,
             )
         # related object only need object permission
         return True
