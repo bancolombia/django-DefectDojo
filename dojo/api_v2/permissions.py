@@ -73,7 +73,7 @@ def check_post_permission(request, post_model, post_pk, post_permission):
     if request.method == "POST":
         obj_id = request.data.get(post_pk) or request.query_params.get(post_pk)
         if obj_id is None:
-            msg = f"Unable to check for permissions: Attribute '{obj_id}' is required"
+            msg = f"Unable to check for permissions: Attribute '{post_pk}' is required"
             raise ParseError(msg)
         obj = get_object_or_404(post_model, pk=obj_id)
         return user_has_permission(request.user, obj, post_permission)
