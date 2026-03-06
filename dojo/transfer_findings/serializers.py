@@ -1,7 +1,9 @@
 from crum import get_current_user
+from dojo.utils import get_product
+from dojo.api_v2.api_error import ApiError
 from rest_framework import serializers
 from dojo.authorization.roles_permissions import Permissions
-from dojo.models import TransferFinding, Finding, TransferFindingFinding, Product, Product_Type, Engagement
+from dojo.models import TransferFinding, Finding, TransferFindingFinding, Product, Product_Type, Engagement, Dojo_User
 from dojo.authorization.authorization import user_has_permission, user_has_global_permission
 from dojo.authorization.exclusive_permissions import user_has_exclusive_permission
 
@@ -20,25 +22,118 @@ class FindingTfSerlilizer(serializers.ModelSerializer):
         return representation
     class Meta:
         model = Finding 
-        fields = '__all__'
+        fields = [
+            "id", "priority", "severity",
+            "title", "status",
+            "cve", "cwe", "date", "reporter",
+            "found_by", "service"]
 
-class TransferFindingFindingsSerializer(serializers.ModelSerializer):
-    findings = FindingTfSerlilizer(read_only=True)
-
-    class Meta:
-        model = TransferFindingFinding
-        fields = '__all__'
 
 class TransferFindingFindingCreateSerializer(serializers.ModelSerializer):
-    findings = serializers.PrimaryKeyRelatedField(queryset=Finding.objects.all(), many=True, required=True)
+    findings = serializers.PrimaryKeyRelatedField(queryset=Finding.objects.all(), required=True, many=True, write_only=True)
     class Meta:
         model = TransferFindingFinding
         fields = '__all__'
+    
+    def create(self, validation_data):
+        self.assignment_of_origin_of_finding(validation_data["findings"], validation_data)
+        transfer_finding_request = validation_data["transfer_findings"]
+        destination_engagement = transfer_finding_request.destination_engagement
+        findings = validation_data.pop("findings")
+        tf_list = []
+        for finding in findings:
+            if finding.risk_status != "Risk Active":
+                raise ApiError.precondition_required("The finding status must be Risk Active, Finding ID: " + str(finding.id))
+            if TransferFindingFinding.objects.filter(findings=finding.id).exists():
+                raise ApiError.precondition_required(
+                    "It is not possible to transfer to a finding that has already been transferred." +
+                    f"Finding {finding.id} is already transferred")
+            if finding.test.engagement.id == destination_engagement.id:
+                raise ApiError.precondition_required(
+                    "It is not possible to transfer to a finding the same engagement." +
+                    f"Finding {finding.id}, engagment_id: {destination_engagement.id}",)
+            transfer_finding_finding = TransferFindingFinding.objects.create(
+                    findings=finding,
+                    transfer_findings=transfer_finding_request,
+                    finding_related=validation_data.get("finding_related", None))
+            tf_list.append(transfer_finding_finding) 
+        return tf_list
+    
+    def assignment_of_origin_of_finding(self, findings, validation_data):
+        origin_engagement = findings[0].test.engagement
+        origin_product = origin_engagement.product
+        origin_product_type = origin_product.prod_type
+        transfer_finding = validation_data["transfer_findings"]
+        transfer_finding.origin_product = origin_product
+        transfer_finding.origin_product_type = origin_product_type
+        transfer_finding.origin_engagement = origin_engagement
+        transfer_finding.save()
+        validation_data["origin_product"] = origin_product
+        validation_data["origin_product_type"] = origin_product_type
+        validation_data["origin_engagement"] = origin_engagement
+
 
 class TransferFindingBasicSerializer(serializers.ModelSerializer):
+    destination_product_type = serializers.SlugRelatedField(
+        slug_field='name',
+        queryset=Product_Type.objects.all(),
+        required=False,
+        allow_null=True
+    )
+    destination_product = serializers.SlugRelatedField(
+        slug_field='name',
+        queryset=Product.objects.all(),
+        required=False,
+        allow_null=True
+    )
+    destination_engagement = serializers.SlugRelatedField(
+        slug_field='name',
+        queryset=Engagement.objects.all(),
+        required=False,
+        allow_null=True
+    )
+    origin_product_type = serializers.SlugRelatedField(
+        slug_field='name',
+        queryset=Product_Type.objects.all(),
+        required=False,
+        allow_null=True
+    )
+    origin_product = serializers.SlugRelatedField(
+        slug_field='name',
+        queryset=Product.objects.all(),
+        required=False,
+        allow_null=True
+    )
+    origin_engagement = serializers.SlugRelatedField(
+        slug_field='name',
+        queryset=Engagement.objects.all(),
+        required=False,
+        allow_null=True
+    )
+    accepted_by = serializers.SlugRelatedField(
+        slug_field='username',
+        queryset=Dojo_User.objects.all(),
+        required=False,
+        allow_null=True
+    )
+
     class Meta:
         model = TransferFinding
-        fields = '__all__'
+        fields = [
+              "id",
+            "title",
+            "date",
+            "notes",
+            "expiration_date",
+            "destination_product_type",
+            "destination_product",
+            "destination_engagement",
+            "origin_product_type",
+            "origin_product",
+            "origin_engagement",
+            "accepted_by",
+            "owner"
+        ]
 
 class TransferFindingFindingSerializer(serializers.ModelSerializer):
     findings = FindingTfSerlilizer(read_only=True)
@@ -91,6 +186,54 @@ class TransferFindingCreateSerializer(serializers.ModelSerializer):
 class TransferFindingSerializer(serializers.ModelSerializer):
 
     transfer_findings = TransferFindingFindingSerializer(many=True)
+    destination_product_type = serializers.SlugRelatedField(
+        slug_field='name',
+        queryset=Product_Type.objects.all(),
+        required=False,
+        allow_null=True
+    )
+    destination_product = serializers.SlugRelatedField(
+        slug_field='name',
+        queryset=Product.objects.all(),
+        required=False,
+        allow_null=True
+    )
+    destination_engagement = serializers.SlugRelatedField(
+        slug_field='name',
+        queryset=Engagement.objects.all(),
+        required=False,
+        allow_null=True
+    )
+    origin_product_type = serializers.SlugRelatedField(
+        slug_field='name',
+        queryset=Product_Type.objects.all(),
+        required=False,
+        allow_null=True
+    )
+    origin_product = serializers.SlugRelatedField(
+        slug_field='name',
+        queryset=Product.objects.all(),
+        required=False,
+        allow_null=True
+    )
+    origin_engagement = serializers.SlugRelatedField(
+        slug_field='name',
+        queryset=Engagement.objects.all(),
+        required=False,
+        allow_null=True
+    )
+    accepted_by = serializers.SlugRelatedField(
+        slug_field='username',
+        queryset=Dojo_User.objects.all(),
+        required=False,
+        allow_null=True
+    )
+    owner = serializers.SlugRelatedField(
+        slug_field='username',
+        queryset=Dojo_User.objects.all(),
+        required=False,
+        allow_null=True
+    )
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
@@ -121,4 +264,28 @@ class TransferFindingSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TransferFinding
+        fields = [
+            "id",
+            "title",
+            "date",
+            "notes",
+            "expiration_date",
+            "destination_product_type",
+            "destination_product",
+            "destination_engagement",
+            "origin_product_type",
+            "origin_product",
+            "origin_engagement",
+            "accepted_by",
+            "owner",
+            "transfer_findings"
+        ]
+
+
+class TransferFindingFindingsSerializer(serializers.ModelSerializer):
+    findings = FindingTfSerlilizer(read_only=True)
+    transfer_findings = TransferFindingBasicSerializer(read_only=True)
+
+    class Meta:
+        model = TransferFindingFinding
         fields = "__all__"
