@@ -198,6 +198,7 @@ class TransferFindingSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True
     )
+    destination_product_id = serializers.PrimaryKeyRelatedField(required=False, read_only=True)
     destination_engagement = serializers.SlugRelatedField(
         slug_field='name',
         queryset=Engagement.objects.all(),
@@ -272,6 +273,7 @@ class TransferFindingSerializer(serializers.ModelSerializer):
             "expiration_date",
             "destination_product_type",
             "destination_product",
+            "destination_product_id",
             "destination_engagement",
             "origin_product_type",
             "origin_product",
