@@ -42,3 +42,20 @@ def product_security_posture_view(request: HttpRequest) -> HttpResponse:
         'actions': page_name,
         'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/secure/product/safety-position{base_params}",  
         'user': user})
+
+@dojo_ratelimit_view()
+def product_type_security_posture_view(request: HttpRequest) -> HttpResponse:
+    page_name = ('product_type_security_posture')
+    product_type_id = request.GET.get('product_type_id')
+    product_type_name = request.GET.get('product_type_name')
+    user = request.user.id
+    cookie_csrftoken = get_token(request)
+    cookie_sessionid = request.COOKIES.get('sessionid', '')
+    base_params = f"?csrftoken={cookie_csrftoken}&sessionid={cookie_sessionid}"
+    base_params += f"&product_type_id={product_type_id}" if product_type_id else ""
+    base_params += f"&product_type_name={product_type_name}" if product_type_name else ""
+    add_breadcrumb(title=page_name, top_level=not len(request.GET), request=request)
+    return render(request, 'dojo/generic_view.html', {
+        'actions': page_name,
+        'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/secure/product_type/safety-position{base_params}",  
+        'user': user})
