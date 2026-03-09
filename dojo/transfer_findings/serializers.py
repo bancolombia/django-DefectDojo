@@ -23,10 +23,19 @@ class FindingTfSerlilizer(serializers.ModelSerializer):
     class Meta:
         model = Finding 
         fields = [
-            "id", "priority", "severity",
-            "title", "status",
-            "cve", "cwe", "date", "reporter",
-            "found_by", "service"]
+            "id",
+            "priority",
+            "severity",
+            "risk_status",
+            "title",
+            "status",
+            "cve",
+            "cwe",
+            "date",
+            "reporter",
+            "found_by",
+            "service"
+        ]
 
 
 class TransferFindingFindingCreateSerializer(serializers.ModelSerializer):
