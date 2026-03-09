@@ -97,9 +97,9 @@ class SecurityPostureAPITest(TestCase):
         )
         
         GeneralSettings.objects.get_or_create(
-            name_key='DEVSECOPS_ADOPTION_EXCLUDE_TAGS',
+            name_key='DEVSECOPS_ADOPTION_INCLUDE_TAGS',
             defaults={
-                'value': '["transferred", "duplicated", "false_positive"]',
+                'value': '["engine_iac", "engine_container"]',
                 'data_type': 'LIST'
             }
         )
@@ -109,6 +109,14 @@ class SecurityPostureAPITest(TestCase):
             defaults={
                 'value': '30',
                 'data_type': 'INT'
+            }
+        )
+        
+        GeneralSettings.objects.get_or_create(
+            name_key='HACKING_CONTINUOUS_EVENT_TAGS',
+            defaults={
+                'value': '["event_hacking", "active_event"]',
+                'data_type': 'LIST'
             }
         )
 
@@ -131,7 +139,12 @@ class SecurityPostureAPITest(TestCase):
         self.assertIn('critical', data['counter_findings_by_priority'])
         self.assertIn('high', data['counter_findings_by_priority'])
         self.assertIn('medium_low', data['counter_findings_by_priority'])
-
+        self.assertIn('counter_active_findings', data)
+        self.assertIn('counter_total_findings', data)
+        self.assertIn('counter_accepted_findings', data)
+        self.assertIn('counter_closed_findings', data)
+        self.assertIn('counter_transferred_findings', data)
+        self.assertIn('counter_onwhitelist_findings', data)
 
     def test_get_security_posture_with_engagement_name(self):
         """Test get security posture with valid engagement_name"""
@@ -277,6 +290,14 @@ class ProductSecurityPostureAPITest(TestCase):
                 'data_type': 'INT'
             }
         )
+        
+        GeneralSettings.objects.get_or_create(
+            name_key='HACKING_CONTINUOUS_EVENT_TAGS',
+            defaults={
+                'value': '["event_hacking", "active_event"]',
+                'data_type': 'LIST'
+            }
+        )
 
     def test_get_product_security_posture_with_product_id(self):
         """Test get product security posture with valid product_id"""
@@ -293,7 +314,12 @@ class ProductSecurityPostureAPITest(TestCase):
         self.assertEqual(data['product_name'], self.product.name)
         self.assertEqual(data['product_id'], self.product.id)
         self.assertEqual(data['severity_product'], self.product.business_criticality)
-        self.assertIn('total_active_findings', data)
+        self.assertIn('counter_active_findings', data)
+        self.assertIn('counter_total_findings', data)
+        self.assertIn('counter_accepted_findings', data)
+        self.assertIn('counter_closed_findings', data)
+        self.assertIn('counter_transferred_findings', data)
+        self.assertIn('counter_onwhitelist_findings', data)
         self.assertIn('counter_findings_by_priority', data)
         self.assertIn('counter_findings_by_severity', data)
         self.assertIn('adoption_devsecops', data)
