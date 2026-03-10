@@ -5,7 +5,6 @@ from rest_framework.decorators import action
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction, IntegrityError
-from dojo.api_v2.pentesting.filter import InputFilter
 from dojo.api_v2.long_risk_acceptance.models import *
 from dojo.api_v2.long_risk_acceptance.serializers import * 
 from dojo.api_v2.views import DojoModelViewSet
