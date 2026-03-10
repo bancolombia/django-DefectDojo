@@ -5,6 +5,16 @@ class IARecommendationSerializer(serializers.Serializer):
     status = serializers.CharField(required=False)
     data = serializers.JSONField()
 
+    def validate_data(self, value):
+        if "like_status" in value:
+            if (
+                value["like_status"] == True or
+                value["like_status"] == False
+            ):
+                return value
+        raise serializers.ValidationError("like_status requiered (false or true)")
+
+
 
 class RecommendationSerializer(serializers.Serializer):
     like_status = serializers.BooleanField(required=False,

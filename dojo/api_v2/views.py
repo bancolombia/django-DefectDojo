@@ -1388,33 +1388,9 @@ class FindingViewSet(
                 if serializer.is_valid():
                     data = serializer.data["data"]
                     ia_recommendation_dict = finding.ia_recommendation
-                    if data.get("recommendations"):
-                        ia_recommendation_dict["data"]["recommendations"] = (
-                            data.get("recommendations"))
-                    if data.get("mitigations"):
-                        ia_recommendation_dict["data"]["mitigations"] = (
-                            data.get("mitigations"))
-                    if data.get("files_to_fix"):
-                        ia_recommendation_dict["data"]["files_to_fix"] = (
-                            serializer.data.get("files_to_fix"))
                     if "like_status" in data:
                         ia_recommendation_dict["data"]["like_status"] = (
                             data.get("like_status"))
-                    if data.get("umbral") in data:
-                        ia_recommendation_dict["data"]["umbral"] = (
-                            data.get("umbral"))
-                    if data.get("decision") in data:
-                        ia_recommendation_dict["data"]["decision"] = (
-                            data.get("decision"))
-                    if data.get("error") in data:
-                        ia_recommendation_dict["data"]["error"] = (
-                            data.get("error"))
-                    if data.get("commit") in data:
-                        ia_recommendation_dict["data"]["commit"] = (
-                            data.get("commit"))
-                    if data.get("pullrequest") in data:
-                        ia_recommendation_dict["data"]["pullrequest"] = (
-                            data.get("pullrequest"))
 
                     finding.ia_recommendation = ia_recommendation_dict
                     finding.save()
