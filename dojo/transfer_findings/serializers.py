@@ -57,7 +57,7 @@ class TransferFindingFindingCreateSerializer(serializers.ModelSerializer):
                 raise ApiError.precondition_required(
                     "It is not possible to transfer to a finding that has already been transferred." +
                     f"Finding {finding.id} is already transferred")
-            if finding.test.engagement.id == destination_engagement.id:
+            if destination_engagement is not None and finding.test.engagement.id == destination_engagement.id:
                 raise ApiError.precondition_required(
                     "It is not possible to transfer to a finding the same engagement." +
                     f"Finding {finding.id}, engagment_id: {destination_engagement.id}",)
