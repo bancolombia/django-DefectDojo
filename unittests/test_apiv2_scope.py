@@ -7,17 +7,17 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from dojo.models import Input, InputFile, InputSecret, InputEngagement
 
 
-class PentestingViewsTestCase(APITestCase):
+class scopeViewsTestCase(APITestCase):
     fixtures = ["dojo_testdata.json"]
 
     def setUp(self):
         token = Token.objects.get(user__username="admin")
         self.client = APIClient()
         self.client.credentials(HTTP_AUTHORIZATION="Token " + token.key)
-        self.create_file_url = reverse("pentesting-create-scope-file")
-        self.create_secret_url = reverse("pentesting-create-scope-secret")
-        self.download_url = reverse("pentesting-download-file")
-        self.list_file_url = reverse("pentesting-list")
+        self.create_file_url = reverse("scope-create-scope-file")
+        self.create_secret_url = reverse("scope-create-scope-secret")
+        self.download_url = reverse("scope-download-file")
+        self.list_file_url = reverse("scope-list")
     
 
     def test_create_scope_file_creates_input_and_file(self):
@@ -66,9 +66,9 @@ class PentestingViewsTestCase(APITestCase):
         assert InputEngagement.objects.filter(input=input_instance, engagement_id=1).exists()
         assert InputSecret.objects.filter(input=input_instance).exists()
 
-    def test_list_pentesting_inputs(self):
+    def test_list_scope_inputs(self):
         """
-        Ensure we can list pentesting inputs.
+        Ensure we can list scope inputs.
         """
         resp = self.client.get(self.list_file_url)
         assert resp.status_code == status.HTTP_200_OK

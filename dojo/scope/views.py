@@ -9,14 +9,14 @@ from dojo.authorization.authorization_decorators import user_is_authorized
 
 
 @dojo_ratelimit_view()
-def pentesting_view(request: HttpRequest, product_id) -> HttpResponse:
-    page_name = ('pentesting')
+def scope_view(request: HttpRequest, product_id) -> HttpResponse:
+    page_name = ('scope')
     user = request.user.id
     cookie_csrftoken = get_token(request)
     cookie_sessionid = request.COOKIES.get('sessionid', '')
     base_params = f"?csrftoken={cookie_csrftoken}&sessionid={cookie_sessionid}"
     base_params += f"&product={product_id}" if product_id else ""
-    add_breadcrumb(title=page_name, top_level=not len(request.GET), request=request)
+    add_breadcrumb(title=page_name, top_level=False, request=request)
     return render(request, 'dojo/generic_view.html', {
         'actions': page_name,
         'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/engagements/inputs{base_params}",

@@ -1,13 +1,14 @@
 import logging
 import os
 import mimetypes
+import json
 from rest_framework.decorators import action
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction, IntegrityError
-from dojo.api_v2.pentesting.filter import InputFilter
-from dojo.api_v2.pentesting.models import InputSecret, InputFile, Input, InputEngagement
-from dojo.api_v2.pentesting.serializers import *
+from dojo.api_v2.scope.filter import InputFilter
+from dojo.api_v2.scope.models import InputSecret, InputFile, Input 
+from dojo.api_v2.scope.serializers import *
 from dojo.api_v2.views import DojoModelViewSet
 from dojo.api_v2.utils import http_response
 from dojo.authorization.roles_permissions import Permissions
@@ -28,8 +29,7 @@ from dojo.api_v2 import (
     prefetch,
 )
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-import json
-
+from dojo.api_v2.scope.queries import get_authorized_scope
 from dojo.finding import serializer
 
 logger = logging.getLogger(__name__)
@@ -46,6 +46,10 @@ class ScopeViewSet(prefetch.PrefetchListMixin,
     filterset_class = InputFilter
     pagination_class = LimitOffsetPagination
 
+    def get_queryset(self):
+        inputs = get_authorized_scope(Permissions.Input_View)
+        return inputs
+
     def update(self, request, *args, **kwargs):
         input_id = kwargs.get("pk")
         try:
@@ -60,10 +64,13 @@ class ScopeViewSet(prefetch.PrefetchListMixin,
                 message="Validation error occurred.", data=serializer.errors)
 
     def list(self, request, *args, **kwargs):
-        paginator = self.pagination_class()
-        data = self.get_serializer(self.filter_queryset(self.get_queryset()), many=True).data
-        paginated_data = paginator.paginate_queryset(data, request)
-        return paginator.get_paginated_response(paginated_data)
+        inputs_qr = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(inputs_qr)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(inputs_qr, many=True)
+        return http_response.ok(data=serializer.data)
 
     @extend_schema(
         parameters=[
@@ -172,7 +179,7 @@ class ScopeViewSet(prefetch.PrefetchListMixin,
             )
         return response
 
-@extend_schema(tags=["pentesting"])
+@extend_schema(tags=["scope"])
 class InputSecretViewSet(prefetch.PrefetchListMixin,
                              prefetch.PrefetchRetrieveMixin,
                              DojoModelViewSet):
@@ -182,7 +189,7 @@ class InputSecretViewSet(prefetch.PrefetchListMixin,
     serializer_class = InputSecretSerializer 
     filter_backends = (DjangoFilterBackend,)
 
-@extend_schema(tags=["pentesting"])
+@extend_schema(tags=["scope"])
 class InputFileViewSet(prefetch.PrefetchListMixin,
                              prefetch.PrefetchRetrieveMixin,
                              DojoModelViewSet):

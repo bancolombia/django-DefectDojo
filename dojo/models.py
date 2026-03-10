@@ -46,7 +46,7 @@ from polymorphic.models import PolymorphicModel
 from tagulous.models import TagField
 from tagulous.models.managers import FakeTagRelatedManager
 from dojo.engine_tools.models import *
-from dojo.api_v2.pentesting.models import * 
+from dojo.api_v2.scope.models import * 
 from dojo.api_v2.long_risk_acceptance.models import *
 from dojo.api_v2.api_error import ApiError
 

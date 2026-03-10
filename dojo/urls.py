@@ -80,7 +80,7 @@ from dojo.api_v2.views import (
 )
 from dojo.api_v2.long_risk_acceptance.views import RiskAcceptanceEngagementViewSet, RiskAcceptanceExclusionRuleViewSet
 from dojo.api_v2.ia_recommendation.views import IArecommendationApiView
-from dojo.api_v2.pentesting.views import ScopeViewSet, InputSecretViewSet, InputFileViewSet
+from dojo.api_v2.scope.views import ScopeViewSet, InputSecretViewSet, InputFileViewSet
 from dojo.api_v2.general_settings.views import GeneralSettingsViewSet
 from dojo.api_v2.manager_cache.views import ManagerCacheApiView
 from dojo.api_v2.alerts.views import AlertViewSet
@@ -129,7 +129,7 @@ from dojo.api_v2.notifications.urls import urlpatterns as notifications_email_ur
 from dojo.api_v2.alerts.urls import urlpatterns as alert_urls
 from dojo.api_v2.ia_recommendation.urls import urlpatterns as ia_recommendation_urls
 from dojo.api_v2.user.urls import urlpatterns as user_api_urls 
-from dojo.pentesting.urls import urlpatterns as pentesting_urls_view
+from dojo.scope.urls import urlpatterns as scope_urls_view
 
 from dojo.utils import get_system_setting
 
@@ -211,7 +211,7 @@ v2_api.register(r"transfer_finding", TransferFindingViewSet, basename="transfer_
 v2_api.register(r"transfer_finding_findings", TransferFindingFindingsViewSet, basename="transfer_finding_findings")
 v2_api.register(r"finding_exclusions", FindingExclusionViewSet, basename="finding_exclusions")
 v2_api.register(r"general_settings", GeneralSettingsViewSet, basename="general_settings")
-v2_api.register(r"pentesting", ScopeViewSet, basename="pentesting")
+v2_api.register(r"scope", ScopeViewSet, basename="scope")
 v2_api.register(r"input_secret", InputSecretViewSet, basename="input_secret")
 v2_api.register(r"input_file", InputFileViewSet, basename="input_file")
 v2_api.register(r"alerts", AlertViewSet, basename="alerts")
@@ -299,7 +299,7 @@ urlpatterns += manager_cache_urls
 urlpatterns += metrics_general_urls
 urlpatterns += security_posture_urls
 urlpatterns += security_posture_urls_view
-urlpatterns += pentesting_urls_view 
+urlpatterns += scope_urls_view 
 urlpatterns += notifications_email_urls
 urlpatterns += api_v2_urls
 urlpatterns += survey_urls

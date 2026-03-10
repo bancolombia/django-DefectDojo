@@ -205,7 +205,7 @@ async function getTransferFindings(transferFindingId){
         related_findings += `<td> <select class="form-control form-control-chosen related-finding-chosen" data-placeholder="Please select..."><option value=""> New Finding </option>`
         if (transferFindingResponse.results.length == 1)
             {
-                const response = await get_product_with_description_findings(transferFindingResponse.results[0].destination_product);
+                const response = await get_product_with_description_findings(transferFindingResponse.results[0].destination_product_id);
                 if(response.code === 200)
                 {
                     for(let engagement of response.data.engagements_list)
