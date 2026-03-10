@@ -108,7 +108,7 @@ botocore==1.42.63
 et_xmlfile==2.0.0
 inflection==0.5.1
 requests-toolbelt==1.0.0
-smmap==5.0.2
+smmap==5.0.3
 wcwidth==0.6.0
 kombu==5.6.2
 six==1.17.0
