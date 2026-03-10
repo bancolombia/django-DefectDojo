@@ -112,13 +112,6 @@ class SecurityPostureAPITest(TestCase):
             }
         )
         
-        GeneralSettings.objects.get_or_create(
-            name_key='HACKING_CONTINUOUS_EVENT_TAGS',
-            defaults={
-                'value': '["event_hacking", "active_event"]',
-                'data_type': 'LIST'
-            }
-        )
 
     def test_get_security_posture_with_engagement_id(self):
         """Test get security posture with valid engagement_id"""
@@ -291,13 +284,6 @@ class ProductSecurityPostureAPITest(TestCase):
             }
         )
         
-        GeneralSettings.objects.get_or_create(
-            name_key='HACKING_CONTINUOUS_EVENT_TAGS',
-            defaults={
-                'value': '["event_hacking", "active_event"]',
-                'data_type': 'LIST'
-            }
-        )
 
     def test_get_product_security_posture_with_product_id(self):
         """Test get product security posture with valid product_id"""

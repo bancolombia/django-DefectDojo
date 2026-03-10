@@ -54,7 +54,7 @@ def product_type_security_posture_view(request: HttpRequest) -> HttpResponse:
     base_params = f"?csrftoken={cookie_csrftoken}&sessionid={cookie_sessionid}"
     base_params += f"&product_type_id={product_type_id}" if product_type_id else ""
     base_params += f"&product_type_name={product_type_name}" if product_type_name else ""
-    add_breadcrumb(title=page_name, top_level=not len(request.GET), request=request)
+    add_breadcrumb(title=page_name, request=request)
     return render(request, 'dojo/generic_view.html', {
         'actions': page_name,
         'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/secure/product_type/safety-position{base_params}",  

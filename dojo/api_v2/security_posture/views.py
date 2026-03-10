@@ -94,7 +94,7 @@ class ProductSecurityPosture(GenericAPIView):
 class ProductTypeSecurityPosture(GenericAPIView):
     permission_classes = (
         IsAuthenticated,
-        permissions.UserHasProductPermission,)
+        permissions.UserHasProductTypePermission,)
     serializer_class = ProductTypeSecurityPostureSerializer
     pagination_class = LimitOffsetPagination
 
