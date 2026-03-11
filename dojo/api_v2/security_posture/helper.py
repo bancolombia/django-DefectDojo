@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from django.utils import timezone
 from dojo.models import GeneralSettings
 from dojo.api_v2.utils import http_response
-from dojo.models import Engagement, Finding, Product
+from dojo.models import Engagement, Finding, Product, Product_Type
 logger = logging.getLogger(__name__)
 
 def calculate_posture(result):
@@ -76,7 +76,29 @@ def get_engagement_security_posture(engagement: Engagement, engagement_name: str
             "priority",
             "tags"
         ) 
+    all_findings = engagement.get_all_findings.only(
+        "id"
+    )
+    closed_findings = engagement.get_all_findings_closed.only(
+        "id"
+    )
+    accepted_findings = engagement.get_all_findings_accepted.only(
+        "id"
+    )
+    transfer_findings = engagement.get_all_findings_transferred.only(
+        "id"
+    )
+    whitelist_findings = engagement.get_all_findings_whitelist.only(
+        "id"
+    )
+    
     data["counter_active_findings"] = active_finding.distinct().count() 
+    data["counter_total_findings"] = all_findings.distinct().count()
+    data["counter_accepted_findings"] = accepted_findings.distinct().count()
+    data["counter_closed_findings"] = closed_findings.distinct().count()
+    data["counter_transferred_findings"] = transfer_findings.distinct().count()
+    data["counter_onwhitelist_findings"] = whitelist_findings.distinct().count()
+
     data["counter_findings_by_priority"] = {
         "very_critical": 0,
         "critical": 0,
@@ -120,6 +142,9 @@ def _process_engagement(engagement):
     """Helper function to process a single engagement in parallel"""
     return get_engagement_security_posture(engagement, None)
 
+def _process_product(product):
+    """Helper function to process a single product in parallel"""
+    return get_product_security_posture(product, None)
 
 def get_product_security_posture(product: Product, product_name: str):
     """Returns security posture information for a product with all its engagements"""
@@ -136,7 +161,12 @@ def get_product_security_posture(product: Product, product_name: str):
     data["product_id"] = product.id
     data["product_name"] = product.name
     data["severity_product"] = product.business_criticality
-    data["total_active_findings"] = 0
+    data["counter_active_findings"] = 0
+    data["counter_total_findings"] = 0
+    data["counter_accepted_findings"] = 0
+    data["counter_closed_findings"] = 0
+    data["counter_transferred_findings"] = 0
+    data["counter_onwhitelist_findings"] = 0
     
     data["counter_findings_by_severity"] = {
         "critical": 0,
@@ -158,7 +188,7 @@ def get_product_security_posture(product: Product, product_name: str):
     data["details"] = []
     data["events_active_hacking"] = {"status": False, "events": []}
      
-    active_engagements = 0    
+    active_engagements_with_findings = 0    
     result = 0
     adoption_devsecops_product = []
     
@@ -169,9 +199,17 @@ def get_product_security_posture(product: Product, product_name: str):
 
         for future in as_completed(future_to_engagement):
             engagement_posture = future.result()
-                
-            active_engagements += 1
-            data["total_active_findings"] += engagement_posture.get("counter_active_findings", 0)
+
+            engagement_active_findings = engagement_posture.get("counter_active_findings", 0)
+            if engagement_active_findings > 0:
+                active_engagements_with_findings += 1
+
+            data["counter_active_findings"] += engagement_active_findings
+            data["counter_total_findings"] += engagement_posture.get("counter_total_findings", 0)
+            data["counter_accepted_findings"] += engagement_posture.get("counter_accepted_findings", 0)
+            data["counter_closed_findings"] += engagement_posture.get("counter_closed_findings", 0)
+            data["counter_transferred_findings"] += engagement_posture.get("counter_transferred_findings", 0)
+            data["counter_onwhitelist_findings"] += engagement_posture.get("counter_onwhitelist_findings", 0)
             adoption_devsecops_product.extend(engagement_posture.get("adoption_devsecops", []))
             
             for severity, count in engagement_posture.get("counter_findings_by_severity", {}).items():
@@ -190,6 +228,77 @@ def get_product_security_posture(product: Product, product_name: str):
             result += engagement_posture.get("result", 0)
             
     data["adoption_devsecops"] = list(set(adoption_devsecops_product))
-    data["result"] = round(result/active_engagements, 3) if result > 0.0 else 0.0
+    data["result"] = round(result / active_engagements_with_findings, 3) if active_engagements_with_findings > 0 else 0.0
+    data["status"] = calculate_posture(data["result"])
+    return data
+
+def get_product_type_security_posture(product_type: Product_Type, product_type_name: str):
+    """Returns security posture information for a product type with all its engagements"""
+    data = {}
+    try:
+        if isinstance(product_type, Product_Type):
+            pass
+        elif isinstance(product_type_name, Product_Type):
+            product_type = product_type_name
+    except Product_Type.DoesNotExist:
+        return http_response.not_found(
+            message="Product Type not found", data={})
+
+    data["product_type_id"] = product_type.id
+    data["product_type_name"] = product_type.name
+    data["counter_active_findings"] = 0
+    data["counter_total_findings"] = 0
+    data["counter_accepted_findings"] = 0
+    data["counter_closed_findings"] = 0
+    data["counter_transferred_findings"] = 0
+    data["counter_onwhitelist_findings"] = 0
+    
+    data["counter_findings_by_severity"] = {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "unknown": 0,
+    }
+    data["counter_findings_by_priority"] = {
+        "very_critical": 0,
+        "critical": 0,
+        "high": 0,
+        "medium_low": 0,
+        "unknown": 0,
+    }
+    
+    active_products_with_findings = 0
+    adoption_devsecops_product_type = []
+    active_product_list = list(product_type.prod_type.all())
+    result = 0
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_product = {executor.submit(_process_product, prod): prod for prod in active_product_list}
+
+        for future in as_completed(future_to_product):
+            product_posture = future.result()
+
+            product_active_findings = product_posture.get("counter_active_findings", 0)
+            if product_active_findings > 0:
+                active_products_with_findings += 1
+
+            data["counter_active_findings"] += product_active_findings
+            data["counter_total_findings"] += product_posture.get("counter_total_findings", 0)
+            data["counter_accepted_findings"] += product_posture.get("counter_accepted_findings", 0)
+            data["counter_closed_findings"] += product_posture.get("counter_closed_findings", 0)
+            data["counter_transferred_findings"] += product_posture.get("counter_transferred_findings", 0)
+            data["counter_onwhitelist_findings"] += product_posture.get("counter_onwhitelist_findings", 0)
+            adoption_devsecops_product_type.extend(product_posture.get("adoption_devsecops", []))
+            
+            for severity, count in product_posture.get("counter_findings_by_severity", {}).items():
+                data["counter_findings_by_severity"][severity] += count
+            for priority, count in product_posture.get("counter_findings_by_priority", {}).items():
+                data["counter_findings_by_priority"][priority] += count
+            
+            result += product_posture.get("result", 0)
+            
+    data["adoption_devsecops"] = list(set(adoption_devsecops_product_type))
+    data["result"] = round(result / active_products_with_findings, 3) if active_products_with_findings > 0 else 0.0
     data["status"] = calculate_posture(data["result"])
     return data

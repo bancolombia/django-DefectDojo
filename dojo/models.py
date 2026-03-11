@@ -1708,8 +1708,37 @@ class Engagement(models.Model):
         """ Returns the number of active findings for this engagement """
         a = Finding.objects.filter(test__engagement=self, active=True, duplicate=False, risk_accepted= False)
         return a
+    
+    @property
+    def get_all_findings(self):
+        """ Returns the number of all findings for this engagement """
+        a = Finding.objects.filter(test__engagement=self)
+        return a
+    
+    @property
+    def get_all_findings_closed(self):
+        """ Returns the number of closed findings for this engagement """
+        a = Finding.objects.filter(test__engagement=self, is_mitigated=True)
+        return a
 
+    @property
+    def get_all_findings_accepted(self):
+        """ Returns the number of accepted findings for this engagement """
+        a = Finding.objects.filter(test__engagement=self, active=False, risk_accepted=True)
+        return a
+    
+    @property
+    def get_all_findings_transferred(self):
+        """ Returns the number of transferred findings for this engagement """
+        a = Finding.objects.filter(test__engagement=self, active=False, risk_status="Transfer Accepted")
+        return a
 
+    @property
+    def get_all_findings_whitelist(self):
+        """ Returns the number of whitelisted findings for this engagement """
+        a = Finding.objects.filter(test__engagement=self, active=False, risk_status="On Whitelist")
+        return a
+    
     @property
     def has_jira_issue(self):
         import dojo.jira_link.helper as jira_helper

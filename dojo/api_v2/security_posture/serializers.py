@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from dojo.models import Engagement, Product
+from dojo.models import Engagement, Product, Product_Type
 
 class EngagementRequestSecuritypostureSerializer(serializers.Serializer):
     engagement_name = serializers.SlugRelatedField(
@@ -56,6 +56,11 @@ class EngagementSecuritypostureSerializer(serializers.Serializer):
     severity_product = serializers.CharField(required=False, allow_null=True)
     adoption_devsecops = serializers.ListField(child=serializers.CharField())
     counter_active_findings = serializers.IntegerField()
+    counter_total_findings = serializers.IntegerField()
+    counter_accepted_findings = serializers.IntegerField()
+    counter_closed_findings = serializers.IntegerField()
+    counter_transferred_findings = serializers.IntegerField()
+    counter_onwhitelist_findings = serializers.IntegerField()
     counter_findings_by_priority = EngagementProritySerializer()
     counter_findings_by_severity = EngagementSeveritySerializer()
     is_in_hacking_continuos = serializers.BooleanField(default=False)
@@ -102,10 +107,51 @@ class ProductSecurityPostureSerializer(serializers.Serializer):
     product_name = serializers.CharField()
     severity_product = serializers.CharField(required=False, allow_null=True)
     adoption_devsecops = serializers.ListField(child=serializers.CharField())
-    total_active_findings = serializers.IntegerField()
+    counter_active_findings = serializers.IntegerField()
+    counter_total_findings = serializers.IntegerField()
+    counter_accepted_findings = serializers.IntegerField()
+    counter_closed_findings = serializers.IntegerField()
+    counter_transferred_findings = serializers.IntegerField()
+    counter_onwhitelist_findings = serializers.IntegerField()
     counter_findings_by_priority = EngagementProritySerializer()
     counter_findings_by_severity = EngagementSeveritySerializer()
     is_in_hacking_continuos = serializers.BooleanField(default=False)
     events_active_hacking = EngagementEventsSerializer()
+    result = serializers.FloatField()
+    status = serializers.CharField()
+
+# Product Type Security Posture Serializers
+class ProductTypeRequestSecurityPostureSerializer(serializers.Serializer):
+    product_type_id = serializers.PrimaryKeyRelatedField(
+        queryset=Product_Type.objects.all(), many=False, required=False, allow_null=True,
+    )
+    product_type_name = serializers.SlugRelatedField(
+        slug_field='name',
+        queryset=Product_Type.objects.all(),
+        required=False,
+        allow_null=True
+    )
+
+    def validate(self, data):
+        product_type_id = data.get('product_type_id')
+        product_type_name = data.get('product_type_name')
+        
+        if not product_type_id and not product_type_name:
+            raise serializers.ValidationError(
+                "Either product_type_id or product_type_name must be provided")
+        
+        return data
+    
+class ProductTypeSecurityPostureSerializer(serializers.Serializer):
+    product_type_id = serializers.IntegerField()
+    product_type_name = serializers.CharField()
+    counter_active_findings = serializers.IntegerField()
+    counter_total_findings = serializers.IntegerField()
+    counter_accepted_findings = serializers.IntegerField()
+    counter_closed_findings = serializers.IntegerField()
+    counter_transferred_findings = serializers.IntegerField()
+    counter_onwhitelist_findings = serializers.IntegerField()
+    counter_findings_by_priority = EngagementProritySerializer()
+    counter_findings_by_severity = EngagementSeveritySerializer()
     result = serializers.FloatField()
     status = serializers.CharField()
