@@ -2,6 +2,7 @@
 
 import json
 import logging
+import dateutil
 
 from dojo.models import Finding
 from django.conf import settings
@@ -324,6 +325,11 @@ class TrivyParser:
                     fix_available=fix_available,
                     tags=[],
                     service=service_name,
+                    publish_date=(
+                    dateutil.parser.parse(vuln.get("PublishedDate"))
+                    if vuln.get("PublishedDate", None)
+                    else None
+                    ),
                     **status_fields,
                 )
                 

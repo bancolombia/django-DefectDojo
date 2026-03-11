@@ -177,6 +177,7 @@ def rules_for_direct_acceptance(
         .get(get_product_type_prefix_key(product_type.name)).get("number_acceptors")
     )
 
+    status_permission.update({"number_of_acceptors_required": number_of_acceptors_required})
 
     if (
         user.is_superuser is True
