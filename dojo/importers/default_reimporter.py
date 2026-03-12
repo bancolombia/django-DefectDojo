@@ -696,7 +696,6 @@ class DefaultReImporter(BaseImporter, DefaultReImporterOptions):
         finding.references = finding_from_report.references
         finding.cvssv3_score = finding_from_report.cvssv3_score
         finding.severity_justification = finding_from_report.severity_justification
-        finding.steps_to_reproduce = finding_from_report.steps_to_reproduce
 
         # Process vulnerability IDs
         if finding_from_report.unsaved_vulnerability_ids:
