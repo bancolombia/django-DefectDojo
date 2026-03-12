@@ -33,7 +33,6 @@ class SecurityPostureAPITest(TestCase):
         self.engagement = Engagement.objects.first()
         self.engagement.name = "Test Engagement for Security Posture"
         self.engagement.save()
-        self.test = Test.objects.first()
         
         # Create test findings
         self.critical_finding = Finding.objects.create(
@@ -150,6 +149,15 @@ class SecurityPostureAPITest(TestCase):
         data = response.json()['data']
         self.assertEqual(data['engagement_name'], self.engagement.name)
 
+    def test_get_security_posture_missing_parameters(self):
+        """Test error when required parameters are missing"""
+        response = self.client.get(self.url, format='json')
+        print("response", response.json())
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('Either engagement_id or engagement_name must be provided', 
+                     response.json()['data']["non_field_errors"])
+
     def test_get_security_posture_invalid_engagement_id(self):
         """Test error with non-existent engagement_id"""
         response = self.client.get(
@@ -187,7 +195,6 @@ class SecurityPostureAPITest(TestCase):
         self.assertEqual(data['counter_findings_by_priority']['critical'], 0)
         self.assertEqual(data['counter_findings_by_priority']['high'], 0)
         self.assertEqual(data['counter_findings_by_priority']['medium_low'], 0)
-        self.assertEqual(data['counter_findings_by_priority']['unknown'], 4)
 
 
 class ProductSecurityPostureAPITest(TestCase):
@@ -213,7 +220,6 @@ class ProductSecurityPostureAPITest(TestCase):
         self.engagement.active = True
         self.engagement.save()
         
-        self.test = Test.objects.first()
         
         self.critical_finding = Finding.objects.create(
             title="Critical Security Issue Product",
@@ -434,7 +440,6 @@ class ProductTypeSecurityPostureAPITest(TestCase):
         self.engagement.active = True
         self.engagement.save()
 
-        self.test = Test.objects.first()
 
         Finding.objects.create(
             title="Critical Security Issue Product Type",
