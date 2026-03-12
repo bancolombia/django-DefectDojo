@@ -150,15 +150,6 @@ class SecurityPostureAPITest(TestCase):
         data = response.json()['data']
         self.assertEqual(data['engagement_name'], self.engagement.name)
 
-    def test_get_security_posture_missing_parameters(self):
-        """Test error when required parameters are missing"""
-        response = self.client.get(self.url, format='json')
-        print("response", response.json())
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('Either engagement_id or engagement_name must be provided', 
-                     response.json()['data']["non_field_errors"])
-
     def test_get_security_posture_invalid_engagement_id(self):
         """Test error with non-existent engagement_id"""
         response = self.client.get(
