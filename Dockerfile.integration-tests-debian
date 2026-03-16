@@ -3,7 +3,7 @@
 
 FROM openapitools/openapi-generator-cli:v7.20.0@sha256:fa4add01856e44becf70674164df354d61bd37ba0f444d27be949801e013921b AS openapitools
 # currently only supports x64, no arm yet due to chrome and selenium dependencies
-FROM python:3.15.0a6-slim-bookworm@sha256:4d0c4a80622e711560c27b69178acac12df957b42208906b432c86dac209c3a1 AS build
+FROM python:3.15.0a7-slim-bookworm@sha256:1b313996ef69a38d87dd7948205162761ccf4a1d2cdbf101b4c0884412384291 AS build
 WORKDIR /app
 RUN \
   apt-get -y update && \
