@@ -1262,9 +1262,9 @@ class UserHasLongRiskAcceptancePermission(permissions.BasePermission):
         return True
 
     def has_object_permission(self, request, view, obj):
-        if UserHasInputPermission.path_post.match(
+        if UserHasLongRiskAcceptancePermission.path_post.match(
             request.path,
-        ) or UserHasInputPermission.path.match(request.path):
+        ) or UserHasLongRiskAcceptancePermission.path.match(request.path):
             return check_object_permission(
                 request,
                 obj,

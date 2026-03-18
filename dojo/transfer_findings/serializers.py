@@ -186,11 +186,11 @@ class TransferFindingCreateSerializer(serializers.ModelSerializer):
         model = TransferFinding
         fields = "__all__"
     
-    def create(self, validate_data) :
-        if validate_data.get("owner") is None:
+    def create(self, validated_data) :
+        if validated_data.get("owner") is None:
             user = get_current_user()
-            validate_data["owner"] = user
-        return super().create(validate_data)
+            validated_data["owner"] = user
+        return super().create(validated_data)
 
 class TransferFindingSerializer(serializers.ModelSerializer):
 

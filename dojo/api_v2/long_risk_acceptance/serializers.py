@@ -5,7 +5,8 @@ from django.utils import timezone
 from dojo.api_v2.long_risk_acceptance.models import RiskAcceptanceEngagement, RiskAcceptanceExclusionRule
 from dojo.group.queries import get_users_for_group, get_users_for_group_by_role
 from dojo.group.queries import users_with_permissions_to_approve_long_term_findings
-from dojo.models import GeneralSettings, Engagement, Dojo_User, Product
+from tagulous.models import TagField
+from dojo.models import GeneralSettings, Engagement, Dojo_User, Product, Finding 
 from dojo.api_v2.serializers import EngagementSerializer, UserStubSerializer 
 from dojo.models import models
 logger = logging.getLogger(__name__)
@@ -19,18 +20,33 @@ class EngagementSerializerRiskLongAcceptance(serializers.ModelSerializer):
 class ProductSerializerRisLongAcceptance(serializers.ModelSerializer):
 
     class Meta:
-        models = Product
+        model = Product
         fields = ["id", "name"]
 
 
+class FindingRenderRuleSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Finding
+        fields = ["id", "priority", "cve", "risk_status"]
+
+
+class RiskAcceptanceExclusionRuleSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = RiskAcceptanceExclusionRule 
+        fields = "__all__"
+    
+class ExpirationSerializer(serializers.Serializer):
+    expiration_date = serializers.DateField()
+    
 class RiskAcceptanceEngagementSerializer(serializers.ModelSerializer):
     engagements_id = serializers.PrimaryKeyRelatedField(queryset=Engagement.objects.all(), many=True, source="engagement_set", required=True, write_only=True)
     engagements = EngagementSerializerRiskLongAcceptance(read_only=True, source="engagement_set", many=True) 
-    accepted_by_id = serializers.PrimaryKeyRelatedField(source="accepted_by", queryset=Dojo_User.objects.all(), many=False, required=True, write_only=True)
+    accepted_by_id = serializers.PrimaryKeyRelatedField(source="accepted_by", queryset=Dojo_User.objects.all(), many=False, required=False, write_only=True)
     accepted_by = serializers.CharField(read_only=True)
     reviewed_by_id = serializers.PrimaryKeyRelatedField(source="reviewed_by", queryset=Dojo_User.objects.all(), many=False, required=True, write_only=True)
     reviewed_by = serializers.CharField(read_only=True)
-    exclusion_rule = serializers.PrimaryKeyRelatedField(queryset=RiskAcceptanceExclusionRule.objects.all(), many=True, source="riskacceptanceexclusionrule_set", required=False)
+    rules = RiskAcceptanceExclusionRuleSerializers(read_only=True, source="riskacceptanceexclusionrule_set", many=True)
     owner_id = serializers.PrimaryKeyRelatedField(source="owner", queryset=Dojo_User.objects.all(), many=False, required=True, write_only=True)
     owner = UserStubSerializer(read_only=True)
     product = serializers.PrimaryKeyRelatedField(queryset=Product.objects.all(), many=False, required=True)
@@ -49,12 +65,12 @@ class RiskAcceptanceEngagementSerializer(serializers.ModelSerializer):
             validated_data["reviewed_by"] = validated_data["reviewed_by"].username
 
         product = validated_data["product"]
-        users_aprovers =  users_with_permissions_to_approve_long_term_findings("Approvers_Risk", "Risk", product)
-        if not validated_data["accepted_by"] in users_aprovers:
-            raise serializers.ValidationError({
-                "accepted_by": f"This user not is valid"
-            })
-        validated_data["accepted_by"] = validated_data["accepted_by"].username
+        # users_aprovers =  users_with_permissions_to_approve_long_term_findings("Approvers_Risk", "Risk", product)
+        # if not validated_data["accepted_by"] in users_aprovers:
+        #     raise serializers.ValidationError({
+        #         "accepted_by": f"This user not is valid"
+        #     })
+        # validated_data["accepted_by"] = validated_data["accepted_by"].username
 
         exp_date = validated_data["expiration_date"]
         now = timezone.now()
@@ -76,11 +92,20 @@ class RiskAcceptanceEngagementSerializer(serializers.ModelSerializer):
 class RiskAcceptanceExclusionRuleSerializer(serializers.ModelSerializer):
     ra_engagement = serializers.PrimaryKeyRelatedField(queryset=RiskAcceptanceEngagement.objects.all(), many=False)
     title = serializers.CharField(required=True)
-    filters = serializers.JSONField(required=False)
+    include = serializers.JSONField(required=False, read_only=True, source="filters")
+    filters = serializers.JSONField(required=False, write_only=True)
+
 
     class Meta:
         model = RiskAcceptanceExclusionRule
-        fields = '__all__'
+        fields = [
+            "id",
+            "ra_engagement",
+            "title",
+            "include",
+            "filters",
+            "exclusions",
+        ]
 
     # def create(self, validate_data):
     #     ra_engagement = validate_data.pop("ra_engagement")

@@ -825,7 +825,7 @@ async function sendEmail() {
     
     try {
         const response = await $.ajax({
-            url: "/api/v2/notifications_email",
+            url: "/api/v2/notifications_email/",
             type: "POST",
             data: formData,
             processData: false,

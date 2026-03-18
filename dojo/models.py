@@ -1411,6 +1411,7 @@ class Product(models.Model):
     def has_jira_configured(self):
         import dojo.jira_link.helper as jira_helper
         return jira_helper.has_jira_configured(self)
+    
 
     def violates_sla(self):
         findings = Finding.objects.filter(test__engagement__product=self,
