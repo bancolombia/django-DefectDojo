@@ -12,4 +12,9 @@ urlpatterns = [
         views.product_security_posture_view,
         name="product_security_posture_view"
     ),
+    re_path(
+        r"^product_type/security_posture/product_type/?$",
+        views.product_type_security_posture_view,
+        name="product_type_security_posture_view"
+    ),
 ]
