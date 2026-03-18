@@ -44,22 +44,17 @@ def apply_review(request, ra_engagement: RiskAcceptanceEngagement):
 def apply_rule(ra_engagement: RiskAcceptanceEngagement):
     finding_qs = render_rule(ra_engagement)
 
-    ids_risk_pending = []
-
     for finding in finding_qs.iterator(chunk_size=200):
         if finding.risk_status == "Risk Active":
-            ids_risk_pending.append(finding.id)
+          
+            finding.risk_status = "Risk Accepted"
+            finding.active = False
+            finding.risk_accepted = True
 
-        if len(ids_risk_pending) >= 500:
-            Finding.objects.filter(id__in=ids_risk_pending).update(
-                risk_status="Risk Accepted",
-                active=False
-            )
-            ids_risk_pending.clear()
+            finding.save(update_fields=[
+                "risk_status",
+                "active",
+                "risk_accepted"
+            ])
 
-    if ids_risk_pending:
-        Finding.objects.filter(id__in=ids_risk_pending).update(
-            risk_status="Risk Accepted",
-            active=False
-            )
-
+            finding.tags.add("long_term_risk_acceptance")
