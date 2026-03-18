@@ -65,12 +65,7 @@ class RiskAcceptanceEngagementSerializer(serializers.ModelSerializer):
             validated_data["reviewed_by"] = validated_data["reviewed_by"].username
 
         product = validated_data["product"]
-        # users_aprovers =  users_with_permissions_to_approve_long_term_findings("Approvers_Risk", "Risk", product)
-        # if not validated_data["accepted_by"] in users_aprovers:
-        #     raise serializers.ValidationError({
-        #         "accepted_by": f"This user not is valid"
-        #     })
-        # validated_data["accepted_by"] = validated_data["accepted_by"].username
+       
 
         exp_date = validated_data["expiration_date"]
         now = timezone.now()
@@ -106,13 +101,5 @@ class RiskAcceptanceExclusionRuleSerializer(serializers.ModelSerializer):
             "filters",
             "exclusions",
         ]
-
-    # def create(self, validate_data):
-    #     ra_engagement = validate_data.pop("ra_engagement")
-    #     instance = RiskAcceptanceExclusionRule.objects.create(**validate_data)
-    #     if ra_engagement:
-    #         instance.ra_engagement.set(ra_engagement)
-        
-        # return instance
 
 
