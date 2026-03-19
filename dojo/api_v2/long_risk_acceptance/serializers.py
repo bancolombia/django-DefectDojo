@@ -60,13 +60,16 @@ class RiskAcceptanceEngagementSerializer(serializers.ModelSerializer):
             users = get_users_for_group_by_role(value, "Risk")
             if not validated_data["reviewed_by"] in users: 
                 raise serializers.ValidationError({
-                "reviewed_by": f"This user not is valid"
+                "reviewed_by": f"This user nreviewed_by_idot is valid"
             })
-            validated_data["reviewed_by"] = validated_data["reviewed_by"].username
 
-        product = validated_data["product"]
-       
+        user_reviewers = get_users_for_group_by_role("Reviewer_Risk", "Risk")
+        if not validated_data["reviewed_by"] in user_reviewers:
+            raise serializers.ValidationError({
+                "accepted_by": f"This user not is valid for reviewer"
+            })
 
+        validated_data["reviewed_by"] = validated_data["reviewed_by"].username
         exp_date = validated_data["expiration_date"]
         now = timezone.now()
         sla_days = GeneralSettings.get_value("SLA_MAXIMUM_ACCEPTANCE_DAYS", 360)
@@ -76,7 +79,6 @@ class RiskAcceptanceEngagementSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 "expiration_date": f"The date must be greater than now and less than {sla_days} days from today"
             })
-
         instance = RiskAcceptanceEngagement.objects.create(**validated_data)
         if engagements:
             instance.engagement_set.set(engagements)
