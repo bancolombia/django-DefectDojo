@@ -652,7 +652,7 @@ class DojoGroupSerializer(serializers.ModelSerializer):
         required=False,
         source="auth_group.permissions",
     )
-    users = UserStubSerializer(many=True)
+    users = UserStubSerializer(many=True, required=False)
 
     class Meta:
         model = Dojo_Group
