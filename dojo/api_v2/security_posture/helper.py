@@ -4,7 +4,23 @@ from django.utils import timezone
 from dojo.models import GeneralSettings
 from dojo.api_v2.utils import http_response
 from dojo.models import Engagement, Finding, Product, Product_Type
+
 logger = logging.getLogger(__name__)
+
+
+def _get_hc_participation_evaluation(product_id: int) -> dict:
+    """
+    Gets the latest HC participation evaluation for a product.
+    Returns None if no evaluation exists or if module is not available.
+    """
+    try:
+        from dojo.engine_participation.helpers import get_latest_hc_evaluation_for_product
+        return get_latest_hc_evaluation_for_product(product_id)
+    except ImportError:
+        return None
+    except Exception as e:
+        logger.warning(f"Error getting HC participation evaluation for product {product_id}: {e}")
+        return None
 
 def calculate_posture(result):
     posture_status_dict = GeneralSettings.get_value("SECURITY_POSTURE_STATUS", {})
@@ -230,6 +246,9 @@ def get_product_security_posture(product: Product, product_name: str):
     data["adoption_devsecops"] = list(set(adoption_devsecops_product))
     data["result"] = round(result / active_engagements_with_findings, 3) if active_engagements_with_findings > 0 else 0.0
     data["status"] = calculate_posture(data["result"])
+    
+    data["hc_participation_evaluation"] = _get_hc_participation_evaluation(product.id)
+    
     return data
 
 def get_product_type_security_posture(product_type: Product_Type, product_type_name: str):

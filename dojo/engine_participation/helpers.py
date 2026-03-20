@@ -1,0 +1,417 @@
+"""
+Helpers for HC (Hacking Continuo) Participation module.
+
+This module evaluates products for HC participation based on business rules:
+- R1: Only products with business_criticality in (very high, high, medium) are eligible
+- R2: If product is already in Hacking Continuo → document, don't postulate
+- R3: If passes validations → postulate to HC
+"""
+import uuid
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from enum import Enum
+
+from django.db import transaction
+from django.conf import settings
+from django.urls import reverse
+from django.utils import timezone
+
+from celery.utils.log import get_task_logger
+
+from dojo.celery import app
+from dojo.models import Product, Dojo_Group
+from dojo.group.queries import get_group_members_for_group
+from dojo.notifications.helper import create_notification
+from dojo.api_v2.security_posture.helper import get_product_security_posture
+
+logger = get_task_logger(__name__)
+
+ELIGIBLE_CRITICALITIES = ("very high", "high", "medium")
+
+
+class HCConstants(Enum):
+    REVIEWERS_GROUP = settings.HC_REVIEWER_GROUP_NAME
+    APPROVERS_GROUP = settings.HC_APPROVER_GROUP_NAME
+
+
+def get_hc_reviewers_members():
+    """Get members of the HC reviewers group"""
+    reviewer_group = Dojo_Group.objects.filter(
+        name=HCConstants.REVIEWERS_GROUP.value
+    ).first()
+    
+    if not reviewer_group:
+        return []
+    
+    reviewer_members = get_group_members_for_group(reviewer_group)
+    return [member.user.username for member in reviewer_members if member]
+
+
+def get_hc_approvers_members():
+    """Get members of the HC approvers group"""
+    approvers_group = Dojo_Group.objects.filter(
+        name=HCConstants.APPROVERS_GROUP.value
+    ).first()
+    
+    if not approvers_group:
+        return []
+    
+    approvers_members = get_group_members_for_group(approvers_group)
+    return [member.user.username for member in approvers_members if member]
+
+
+def has_valid_comments(hc_participation, user) -> bool:
+    """Check if user has added comments before taking action"""
+    if user.is_superuser:
+        return True
+    
+    for comment in hc_participation.discussions.all():
+        if comment.author == user:
+            return True
+    
+    return False
+
+
+def evaluate_product_for_hc(product: Product) -> dict:
+    """
+    Evaluates a single product for HC participation.
+    
+    Business Rules:
+    - R1: Only products with business_criticality in (very high, high, medium) are eligible
+    - R2: If the product is already in Hacking Continuo → document, don't postulate
+    - R3: If passes R1 and R2 validations → postulate to HC
+    
+    Returns:
+        dict with evaluation results
+    """
+    from dojo.engine_participation.models import HCParticipation
+    
+    result = {
+        "product_id": product.id,
+        "product_name": product.name,
+        "business_criticality": product.business_criticality,
+        "was_in_hacking_continuous": False,
+        "recommendation": None,
+        "reason": None,
+        "security_posture": None,
+    }
+    
+    security_posture = get_product_security_posture(product, None)
+    result["security_posture"] = {
+        "is_in_hacking_continuos": security_posture.get("is_in_hacking_continuos", False),
+        "counter_active_findings": security_posture.get("counter_active_findings", 0),
+        "counter_total_findings": security_posture.get("counter_total_findings", 0),
+        "adoption_devsecops": security_posture.get("adoption_devsecops", []),
+        "result": security_posture.get("result", 0),
+        "status": security_posture.get("status", "UNKNOWN"),
+    }
+    
+    result["was_in_hacking_continuous"] = security_posture.get("is_in_hacking_continuos", False)
+    
+    criticality = product.business_criticality
+    if not criticality or criticality.lower() not in ELIGIBLE_CRITICALITIES:
+        result["recommendation"] = HCParticipation.RECOMMENDATION_CHOICES[2][0]  # not_eligible
+        result["reason"] = (
+            f"R1: Business criticality '{criticality or 'Not defined'}' "
+            f"is not eligible. Only High/Medium/Very High are eligible."
+        )
+        return result
+    
+    if security_posture.get("is_in_hacking_continuos", False):
+        result["recommendation"] = HCParticipation.RECOMMENDATION_CHOICES[1][0]  # already_in_hc
+        result["reason"] = "R2: Product is already in Hacking Continuous. Documented, no postulation required."
+        return result
+    
+    result["recommendation"] = HCParticipation.RECOMMENDATION_CHOICES[0][0]  # postulated
+    result["reason"] = (
+        f"R3: Product eligible for Hacking Continuous postulation. "
+        f"Criticality: {criticality}. Requires review and approval."
+    )
+    
+    return result
+
+
+def _process_single_product(product: Product, batch_id: uuid.UUID, user) -> dict:
+    """Process a single product evaluation (used for parallel processing)"""
+    from dojo.engine_participation.models import HCParticipation
+    
+    try:
+        evaluation_result = evaluate_product_for_hc(product)
+        
+        hc_request = HCParticipation(
+            product=product,
+            recommendation=evaluation_result["recommendation"],
+            business_criticality=evaluation_result["business_criticality"],
+            was_in_hacking_continuous=evaluation_result["was_in_hacking_continuous"],
+            security_posture_data=evaluation_result["security_posture"],
+            reason=evaluation_result["reason"],
+            status="Pending",
+            created_by=user,
+            batch_id=batch_id,
+        )
+        
+        return {
+            "evaluation_result": evaluation_result,
+            "hc_request": hc_request,
+        }
+    except Exception as e:
+        logger.exception(f"Error evaluating product {product.id}: {e}")
+        return {
+            "evaluation_result": {
+                "product_id": product.id,
+                "product_name": product.name,
+                "recommendation": "error",
+                "reason": str(e),
+            },
+            "hc_request": None,
+        }
+
+
+def run_hc_participation_evaluation(user=None) -> dict:
+    """
+    Runs the HC participation evaluation for all products.
+    Only creates requests for products that are postulated (eligible and not in HC).
+    
+    Args:
+        user: Optional - The user executing the evaluation (None for automated tasks)
+    
+    Returns:
+        dict with summary and detailed results
+    """
+    from dojo.engine_participation.models import HCParticipation
+    
+    batch_id = uuid.uuid4()
+    
+    products_qs = Product.objects.select_related("prod_type").all()
+    
+    products_list = list(products_qs)
+    
+    if not products_list:
+        return {
+            "batch_id": str(batch_id),
+            "total_evaluated": 0,
+            "summary": {
+                "postulated": 0,
+                "already_in_hc": 0,
+                "not_eligible": 0,
+                "errors": 0,
+            },
+            "requests_created": 0,
+        }
+    
+    results = []
+    requests_to_create = []
+    
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_product = {
+            executor.submit(_process_single_product, product, batch_id, user): product
+            for product in products_list
+        }
+        
+        for future in as_completed(future_to_product):
+            process_result = future.result()
+            results.append(process_result["evaluation_result"])
+            
+            if process_result["hc_request"] and process_result["evaluation_result"]["recommendation"] == "postulated":
+                requests_to_create.append(process_result["hc_request"])
+    
+    created_requests = []
+    with transaction.atomic():
+        for hc_request in requests_to_create:
+            existing = HCParticipation.objects.filter(
+                product=hc_request.product,
+                status__in=["Pending", "Reviewed"]
+            ).first()
+            
+            if not existing:
+                hc_request.save()
+                created_requests.append(hc_request)
+    
+    if created_requests:
+        _notify_reviewers_of_new_requests(created_requests, batch_id)
+    
+    summary = {
+        "postulated": sum(1 for r in results if r["recommendation"] == "postulated"),
+        "already_in_hc": sum(1 for r in results if r["recommendation"] == "already_in_hc"),
+        "not_eligible": sum(1 for r in results if r["recommendation"] == "not_eligible"),
+        "errors": sum(1 for r in results if r["recommendation"] == "error"),
+    }
+    
+    logger.info(
+        f"HC Participation Evaluation completed. Batch: {batch_id}, "
+        f"Postulated: {summary['postulated']}, "
+        f"Already in HC: {summary['already_in_hc']}, "
+        f"Not eligible: {summary['not_eligible']}, "
+        f"Requests created: {len(created_requests)}"
+    )
+    
+    return {
+        "batch_id": str(batch_id),
+        "total_evaluated": len(results),
+        "summary": summary,
+        "requests_created": len(created_requests),
+        "results": results,
+    }
+
+
+def _notify_reviewers_of_new_requests(requests, batch_id):
+    """Send notifications to reviewers about new HC participation requests"""
+    reviewers = get_hc_reviewers_members()
+    
+    if not reviewers:
+        logger.warning("No reviewers found for HC participation notifications")
+        return
+    
+    product_names = [req.product.name for req in requests[:5]]
+    more_text = f" and {len(requests) - 5} more" if len(requests) > 5 else ""
+    
+    create_notification(
+        event="hc_participation_request",
+        subject=f"🎯 {len(requests)} new Hacking Continuous requests",
+        title=f"New Hacking Continuous participation requests",
+        description=(
+            f"{len(requests)} new HC participation requests have been generated "
+            f"for products: {', '.join(product_names)}{more_text}. "
+            f"Batch ID: {batch_id}"
+        ),
+        url=reverse("hc_participations"),
+        recipients=reviewers,
+        icon="bullseye",
+        color_icon="#17a2b8",
+    )
+
+
+def approve_hc_participation(hc_participation, user):
+    """
+    Approve an HC participation request.
+    This marks the product as postulated/approved for HC.
+    """
+    from dojo.engine_participation.models import HCParticipationLog
+    
+    previous_status = hc_participation.status
+    
+    hc_participation.status = "Approved"
+    hc_participation.final_status = "Approved"
+    hc_participation.approved_at = timezone.now()
+    hc_participation.approved_by = user
+    hc_participation.status_updated_at = timezone.now()
+    hc_participation.status_updated_by = user
+    hc_participation.save()
+    
+    HCParticipationLog.objects.create(
+        hc_participation=hc_participation,
+        changed_by=user,
+        previous_status=previous_status,
+        current_status="Approved",
+        notes="Request approved for Hacking Continuous participation"
+    )
+    
+    if hc_participation.created_by:
+        create_notification(
+            event="hc_participation_approved",
+            subject=f"✅ HC Request approved - {hc_participation.product.name}",
+            title=f"HC Request approved for {hc_participation.product.name}",
+            description=f"The Hacking Continuous participation request for product {hc_participation.product.name} has been approved.",
+            url=reverse("hc_participation", args=[str(hc_participation.pk)]),
+            recipients=[hc_participation.created_by.username],
+            icon="check-circle",
+            color_icon="#28a745",
+        )
+
+
+def reject_hc_participation(hc_participation, user):
+    """Reject an HC participation request"""
+    from dojo.engine_participation.models import HCParticipationLog
+    
+    previous_status = hc_participation.status
+    
+    hc_participation.status = "Rejected"
+    hc_participation.final_status = "Rejected"
+    hc_participation.rejected_by = user
+    hc_participation.status_updated_at = timezone.now()
+    hc_participation.status_updated_by = user
+    
+    if not hc_participation.reviewed_at:
+        hc_participation.reviewed_at = timezone.now()
+        hc_participation.reviewed_by = user
+    
+    hc_participation.save()
+    
+    HCParticipationLog.objects.create(
+        hc_participation=hc_participation,
+        changed_by=user,
+        previous_status=previous_status,
+        current_status="Rejected",
+        notes="Request rejected"
+    )
+    
+    if hc_participation.created_by:
+        create_notification(
+            event="hc_participation_rejected",
+            subject=f"❌ HC Request rejected - {hc_participation.product.name}",
+            title=f"HC Request rejected for {hc_participation.product.name}",
+            description=f"The Hacking Continuous participation request for product {hc_participation.product.name} has been rejected.",
+            url=reverse("hc_participation", args=[str(hc_participation.pk)]),
+            recipients=[hc_participation.created_by.username],
+            icon="times-circle",
+            color_icon="#dc3545",
+        )
+
+
+def get_latest_hc_evaluation_for_product(product_id: int) -> dict:
+    """
+    Gets the latest HC participation evaluation for a specific product.
+    Used for integration with security_posture.
+    """
+    from dojo.engine_participation.models import HCParticipation
+    
+    try:
+        evaluation = HCParticipation.objects.filter(
+            product_id=product_id
+        ).order_by("-create_date").first()
+        
+        if not evaluation:
+            return None
+        
+        return {
+            "evaluation_id": str(evaluation.uuid),
+            "evaluation_date": evaluation.create_date.isoformat(),
+            "recommendation": evaluation.recommendation,
+            "status": evaluation.status,
+            "final_status": evaluation.final_status,
+            "business_criticality": evaluation.business_criticality,
+            "was_in_hacking_continuous": evaluation.was_in_hacking_continuous,
+            "reason": evaluation.reason,
+            "reviewed_by": evaluation.reviewed_by.username if evaluation.reviewed_by else None,
+            "approved_by": evaluation.approved_by.username if evaluation.approved_by else None,
+        }
+    except Exception as e:
+        logger.exception(f"Error getting latest HC evaluation for product {product_id}: {e}")
+        return None
+
+
+@app.task
+def run_monthly_hc_evaluation():
+    """
+    Celery task to run monthly HC participation evaluation.
+    Evaluates all products and creates requests for eligible ones.
+    No user validation required - this is an automated scheduled task.
+    """
+    logger.info("Starting monthly HC participation evaluation...")
+    
+    try:
+        result = run_hc_participation_evaluation()
+        
+        logger.info(
+            f"Monthly HC evaluation completed. "
+            f"Total evaluated: {result['total_evaluated']}, "
+            f"Requests created: {result['requests_created']}"
+        )
+        
+        return result
+        
+    except Exception as e:
+        logger.exception(f"Error in monthly HC evaluation: {e}")
+        raise
+
+

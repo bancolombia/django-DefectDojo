@@ -46,7 +46,8 @@ from polymorphic.models import PolymorphicModel
 from tagulous.models import TagField
 from tagulous.models.managers import FakeTagRelatedManager
 from dojo.engine_tools.models import *
-from dojo.api_v2.scope.models import * 
+from dojo.api_v2.scope.models import *
+from dojo.engine_participation.models import *
 from dojo.api_v2.api_error import ApiError
 
 from dojo.validators import cvss3_validator, cvss4_validator

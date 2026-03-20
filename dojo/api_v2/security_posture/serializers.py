@@ -102,6 +102,16 @@ class EngagementSummarySerializer(serializers.Serializer):
     adoption_devsecops = serializers.ListField(child=serializers.CharField())
 
 
+class HCParticipationEvaluationSummarySerializer(serializers.Serializer):
+    """Serializer for HC participation evaluation summary in security posture"""
+    evaluation_id = serializers.CharField(required=False, allow_null=True)
+    evaluation_date = serializers.CharField(required=False, allow_null=True)
+    recommendation = serializers.CharField(required=False, allow_null=True)
+    business_criticality = serializers.CharField(required=False, allow_null=True)
+    was_in_hacking_continuous = serializers.BooleanField(required=False, default=False)
+    evaluated_by = serializers.CharField(required=False, allow_null=True)
+
+
 class ProductSecurityPostureSerializer(serializers.Serializer):
     product_id = serializers.IntegerField()
     product_name = serializers.CharField()
@@ -119,6 +129,9 @@ class ProductSecurityPostureSerializer(serializers.Serializer):
     events_active_hacking = EngagementEventsSerializer()
     result = serializers.FloatField()
     status = serializers.CharField()
+    hc_participation_evaluation = HCParticipationEvaluationSummarySerializer(
+        required=False, allow_null=True
+    )
 
 # Product Type Security Posture Serializers
 class ProductTypeRequestSecurityPostureSerializer(serializers.Serializer):
