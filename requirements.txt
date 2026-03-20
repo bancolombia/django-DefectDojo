@@ -1,4 +1,4 @@
-# requirements.txt for DefectDojo using Python 3.x
+
 py==1.11.0
 decorator==5.2.1
 asteval==1.0.8
@@ -26,7 +26,7 @@ django-slack==5.19.0
 git+https://github.com/DefectDojo/django-tagging@develop#egg=django-tagging
 django-watson==1.6.3
 django-prometheus==2.4.1
-Django==5.1.15
+Django==5.1.12 # rollback vulnerability in version 5.1.15
 djangorestframework==3.17.0
 html2text==2025.4.15
 humanize==4.15.0

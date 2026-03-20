@@ -7,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from dojo.user.queries import get_user
 from dojo.api_v2.notifications.serializers import SerializerEmailNotificationRiskAcceptance
 from dojo.models import Risk_Acceptance
+from dojo.api_v2.long_risk_acceptance.models import RiskAcceptanceEngagement
 from drf_spectacular.utils import (
     extend_schema,
 )
@@ -37,17 +38,18 @@ class NotificationEmailApiView(GenericAPIView):
     )
     def post(self, request):
         serializer = SerializerEmailNotificationRiskAcceptance(data=request.data)
-        if serializer.is_valid():
-            recipients = serializer.validated_data.get('recipients')
-            template = serializer.validated_data.get('template')
-            copy_email = serializer.validated_data.get('copy', '')
-            subject = serializer.validated_data.get('subject')
-            message = serializer.validated_data.get('message')
-            risk_acceptance_id = serializer.validated_data.get('risk_acceptance_id')
-            enable_acceptance_risk_for_email = serializer.validated_data.get('enable_acceptance_risk_for_email')
-            attachment = request.FILES.get('attachment')
-        else:
-            return http_response.bad_request(serializer.errors)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        recipients = data.get("recipients")
+        template = data.get("template")
+        copy_email = data.get("copy")
+        subject = data.get("subject")
+        message = data.get("message")
+        risk_acceptance_id = data.get("risk_acceptance_id")
+        enable_acceptance_risk_for_email = data.get("enable_acceptance_risk_for_email")
+        long_risk_acceptance = data.get("long_risk_acceptance")
+        attachment = request.FILES.get("attachment")
+        risk_acceptance_eng_id = data.get("risk_acceptance_eng_id")
         
         attachment_data = None
         attachment_name = None
@@ -68,16 +70,23 @@ class NotificationEmailApiView(GenericAPIView):
             attachment_name=attachment_name,
             attachment_content_type=attachment_content_type,
             risk_acceptance_id=risk_acceptance_id,
+            risk_acceptance_eng_id=risk_acceptance_eng_id,
+            long_risk_acceptance=long_risk_acceptance,
             enable_acceptance_risk_for_email=enable_acceptance_risk_for_email,
             template=template,
         )
 
-        risk_acceptance = Risk_Acceptance.objects.get(id=risk_acceptance_id)
-        system_user = get_user(settings.SYSTEM_USER)
-        risk_acceptance.add_note(
-            f"Email notification send to {recipients} successfully, Message: " + (message if message else "No message provided"),
-            author=system_user
-        )
+        if risk_acceptance_id:
+            risk_acceptance = Risk_Acceptance.objects.get(id=risk_acceptance_id)
+        elif risk_acceptance_eng_id:
+            risk_acceptance = RiskAcceptanceEngagement.objects.get(id=risk_acceptance_eng_id)
+
+            system_user = get_user(settings.SYSTEM_USER)
+            risk_acceptance.add_note(
+                f"Email notification send to {recipients} successfully, Message: " + (message if message else "No message provided"),
+                author=system_user
+            )
 
         return http_response.ok(
             message="Risk acceptance email sent successfully")
+

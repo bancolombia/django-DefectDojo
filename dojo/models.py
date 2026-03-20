@@ -47,6 +47,7 @@ from tagulous.models import TagField
 from tagulous.models.managers import FakeTagRelatedManager
 from dojo.engine_tools.models import *
 from dojo.api_v2.scope.models import * 
+from dojo.api_v2.long_risk_acceptance.models import *
 from dojo.api_v2.api_error import ApiError
 
 from dojo.validators import cvss3_validator, cvss4_validator
@@ -1253,7 +1254,6 @@ class Product(models.Model):
         help_text=_("Disable SLA breach notifications if configured in the global settings"))
     async_updating = models.BooleanField(default=False,
                                             help_text=_("Findings under this Product or SLA configuration are asynchronously being updated"))
-
     class Meta:
         ordering = ("name",)
         indexes = [
@@ -1411,6 +1411,7 @@ class Product(models.Model):
     def has_jira_configured(self):
         import dojo.jira_link.helper as jira_helper
         return jira_helper.has_jira_configured(self)
+    
 
     def violates_sla(self):
         findings = Finding.objects.filter(test__engagement__product=self,
@@ -1632,6 +1633,7 @@ class Engagement(models.Model):
 
     tags = TagField(blank=True, force_lowercase=True, help_text=_("Add tags that help describe this engagement. Choose from the list or add new tags. Press Enter key to add."))
     inherited_tags = TagField(blank=True, force_lowercase=True, help_text=_("Internal use tags sepcifically for maintaining parity with product. This field will be present as a subset in the tags field"))
+    long_risk_acceptances = models.ForeignKey(RiskAcceptanceEngagement, on_delete=models.CASCADE, null=True, blank=True)
 
     class Meta:
         ordering = ["-target_start"]
