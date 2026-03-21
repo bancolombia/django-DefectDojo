@@ -34,7 +34,7 @@ def custom_error_view(request, exception=None):
 
 def custom_unauthorized_view(request, exception=None):
     ErrorPageProductAnnouncement(request=request)
-    return render(request, "403.html", {}, status=400)
+    return render(request, "403.html", {}, status=403)
 
 
 def custom_bad_request_view(request, exception=None):
