@@ -8,6 +8,7 @@ from dojo.group.queries import users_with_permissions_to_approve_long_term_findi
 from tagulous.models import TagField
 from dojo.models import GeneralSettings, Engagement, Dojo_User, Product, Finding 
 from dojo.api_v2.serializers import EngagementSerializer, UserStubSerializer 
+from dojo.api_v2 import validators
 from dojo.models import models
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,9 @@ class ExpirationSerializer(serializers.Serializer):
     expiration_date = serializers.DateField()
     
 class RiskAcceptanceEngagementSerializer(serializers.ModelSerializer):
+    description = serializers.CharField(
+        validators=[validators.valid_chars_validator],
+    )
     engagements_id = serializers.PrimaryKeyRelatedField(queryset=Engagement.objects.all(), many=True, source="engagement_set", required=True, write_only=True)
     engagements = EngagementSerializerRiskLongAcceptance(read_only=True, source="engagement_set", many=True) 
     accepted_by_id = serializers.PrimaryKeyRelatedField(source="accepted_by", queryset=Dojo_User.objects.all(), many=False, required=False, write_only=True)
