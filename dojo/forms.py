@@ -1465,6 +1465,7 @@ class DeleteEngagementForm(forms.ModelForm):
 
 
 class TestForm(forms.ModelForm):
+    tags = TagField(required=False, autocomplete_tags=Finding.tags.tag_model.objects.all().order_by("name"))
     title = forms.CharField(max_length=255, required=False)
     description = forms.CharField(widget=forms.Textarea(attrs={"rows": "3"}), required=False)
     test_type = forms.ModelChoiceField(queryset=Test_Type.objects.all().order_by("name"))
