@@ -3,6 +3,7 @@ from django.urls import reverse
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 from rest_framework import status
+from unittest.mock import patch
 
 from dojo.models import (
     Product,
@@ -699,8 +700,8 @@ class SecurityPostureHelperUnitTest(TestCase):
         self.assertIsInstance(calculate_posture(10.0), str)
 
     def test_calculate_posture_unknown_when_no_settings(self):
-        GeneralSettings.objects.filter(name_key='SECURITY_POSTURE_STATUS').delete()
-        self.assertEqual(calculate_posture(0.0), 'UNKNOWN')
+        with patch.object(GeneralSettings, 'get_value', return_value={}):
+            self.assertEqual(calculate_posture(0.0), 'UNKNOWN')
 
     def test_calculate_posture_first_matching_key(self):
         """Un resultado <= 50 debe retornar la primera clave (APETITO)."""
