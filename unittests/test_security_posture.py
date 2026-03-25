@@ -6,12 +6,24 @@ from rest_framework import status
 from unittest.mock import patch
 
 from dojo.models import (
-    Product, 
-    Engagement, 
-    Test, 
+    Product,
+    Engagement,
+    Test,
     Finding,
     GeneralSettings,
     Product_Type,
+)
+from dojo.api_v2.security_posture.helper import (
+    _apply_total_counters,
+    _classify_active_findings,
+    _init_priority_counter,
+    _init_severity_counter,
+    _increment_bucket,
+    calculate_posture,
+    adoption_devsecops_include,
+    get_product_security_posture,
+    get_product_type_security_posture,
+    get_engagement_security_posture,
 )
 
 class SecurityPostureAPITest(TestCase):
@@ -628,4 +640,250 @@ class ProductTypeSecurityPostureAPITest(TestCase):
         self.assertIn('status', data)
         self.assertIsInstance(data['result'], (int, float))
         self.assertIsInstance(data['status'], str)
+
+
+class SecurityPostureHelperUnitTest(TestCase):
+    """Unit tests para funciones helper del refactor ORM-aggregation."""
+    fixtures = ['dojo_testdata.json']
+
+    def setUp(self):
+        self.engagement = Engagement.objects.first()
+        self.test_obj = Test.objects.first()
+        self._setup_general_settings()
+
+    def _setup_general_settings(self):
+        defaults = [
+            ('SECURITY_POSTURE_STATUS', '{"APETITO": 50, "TOLERANCIA": 100, "EXCEDIDO": 150}', 'DICT'),
+            ('HACKING_CONTINUOUS_TAGS', 'hacking_continuous', 'LIST'),
+            ('DEVSECOPS_ADOPTION_INCLUDE_TAGS', 'engine_iac,engine_container', 'LIST'),
+            ('HACKING_CONTINUOUS_DAYS_TOLERANCE', '30', 'INT'),
+            ('HACKING_CONTINUOUS_EVENT_TAGS', '', 'LIST'),
+        ]
+        for key, value, dtype in defaults:
+            GeneralSettings.objects.update_or_create(
+                name_key=key, defaults={'value': value, 'data_type': dtype}
+            )
+
+    # --- _init_priority_counter / _init_severity_counter ---
+
+    def test_init_priority_counter_all_zero(self):
+        counter = _init_priority_counter()
+        self.assertEqual(set(counter.keys()), {'very_critical', 'critical', 'high', 'medium_low', 'unknown'})
+        self.assertTrue(all(v == 0 for v in counter.values()))
+
+    def test_init_severity_counter_all_zero(self):
+        counter = _init_severity_counter()
+        self.assertEqual(set(counter.keys()), {'critical', 'high', 'medium', 'low', 'info', 'unknown'})
+        self.assertTrue(all(v == 0 for v in counter.values()))
+
+    # --- _increment_bucket ---
+
+    def test_increment_bucket_very_critical(self):
+        counter = _init_priority_counter()
+        _increment_bucket(counter, 'Very Critical')
+        self.assertEqual(counter['very_critical'], 1)
+
+    def test_increment_bucket_unknown_fallback(self):
+        """Claves que no existen en el counter deben caer a 'unknown'."""
+        counter = _init_priority_counter()
+        _increment_bucket(counter, 'NonExistentLevel')
+        self.assertEqual(counter['unknown'], 1)
+
+    def test_increment_bucket_severity_critical(self):
+        counter = _init_severity_counter()
+        _increment_bucket(counter, 'Critical')
+        self.assertEqual(counter['critical'], 1)
+
+    # --- calculate_posture ---
+
+    def test_calculate_posture_returns_string(self):
+        self.assertIsInstance(calculate_posture(10.0), str)
+
+    def test_calculate_posture_unknown_when_no_settings(self):
+        with patch.object(GeneralSettings, 'get_value', return_value={}):
+            self.assertEqual(calculate_posture(0.0), 'UNKNOWN')
+
+    def test_calculate_posture_first_matching_key(self):
+        """Un resultado <= 50 debe retornar la primera clave (APETITO)."""
+        result = calculate_posture(0.0)
+        self.assertEqual(result, 'APETITO')
+
+    # --- adoption_devsecops_include ---
+
+    def test_adoption_devsecops_include_filters_correctly(self):
+        tags = ['engine_iac', 'engine_container', 'unrelated_tag']
+        result = adoption_devsecops_include(tags)
+        self.assertIn('engine_iac', result)
+        self.assertIn('engine_container', result)
+        self.assertNotIn('unrelated_tag', result)
+
+    def test_adoption_devsecops_include_empty(self):
+        self.assertEqual(adoption_devsecops_include([]), [])
+
+    def test_adoption_devsecops_include_deduplicates(self):
+        tags = ['engine_iac', 'engine_iac', 'engine_container']
+        result = adoption_devsecops_include(tags)
+        self.assertEqual(len(result), len(set(result)))
+
+    # --- _apply_total_counters (1 query aggregate) ---
+
+    def test_apply_total_counters_all_keys_present(self):
+        qs = Finding.objects.filter(test__engagement=self.engagement)
+        data = {}
+        _apply_total_counters(data, qs)
+        for key in ('counter_active_findings', 'counter_total_findings',
+                    'counter_closed_findings', 'counter_accepted_findings',
+                    'counter_transferred_findings', 'counter_onwhitelist_findings'):
+            self.assertIn(key, data)
+            self.assertIsInstance(data[key], int)
+
+    def test_apply_total_counters_active_finding_counted(self):
+        """Un nuevo finding activo debe incrementar counter_active_findings."""
+        before_qs = Finding.objects.filter(test__engagement=self.engagement)
+        before_data = {}
+        _apply_total_counters(before_data, before_qs)
+        before_count = before_data['counter_active_findings']
+
+        Finding.objects.create(
+            title="New Active TC", test=self.test_obj, severity="High",
+            description="d", active=True, verified=True, false_p=False, duplicate=False,
+        )
+        after_qs = Finding.objects.filter(test__engagement=self.engagement)
+        after_data = {}
+        _apply_total_counters(after_data, after_qs)
+        self.assertEqual(after_data['counter_active_findings'], before_count + 1)
+
+    def test_apply_total_counters_duplicate_not_counted_as_active(self):
+        """Findings duplicados no deben contarse en counter_active_findings."""
+        Finding.objects.create(
+            title="Duplicate TC", test=self.test_obj, severity="High",
+            description="d", active=True, duplicate=True, verified=True, false_p=False,
+        )
+        qs = Finding.objects.filter(test__engagement=self.engagement)
+        data = {}
+        _apply_total_counters(data, qs)
+        # duplicate=True excluye del conteo activo
+        active_manual = Finding.objects.filter(
+            test__engagement=self.engagement,
+            active=True, duplicate=False, risk_accepted=False
+        ).count()
+        self.assertEqual(data['counter_active_findings'], active_manual)
+
+    # --- _classify_active_findings ---
+
+    def test_classify_active_findings_returns_float(self):
+        Finding.objects.create(
+            title="Classify TC", test=self.test_obj, severity="Critical",
+            description="d", active=True, verified=True, false_p=False, duplicate=False,
+        )
+        qs = Finding.objects.filter(
+            test__engagement=self.engagement,
+            active=True, duplicate=False, risk_accepted=False,
+        )
+        data = {
+            'counter_findings_by_priority': _init_priority_counter(),
+            'counter_findings_by_severity': _init_severity_counter(),
+        }
+        result = _classify_active_findings(data, qs)
+        self.assertIsInstance(result, float)
+
+    def test_classify_active_findings_total_matches_qs_count(self):
+        """La suma de todos los buckets debe igual al total de findings activos."""
+        Finding.objects.create(
+            title="Classify High TC", test=self.test_obj, severity="High",
+            description="d", active=True, verified=True, false_p=False, duplicate=False,
+        )
+        qs = Finding.objects.filter(
+            test__engagement=self.engagement,
+            active=True, duplicate=False, risk_accepted=False,
+        )
+        data = {
+            'counter_findings_by_priority': _init_priority_counter(),
+            'counter_findings_by_severity': _init_severity_counter(),
+        }
+        _classify_active_findings(data, qs)
+        self.assertEqual(sum(data['counter_findings_by_severity'].values()), qs.count())
+        self.assertEqual(sum(data['counter_findings_by_priority'].values()), qs.count())
+
+
+class ProductPostureInactiveEngagementTest(TestCase):
+    """Verifica que engagements inactivos son excluidos del cálculo del product posture."""
+    fixtures = ['dojo_testdata.json']
+
+    def setUp(self):
+        self.product = Product.objects.first()
+        self.test_obj = Test.objects.first()
+        # Desactivar todos los engagements del product para aislar el test
+        Engagement.objects.filter(product=self.product).update(active=False)
+        Finding.objects.create(
+            title="Finding in inactive eng", test=self.test_obj, severity="Critical",
+            description="d", active=True, verified=True, false_p=False, duplicate=False,
+        )
+        self._setup_general_settings()
+
+    def _setup_general_settings(self):
+        defaults = [
+            ('SECURITY_POSTURE_STATUS', '{"APETITO": 50, "TOLERANCIA": 100}', 'DICT'),
+            ('HACKING_CONTINUOUS_TAGS', '[]', 'LIST'),
+            ('DEVSECOPS_ADOPTION_INCLUDE_TAGS', '["engine_iac"]', 'LIST'),
+            ('HACKING_CONTINUOUS_DAYS_TOLERANCE', '30', 'INT'),
+            ('HACKING_CONTINUOUS_EVENT_TAGS', '[]', 'LIST'),
+        ]
+        for key, value, dtype in defaults:
+            GeneralSettings.objects.update_or_create(
+                name_key=key, defaults={'value': value, 'data_type': dtype}
+            )
+
+    def test_inactive_engagement_findings_not_counted(self):
+        """Findings de engagements inactivos no deben aparecer en counter_active_findings."""
+        data = get_product_security_posture(self.product, None)
+        self.assertEqual(data['counter_active_findings'], 0)
+        self.assertEqual(data['result'], 0.0)
+
+    def test_inactive_engagement_fast_path_fields(self):
+        """Con 0 engagements activos, todos los campos deben existir con valores por defecto."""
+        data = get_product_security_posture(self.product, None)
+        self.assertIn('status', data)
+        self.assertIn('adoption_devsecops', data)
+        self.assertEqual(data['adoption_devsecops'], [])
+        self.assertEqual(data['counter_total_findings'], 0)
+
+
+class ProductTypePostureEmptyEngagementsTest(TestCase):
+    """Verifica el fast-path cuando product_type no tiene engagements activos."""
+    fixtures = ['dojo_testdata.json']
+
+    def setUp(self):
+        self.product_type = Product_Type.objects.get(id=1)
+        Engagement.objects.filter(product__prod_type=self.product_type).update(active=False)
+        self._setup_general_settings()
+
+    def _setup_general_settings(self):
+        defaults = [
+            ('SECURITY_POSTURE_STATUS', '{"APETITO": 50, "TOLERANCIA": 100}', 'DICT'),
+            ('HACKING_CONTINUOUS_TAGS', '[]', 'LIST'),
+            ('DEVSECOPS_ADOPTION_INCLUDE_TAGS', '["engine_iac"]', 'LIST'),
+            ('HACKING_CONTINUOUS_DAYS_TOLERANCE', '30', 'INT'),
+            ('HACKING_CONTINUOUS_EVENT_TAGS', '[]', 'LIST'),
+        ]
+        for key, value, dtype in defaults:
+            GeneralSettings.objects.update_or_create(
+                name_key=key, defaults={'value': value, 'data_type': dtype}
+            )
+
+    def test_empty_engagements_returns_zeros(self):
+        data = get_product_type_security_posture(self.product_type, None)
+        self.assertEqual(data['counter_active_findings'], 0)
+        self.assertEqual(data['counter_total_findings'], 0)
+        self.assertEqual(data['result'], 0.0)
+
+    def test_empty_engagements_status_present(self):
+        data = get_product_type_security_posture(self.product_type, None)
+        self.assertIn('status', data)
+        self.assertIsInstance(data['status'], str)
+
+    def test_empty_engagements_adoption_devsecops_empty(self):
+        data = get_product_type_security_posture(self.product_type, None)
+        self.assertIn('adoption_devsecops', data)
+        self.assertEqual(data['adoption_devsecops'], [])
 
