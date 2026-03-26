@@ -1,4 +1,5 @@
 from django import forms
+from dojo.api_v2.validators import valid_chars_validator
 from dojo.templatetags.authorization_tags import is_in_reviewer_group
 from dojo.engine_tools.models import FindingExclusion, FindingExclusionDiscussion
 from dojo.models import Product, Product_Type, Engagement
@@ -49,6 +50,23 @@ class CreateFindingExclusionForm(forms.ModelForm):
     class Meta:
         model = FindingExclusion
         fields = ["type", "unique_id_from_tool", "reason", "practice", "scope", "product_type", "product", "engagements"]
+    
+    
+    def clean_unique_id_from_tool(self):
+        value = self.cleaned_data.get("unique_id_from_tool")
+        valid_chars_validator(value)
+        return value
+
+    def clean_reason(self):
+        value = self.cleaned_data.get("reason")
+        valid_chars_validator(value)
+        return value
+
+    def clean_practice(self):
+        value = self.cleaned_data.get("practice")
+        valid_chars_validator(value)
+        return value
+
         
     def __init__(self, user, *args, **kwargs):
         self.user = user
