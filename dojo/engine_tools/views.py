@@ -154,13 +154,6 @@ def create_finding_exclusion(request: HttpRequest) -> HttpResponse:
                 extra_tags="alert-success")
             
             return HttpResponseRedirect(reverse("finding_exclusions"))
-        # else:
-        #     messages.add_message(
-        #         request,
-        #         messages.WARNING,
-        #         _("Please correct any errors displayed below."),
-        #         extra_tags="alert-warning")
-        #     return HttpResponseRedirect(reverse("finding_exclusions"))
 
     add_breadcrumb(title="Create Exclusion",
                    top_level=False,
