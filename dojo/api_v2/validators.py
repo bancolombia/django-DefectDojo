@@ -23,5 +23,6 @@ class CharacterValidation():
 
         if re.search(special_char_regex, value):
             raise ValidationError(f"The name : {value} : cannot contain special characters like < > & ( ) ; : [ ] '")
+        return value
 
 valid_chars_validator = CharacterValidation()
