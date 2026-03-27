@@ -29,6 +29,7 @@ from django.utils.decorators import method_decorator
 from django.core.exceptions import PermissionDenied
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.translation import gettext as _
 from django.shortcuts import render, redirect, get_object_or_404
 from django.db import transaction
 from django.db.models import Q
@@ -153,12 +154,6 @@ def create_finding_exclusion(request: HttpRequest) -> HttpResponse:
                 extra_tags="alert-success")
             
             return HttpResponseRedirect(reverse("finding_exclusions"))
-        else:
-            messages.add_message(
-                request,
-                messages.ERROR,
-                "Please correct any errors displayed below.",
-                extra_tags="alert-danger")
 
     add_breadcrumb(title="Create Exclusion",
                    top_level=False,

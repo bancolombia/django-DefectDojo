@@ -1220,6 +1220,13 @@ def new_tech_for_prod(request, pid):
                                  _("Technology added successfully."),
                                  extra_tags="alert-success")
             return HttpResponseRedirect(reverse("view_product", args=(pid,)))
+        else:
+            messages.add_message(request,
+                                 messages.WARNING,
+                                 _("Technology added Error."),
+                                 extra_tags="alert-warning")
+            return HttpResponseRedirect(reverse("view_product", args=(pid,)))
+            
 
     form = AppAnalysisForm(initial={"user": request.user})
     product_tab = Product_Tab(get_object_or_404(Product, id=pid), title=_("Add Technology"), tab="settings")
