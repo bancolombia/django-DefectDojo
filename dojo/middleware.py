@@ -66,8 +66,13 @@ class LoginRequiredMiddleware:
                 uwsgi.set_logvar("dd_user", str(request.user))
             path = request.path_info.lstrip("/")
             from dojo.models import Dojo_User
-            if Dojo_User.force_password_reset(request.user) and path != "change_password":
-                return HttpResponseRedirect(reverse("change_password"))
+            if Dojo_User.force_password_reset(request.user):
+                if settings.SOCIAL_LOGIN_AUTO_REDIRECT is True:
+                    from dojo.views import custom_unauthorized_view
+                    logger.error(f"User '{request.user.username}' was blocked due to rate limiting.")
+                    return custom_unauthorized_view(request)
+                else:
+                    return HttpResponseRedirect(reverse("change_password"))
 
         return self.get_response(request)
 
