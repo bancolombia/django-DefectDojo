@@ -684,6 +684,9 @@ def add_tests(request, eid):
                 eng.save()
 
             new_test.save()
+            if tags := request.POST.get("tags"):
+                for tag in tags.strip().split(","):
+                    new_test.tags.add(tag)
 
             # Save the credential to the test
             if cred_form.is_valid():

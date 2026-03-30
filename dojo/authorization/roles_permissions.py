@@ -180,6 +180,11 @@ class Permissions(IntEnum):
     Input_Add = 4003
     Input_Delete = 4004
 
+    Long_Risk_Acceptance_Eng_View = 5001
+    Long_Risk_Acceptance_Eng_Edit = 5002
+    Long_Risk_Acceptance_Eng_Add = 5003
+    Long_Risk_Acceptance_Eng_Delete = 5004
+
     @classmethod
     def has_value(cls, value):
         try:

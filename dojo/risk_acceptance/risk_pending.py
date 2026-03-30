@@ -5,6 +5,7 @@ from dojo.celery import app
 from django.shortcuts import render
 from django.db.models import Q
 from django.db.models.query import QuerySet
+from datetime import datetime
 from django.utils import timezone
 from django.conf import settings
 from dojo.utils import Response
@@ -60,6 +61,15 @@ def risk_acceptance_decline(
 
 def update_expiration_risk_accepted(finding: Finding,
                                     risk_acceptance: Risk_Acceptance):
+
+    if risk_acceptance.long_term_acceptance:
+        expiration_delta_days =  (timezone.now() - risk_acceptance.expiration_date).days
+        expiration_delta_days =  (risk_acceptance.expiration_date - timezone.now()).days
+        return (expiration_delta_days,
+            risk_acceptance.expiration_date,
+            risk_acceptance.created)
+
+
     finding_accepteds = risk_acceptance.accepted_findings.filter(
         risk_status__in=["Risk Accepted", "Risk Expired"]
         )

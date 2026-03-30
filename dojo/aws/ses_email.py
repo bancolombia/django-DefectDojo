@@ -1,5 +1,6 @@
 import logging
 import boto3
+from django import conf
 from botocore.exceptions import ClientError
 from dojo.decorators import dojo_async_task, we_want_async
 from email.mime.multipart import MIMEMultipart

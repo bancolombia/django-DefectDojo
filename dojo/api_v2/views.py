@@ -3765,11 +3765,11 @@ class TransferFindingFindingsViewSet(prefetch.PrefetchListMixin,
                         helper_tf.reset_finding_related(transfer_finding_finding.findings)
                         transfer_finding_finding.delete()
                 NotificationTransferFinding.transfer_finding_status_changes(transfer_finding_obj)
-                return Response(serializer.data, status=status.HTTP_204_NO_CONTENT)
+                return http_response.ok(message="Transfer Deleted")
             else:
                 helper_tf.reset_finding_related(pk)
                 super().destroy(request, pk)
-                return Response(serializer.data, status=status.HTTP_204_NO_CONTENT)
+                return http_response.ok(message="Transfer Deleted")
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

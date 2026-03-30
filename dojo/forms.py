@@ -25,6 +25,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.dates import MONTHS
 from django.utils.safestring import mark_safe
+from dojo.api_v2.validators import valid_chars_validator 
 from django.utils.translation import gettext_lazy as _
 from polymorphic.base import ManagerInheritanceWarning
 from tagulous.forms import TagField
@@ -304,6 +305,17 @@ class Product_TypeForm(forms.ModelForm):
                   "environment_technical_contact",
                   "critical_product",
                   "key_product"]
+    
+    def clean_name(self):
+        value = self.cleaned_data.get("name")
+        valid_chars_validator(value)
+        return value
+
+    def clean_description(self):
+        value = self.cleaned_data.get("description")
+        valid_chars_validator(value)
+        return value
+
 
 
 class Delete_Product_TypeForm(forms.ModelForm):
@@ -457,6 +469,22 @@ class ProductForm(forms.ModelForm):
     def clean_tags(self):
         tag_validator(self.cleaned_data.get("tags"))
         return self.cleaned_data.get("tags")
+    
+    def clean_name(self):
+        value = self.cleaned_data.get("name")
+        valid_chars_validator(value)
+        return value
+
+    def clean_description(self):
+        value = self.cleaned_data.get("description")
+        valid_chars_validator(value)
+        return value
+
+    def clean_tags(self):
+        value = self.cleaned_data.get("tags")
+        valid_chars_validator(value)
+        return value
+
 
 
 class DeleteProductForm(forms.ModelForm):
@@ -1465,6 +1493,7 @@ class DeleteEngagementForm(forms.ModelForm):
 
 
 class TestForm(forms.ModelForm):
+    tags = TagField(required=False, autocomplete_tags=Finding.tags.tag_model.objects.all().order_by("name"))
     title = forms.CharField(max_length=255, required=False)
     description = forms.CharField(widget=forms.Textarea(attrs={"rows": "3"}), required=False)
     test_type = forms.ModelChoiceField(queryset=Test_Type.objects.all().order_by("name"))
@@ -3153,6 +3182,23 @@ class AppAnalysisForm(forms.ModelForm):
     class Meta:
         model = App_Analysis
         exclude = ["product"]
+    
+    
+    def clean_name(self):
+        value = self.cleaned_data.get("name")
+        valid_chars_validator(value)
+        return value
+
+    def clean_version(self):
+        value = self.cleaned_data.get("version")
+        valid_chars_validator(value)
+        return value
+
+    def clean_icon(self):
+        value = self.cleaned_data.get("icon")
+        valid_chars_validator(value)
+        return value
+
 
 
 class DeleteAppAnalysisForm(forms.ModelForm):
