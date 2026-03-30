@@ -9,8 +9,8 @@ class ProductAnnouncementManager:
 
     """Base class for centralized helper methods"""
 
-    base_try_free = "Try today for free"
-    base_contact_us = "email us at"
+    base_try_free = "We have detected an unusual number of requests from your account, so access has been temporarily blocked to protect the service."
+    base_contact_us = "If you have any questions or need assistance, please contact us at soporte"
     base_email_address = "hello@defectdojo.com"
     ui_try_free = f'<b><a href="https://cloud.defectdojo.com/accounts/onboarding/plg_step_1" target="_blank">{base_try_free}</a></b>'
     ui_contact_us = f'{base_contact_us} <b><a href="mailto:{base_email_address}">{base_email_address}</a></b>'
@@ -26,6 +26,10 @@ class ProductAnnouncementManager:
         **kwargs: dict,
     ):
         """Skip all this if the CREATE_CLOUD_BANNER is not set"""
+        from dojo.models import System_Settings
+        email = System_Settings.objects.get().mail_notifications_to
+        if email:
+            self.ui_outreach = self.api_outreach.replace("hello@defectdojo.com", email)
         if not settings.CREATE_CLOUD_BANNER:
             return
         # Fill in the vars if the were supplied correctly
@@ -76,7 +80,7 @@ class ErrorPageProductAnnouncement(ProductAnnouncementManager):
         response_data: dict | None = None,
         **kwargs: dict,
     ):
-        self.base_message = "Pro comes with support."
+        self.base_message = ""
         super().__init__(
             *args,
             request=request,
