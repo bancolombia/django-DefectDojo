@@ -565,12 +565,6 @@
                                                         {% trans "HC Participation Requests" %}
                                                     </a>
                                                 </li>
-                                                <li>
-                                                    <a rel="noopener noreferrer" href="{% url 'run_hc_evaluation' %}" 
-                                                       onclick="return confirm('Run HC Evaluation now?');">
-                                                        {% trans "Run HC Evaluation" %}
-                                                    </a>
-                                                </li>
                                                 {% if request.user|has_permission_to_reclassify_orphans %}
                                                     <li>
                                                         <a rel="noopener noreferrer" href="{% url 'orphans_reclassification' %}">

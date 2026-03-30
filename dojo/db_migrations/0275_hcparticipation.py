@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('dojo', '0273_alter_inputsecret_key_alter_inputsecret_secret'),
+        ('dojo', '0274_riskacceptanceengagement_and_more'),
     ]
 
     operations = [

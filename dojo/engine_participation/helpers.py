@@ -27,11 +27,22 @@ from dojo.api_v2.security_posture.helper import get_product_security_posture
 logger = get_task_logger(__name__)
 
 ELIGIBLE_CRITICALITIES = ("very high", "high", "medium")
+ACTIVE_HC_REQUEST_STATUSES = ("Pending", "Reviewed")
+HC_BMC_APPLICATION_CLASSID_MARKER = "CLASSID: BMC_APPLICATION"
+HC_STATUS_TRANSITIONS = {
+    "Reviewed": {"Pending"},
+    "Approved": {"Reviewed"},
+    "Rejected": {"Pending", "Reviewed"},
+}
 
 
 class HCConstants(Enum):
     REVIEWERS_GROUP = settings.HC_REVIEWER_GROUP_NAME
     APPROVERS_GROUP = settings.HC_APPROVER_GROUP_NAME
+
+
+class InvalidHCParticipationTransition(Exception):
+    """Raised when a workflow action is attempted from an invalid state."""
 
 
 def get_hc_reviewers_members():
@@ -70,6 +81,16 @@ def has_valid_comments(hc_participation, user) -> bool:
             return True
     
     return False
+
+
+def _validate_hc_status_transition(current_status: str, target_status: str) -> None:
+    allowed_statuses = HC_STATUS_TRANSITIONS.get(target_status, set())
+    if current_status not in allowed_statuses:
+        allowed_labels = ", ".join(sorted(allowed_statuses)) or "none"
+        raise InvalidHCParticipationTransition(
+            f"Cannot change HC request from {current_status} to {target_status}. "
+            f"Allowed previous statuses: {allowed_labels}."
+        )
 
 
 def evaluate_product_for_hc(product: Product) -> dict:
@@ -182,7 +203,21 @@ def run_hc_participation_evaluation(user=None) -> dict:
     
     batch_id = uuid.uuid4()
     
-    products_qs = Product.objects.select_related("prod_type").all()
+    total_products = Product.objects.count()
+
+    products_qs = Product.objects.select_related("prod_type").filter(
+        description__icontains=HC_BMC_APPLICATION_CLASSID_MARKER,
+    )
+    candidates_count = products_qs.count()
+    skipped_by_classid = max(total_products - candidates_count, 0)
+
+    logger.info(
+        "HC Participation Evaluation scope. Total products: %s, "
+        "CLASSID candidates: %s, skipped by CLASSID filter: %s",
+        total_products,
+        candidates_count,
+        skipped_by_classid,
+    )
     
     products_list = list(products_qs)
     
@@ -190,6 +225,11 @@ def run_hc_participation_evaluation(user=None) -> dict:
         return {
             "batch_id": str(batch_id),
             "total_evaluated": 0,
+            "scope": {
+                "total_products": total_products,
+                "classid_candidates": candidates_count,
+                "skipped_by_classid": skipped_by_classid,
+            },
             "summary": {
                 "postulated": 0,
                 "already_in_hc": 0,
@@ -216,14 +256,18 @@ def run_hc_participation_evaluation(user=None) -> dict:
                 requests_to_create.append(process_result["hc_request"])
     
     created_requests = []
+    requests_to_create.sort(key=lambda request: request.product_id)
+
     with transaction.atomic():
         for hc_request in requests_to_create:
+            locked_product = Product.objects.select_for_update().get(pk=hc_request.product_id)
             existing = HCParticipation.objects.filter(
-                product=hc_request.product,
-                status__in=["Pending", "Reviewed"]
-            ).first()
+                product=locked_product,
+                status__in=ACTIVE_HC_REQUEST_STATUSES,
+            ).exists()
             
             if not existing:
+                hc_request.product = locked_product
                 hc_request.save()
                 created_requests.append(hc_request)
     
@@ -239,6 +283,9 @@ def run_hc_participation_evaluation(user=None) -> dict:
     
     logger.info(
         f"HC Participation Evaluation completed. Batch: {batch_id}, "
+        f"Total products: {total_products}, "
+        f"CLASSID candidates: {candidates_count}, "
+        f"Skipped by CLASSID: {skipped_by_classid}, "
         f"Postulated: {summary['postulated']}, "
         f"Already in HC: {summary['already_in_hc']}, "
         f"Not eligible: {summary['not_eligible']}, "
@@ -248,6 +295,11 @@ def run_hc_participation_evaluation(user=None) -> dict:
     return {
         "batch_id": str(batch_id),
         "total_evaluated": len(results),
+        "scope": {
+            "total_products": total_products,
+            "classid_candidates": candidates_count,
+            "skipped_by_classid": skipped_by_classid,
+        },
         "summary": summary,
         "requests_created": len(created_requests),
         "results": results,
@@ -281,31 +333,65 @@ def _notify_reviewers_of_new_requests(requests, batch_id):
     )
 
 
+def mark_hc_participation_reviewed(hc_participation, user):
+    """Move an HC participation request from Pending to Reviewed."""
+    from dojo.engine_participation.models import HCParticipation, HCParticipationLog
+
+    with transaction.atomic():
+        locked_hc_participation = HCParticipation.objects.select_for_update().get(pk=hc_participation.pk)
+        _validate_hc_status_transition(locked_hc_participation.status, "Reviewed")
+
+        previous_status = locked_hc_participation.status
+        current_time = timezone.now()
+
+        locked_hc_participation.status = "Reviewed"
+        locked_hc_participation.reviewed_at = current_time
+        locked_hc_participation.reviewed_by = user
+        locked_hc_participation.status_updated_at = current_time
+        locked_hc_participation.status_updated_by = user
+        locked_hc_participation.save()
+
+        HCParticipationLog.objects.create(
+            hc_participation=locked_hc_participation,
+            changed_by=user,
+            previous_status=previous_status,
+            current_status="Reviewed",
+            notes="Request marked as reviewed",
+        )
+
+    return locked_hc_participation
+
+
 def approve_hc_participation(hc_participation, user):
     """
     Approve an HC participation request.
     This marks the product as postulated/approved for HC.
     """
-    from dojo.engine_participation.models import HCParticipationLog
+    from dojo.engine_participation.models import HCParticipation, HCParticipationLog
     
-    previous_status = hc_participation.status
-    
-    hc_participation.status = "Approved"
-    hc_participation.final_status = "Approved"
-    hc_participation.approved_at = timezone.now()
-    hc_participation.approved_by = user
-    hc_participation.status_updated_at = timezone.now()
-    hc_participation.status_updated_by = user
-    hc_participation.save()
-    
-    HCParticipationLog.objects.create(
-        hc_participation=hc_participation,
-        changed_by=user,
-        previous_status=previous_status,
-        current_status="Approved",
-        notes="Request approved for Hacking Continuous participation"
-    )
-    
+    with transaction.atomic():
+        hc_participation = HCParticipation.objects.select_for_update().get(pk=hc_participation.pk)
+        _validate_hc_status_transition(hc_participation.status, "Approved")
+
+        previous_status = hc_participation.status
+        current_time = timezone.now()
+
+        hc_participation.status = "Approved"
+        hc_participation.final_status = "Approved"
+        hc_participation.approved_at = current_time
+        hc_participation.approved_by = user
+        hc_participation.status_updated_at = current_time
+        hc_participation.status_updated_by = user
+        hc_participation.save()
+
+        HCParticipationLog.objects.create(
+            hc_participation=hc_participation,
+            changed_by=user,
+            previous_status=previous_status,
+            current_status="Approved",
+            notes="Request approved for Hacking Continuous participation",
+        )
+
     if hc_participation.created_by:
         create_notification(
             event="hc_participation_approved",
@@ -318,33 +404,40 @@ def approve_hc_participation(hc_participation, user):
             color_icon="#28a745",
         )
 
+    return hc_participation
+
 
 def reject_hc_participation(hc_participation, user):
     """Reject an HC participation request"""
-    from dojo.engine_participation.models import HCParticipationLog
-    
-    previous_status = hc_participation.status
-    
-    hc_participation.status = "Rejected"
-    hc_participation.final_status = "Rejected"
-    hc_participation.rejected_by = user
-    hc_participation.status_updated_at = timezone.now()
-    hc_participation.status_updated_by = user
-    
-    if not hc_participation.reviewed_at:
-        hc_participation.reviewed_at = timezone.now()
-        hc_participation.reviewed_by = user
-    
-    hc_participation.save()
-    
-    HCParticipationLog.objects.create(
-        hc_participation=hc_participation,
-        changed_by=user,
-        previous_status=previous_status,
-        current_status="Rejected",
-        notes="Request rejected"
-    )
-    
+    from dojo.engine_participation.models import HCParticipation, HCParticipationLog
+
+    with transaction.atomic():
+        hc_participation = HCParticipation.objects.select_for_update().get(pk=hc_participation.pk)
+        _validate_hc_status_transition(hc_participation.status, "Rejected")
+
+        previous_status = hc_participation.status
+        current_time = timezone.now()
+
+        hc_participation.status = "Rejected"
+        hc_participation.final_status = "Rejected"
+        hc_participation.rejected_by = user
+        hc_participation.status_updated_at = current_time
+        hc_participation.status_updated_by = user
+
+        if not hc_participation.reviewed_at:
+            hc_participation.reviewed_at = current_time
+            hc_participation.reviewed_by = user
+
+        hc_participation.save()
+
+        HCParticipationLog.objects.create(
+            hc_participation=hc_participation,
+            changed_by=user,
+            previous_status=previous_status,
+            current_status="Rejected",
+            notes="Request rejected",
+        )
+
     if hc_participation.created_by:
         create_notification(
             event="hc_participation_rejected",
@@ -356,6 +449,8 @@ def reject_hc_participation(hc_participation, user):
             icon="times-circle",
             color_icon="#dc3545",
         )
+
+    return hc_participation
 
 
 def get_latest_hc_evaluation_for_product(product_id: int) -> dict:

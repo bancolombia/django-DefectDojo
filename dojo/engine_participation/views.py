@@ -6,31 +6,29 @@ Provides UI for:
 - Running evaluations (admin only)
 - Reviewing, approving, and rejecting requests
 """
-from datetime import datetime
-
 from django.contrib import messages
-from django.conf import settings
-from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
+from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
-from django.utils import timezone
 from django.core.exceptions import PermissionDenied
+from django.views.decorators.http import require_POST
 
 from dojo.utils import get_page_items, add_breadcrumb
 from dojo.templatetags.authorization_tags import is_in_group
 from dojo.engine_participation.models import (
     HCParticipation,
     HCParticipationDiscussion,
-    HCParticipationLog,
 )
 from dojo.engine_participation.filters import HCParticipationFilter
 from dojo.engine_participation.forms import HCParticipationDiscussionForm
 from dojo.engine_participation.helpers import (
     HCConstants,
+    InvalidHCParticipationTransition,
     approve_hc_participation,
     reject_hc_participation,
     has_valid_comments,
     get_hc_approvers_members,
+    mark_hc_participation_reviewed,
     run_hc_participation_evaluation,
 )
 from dojo.notifications.helper import create_notification
@@ -94,37 +92,48 @@ def show_hc_participation(request: HttpRequest, hcid: str) -> HttpResponse:
         "discussion_form": discussion_form,
         "logs": logs,
         "discussions": discussions,
+        "can_review_hc_participation": is_in_group(request.user, HCConstants.REVIEWERS_GROUP.value),
+        "can_approve_hc_participation": is_in_group(request.user, HCConstants.APPROVERS_GROUP.value),
+        "can_reject_hc_participation": (
+            is_in_group(request.user, HCConstants.REVIEWERS_GROUP.value)
+            or is_in_group(request.user, HCConstants.APPROVERS_GROUP.value)
+        ),
         "name": f"HC Request | {hc_participation.product.name}",
     })
 
 
+@require_POST
 def add_hc_discussion(request: HttpRequest, hcid: str) -> HttpResponse:
     """Add discussion/comment to HC participation request"""
     
     hc_participation = get_object_or_404(HCParticipation, pk=hcid)
-    
-    if request.method == "POST":
-        form = HCParticipationDiscussionForm(request.POST)
-        if form.is_valid():
-            discussion = form.save(commit=False)
-            discussion.hc_participation = hc_participation
-            discussion.author = request.user
-            discussion.save()
-            
-            messages.add_message(
-                request,
-                messages.SUCCESS,
-                "Comment added.",
-                extra_tags="alert-success"
-            )
+
+    form = HCParticipationDiscussionForm(request.POST)
+    if form.is_valid():
+        discussion = form.save(commit=False)
+        discussion.hc_participation = hc_participation
+        discussion.author = request.user
+        discussion.save()
+        
+        messages.add_message(
+            request,
+            messages.SUCCESS,
+            "Comment added.",
+            extra_tags="alert-success"
+        )
     
     return redirect("hc_participation", hcid=hcid)
 
 
+@require_POST
 def delete_hc_discussion(request: HttpRequest, hcid: str, did: int) -> HttpResponse:
     """Delete a discussion from HC participation request"""
     
-    discussion = get_object_or_404(HCParticipationDiscussion, pk=did)
+    discussion = get_object_or_404(
+        HCParticipationDiscussion,
+        pk=did,
+        hc_participation_id=hcid,
+    )
     
     if discussion.author != request.user and not request.user.is_superuser:
         raise PermissionDenied
@@ -141,6 +150,7 @@ def delete_hc_discussion(request: HttpRequest, hcid: str, did: int) -> HttpRespo
     return redirect("hc_participation", hcid=hcid)
 
 
+@require_POST
 def review_hc_participation(request: HttpRequest, hcid: str) -> HttpResponse:
     """Mark HC participation request as reviewed"""
     
@@ -157,22 +167,17 @@ def review_hc_participation(request: HttpRequest, hcid: str) -> HttpResponse:
             extra_tags="alert-danger"
         )
         return redirect("hc_participation", hcid=hcid)
-    
-    previous_status = hc_participation.status
-    hc_participation.status = "Reviewed"
-    hc_participation.reviewed_at = timezone.now()
-    hc_participation.reviewed_by = request.user
-    hc_participation.status_updated_at = timezone.now()
-    hc_participation.status_updated_by = request.user
-    hc_participation.save()
-    
-    HCParticipationLog.objects.create(
-        hc_participation=hc_participation,
-        changed_by=request.user,
-        previous_status=previous_status,
-        current_status="Reviewed",
-        notes="Request marked as reviewed"
-    )
+
+    try:
+        hc_participation = mark_hc_participation_reviewed(hc_participation, request.user)
+    except InvalidHCParticipationTransition as exc:
+        messages.add_message(
+            request,
+            messages.ERROR,
+            str(exc),
+            extra_tags="alert-danger"
+        )
+        return redirect("hc_participation", hcid=hcid)
     
     approvers = get_hc_approvers_members()
     
@@ -197,6 +202,7 @@ def review_hc_participation(request: HttpRequest, hcid: str) -> HttpResponse:
     return redirect("hc_participation", hcid=hcid)
 
 
+@require_POST
 def approve_hc_participation_request(request: HttpRequest, hcid: str) -> HttpResponse:
     """Approve HC participation request"""
     
@@ -213,8 +219,17 @@ def approve_hc_participation_request(request: HttpRequest, hcid: str) -> HttpRes
             extra_tags="alert-danger"
         )
         return redirect("hc_participation", hcid=hcid)
-    
-    approve_hc_participation(hc_participation, request.user)
+
+    try:
+        approve_hc_participation(hc_participation, request.user)
+    except InvalidHCParticipationTransition as exc:
+        messages.add_message(
+            request,
+            messages.ERROR,
+            str(exc),
+            extra_tags="alert-danger"
+        )
+        return redirect("hc_participation", hcid=hcid)
     
     messages.add_message(
         request,
@@ -226,6 +241,7 @@ def approve_hc_participation_request(request: HttpRequest, hcid: str) -> HttpRes
     return redirect("hc_participation", hcid=hcid)
 
 
+@require_POST
 def reject_hc_participation_request(request: HttpRequest, hcid: str) -> HttpResponse:
     """Reject HC participation request"""
     
@@ -243,8 +259,17 @@ def reject_hc_participation_request(request: HttpRequest, hcid: str) -> HttpResp
             extra_tags="alert-danger"
         )
         return redirect("hc_participation", hcid=hcid)
-    
-    reject_hc_participation(hc_participation, request.user)
+
+    try:
+        reject_hc_participation(hc_participation, request.user)
+    except InvalidHCParticipationTransition as exc:
+        messages.add_message(
+            request,
+            messages.ERROR,
+            str(exc),
+            extra_tags="alert-danger"
+        )
+        return redirect("hc_participation", hcid=hcid)
     
     messages.add_message(
         request,
@@ -256,6 +281,7 @@ def reject_hc_participation_request(request: HttpRequest, hcid: str) -> HttpResp
     return redirect("hc_participation", hcid=hcid)
 
 
+@require_POST
 def run_hc_evaluation(request: HttpRequest) -> HttpResponse:
     """Manually trigger HC participation evaluation (admin only)."""
     if not request.user.is_superuser and not request.user.is_staff:

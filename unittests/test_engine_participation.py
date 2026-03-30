@@ -24,7 +24,10 @@ from dojo.engine_participation.helpers import (
     run_hc_participation_evaluation,
     get_latest_hc_evaluation_for_product,
     ELIGIBLE_CRITICALITIES,
+    HC_BMC_APPLICATION_CLASSID_MARKER,
+    InvalidHCParticipationTransition,
     approve_hc_participation,
+    mark_hc_participation_reviewed,
     reject_hc_participation,
 )
 
@@ -213,6 +216,7 @@ class RunHCEvaluationTest(TestCase):
         self.user = Dojo_User.objects.get(username="admin")
         self.product = Product.objects.first()
         self.product.business_criticality = "high"
+        self.product.description = f"Service Metadata | {HC_BMC_APPLICATION_CLASSID_MARKER}"
         self.product.save()
         self.setup_general_settings()
     
@@ -272,15 +276,51 @@ class RunHCEvaluationTest(TestCase):
         self.assertIn("postulated", result["summary"])
         self.assertIn("already_in_hc", result["summary"])
         self.assertIn("not_eligible", result["summary"])
+        self.assertIn("scope", result)
+        self.assertIn("total_products", result["scope"])
+        self.assertIn("classid_candidates", result["scope"])
+        self.assertIn("skipped_by_classid", result["scope"])
+
+    @patch('dojo.engine_participation.helpers.get_product_security_posture')
+    def test_run_evaluation_skips_existing_active_request(self, mock_security_posture):
+        """Test that evaluation does not duplicate active HC requests"""
+        mock_security_posture.return_value = {
+            "is_in_hacking_continuos": False,
+            "counter_active_findings": 5,
+            "counter_total_findings": 10,
+            "adoption_devsecops": [],
+            "result": 10.0,
+            "status": "APETITO",
+        }
+
+        HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.user,
+        )
+
+        result = run_hc_participation_evaluation(user=self.user)
+
+        self.assertEqual(
+            HCParticipation.objects.filter(product=self.product, status="Pending").count(),
+            1,
+        )
+        self.assertEqual(result["requests_created"], 0)
     
     @patch('dojo.engine_participation.helpers.Product.objects')
     def test_run_evaluation_empty_products(self, mock_products):
         """Test evaluation with no products"""
-        mock_products.select_related.return_value.all.return_value = []
+        mock_products.count.return_value = 0
+        mock_products.select_related.return_value.filter.return_value.count.return_value = 0
+        mock_products.select_related.return_value.filter.return_value.all.return_value = []
         
         result = run_hc_participation_evaluation(user=self.user)
         
         self.assertEqual(result["total_evaluated"], 0)
+        self.assertEqual(result["scope"]["total_products"], 0)
+        self.assertEqual(result["scope"]["classid_candidates"], 0)
+        self.assertEqual(result["scope"]["skipped_by_classid"], 0)
 
 
 class ApproveRejectHCTest(TestCase):
@@ -323,6 +363,32 @@ class ApproveRejectHCTest(TestCase):
         log = HCParticipationLog.objects.filter(hc_participation=self.hc).first()
         self.assertIsNotNone(log)
         self.assertEqual(log.current_status, "Rejected")
+
+    def test_review_hc_participation_requires_pending_status(self):
+        """Test reviewing only works from Pending status"""
+        self.hc.status = "Approved"
+        self.hc.final_status = "Approved"
+        self.hc.save()
+
+        with self.assertRaises(InvalidHCParticipationTransition):
+            mark_hc_participation_reviewed(self.hc, self.user)
+
+    def test_approve_hc_participation_requires_reviewed_status(self):
+        """Test approving only works from Reviewed status"""
+        self.hc.status = "Pending"
+        self.hc.save()
+
+        with self.assertRaises(InvalidHCParticipationTransition):
+            approve_hc_participation(self.hc, self.user)
+
+    def test_reject_hc_participation_rejects_terminal_status(self):
+        """Test rejecting does not work from terminal statuses"""
+        self.hc.status = "Approved"
+        self.hc.final_status = "Approved"
+        self.hc.save()
+
+        with self.assertRaises(InvalidHCParticipationTransition):
+            reject_hc_participation(self.hc, self.user)
 
 
 class GetLatestEvaluationTest(TestCase):
@@ -433,6 +499,103 @@ class HCParticipationViewsTest(TestCase):
         client = Client()
         client.force_login(regular_user)
         
-        response = client.get(reverse('run_hc_evaluation'))
+        response = client.post(reverse('run_hc_evaluation'))
         
         self.assertEqual(response.status_code, 403)
+
+    def test_review_requires_post(self):
+        """Test review action rejects GET requests"""
+        from django.test import Client
+
+        client = Client()
+        client.force_login(self.user)
+
+        response = client.get(reverse('review_hc_participation', args=[str(self.hc.uuid)]))
+
+        self.assertEqual(response.status_code, 405)
+
+    def test_approve_requires_post(self):
+        """Test approve action rejects GET requests"""
+        from django.test import Client
+
+        client = Client()
+        client.force_login(self.user)
+
+        response = client.get(reverse('approve_hc_participation', args=[str(self.hc.uuid)]))
+
+        self.assertEqual(response.status_code, 405)
+
+    def test_reject_requires_post(self):
+        """Test reject action rejects GET requests"""
+        from django.test import Client
+
+        client = Client()
+        client.force_login(self.user)
+
+        response = client.get(reverse('reject_hc_participation', args=[str(self.hc.uuid)]))
+
+        self.assertEqual(response.status_code, 405)
+
+    def test_run_evaluation_requires_post(self):
+        """Test run evaluation action rejects GET requests"""
+        from django.test import Client
+
+        client = Client()
+        client.force_login(self.user)
+
+        response = client.get(reverse('run_hc_evaluation'))
+
+        self.assertEqual(response.status_code, 405)
+
+    def test_api_run_evaluation_requires_authentication(self):
+        """Test API endpoint requires token authentication"""
+        api_client = APIClient()
+
+        response = api_client.post(reverse("api_hc_run_evaluation"), format="json")
+
+        self.assertEqual(response.status_code, 403)
+
+    @patch("dojo.api_v2.engine_participation.views.run_hc_participation_evaluation")
+    def test_api_run_evaluation_with_admin_token(self, mock_run_evaluation):
+        """Test API endpoint executes evaluation with admin token"""
+        mock_run_evaluation.return_value = {
+            "batch_id": "batch-1",
+            "total_evaluated": 1,
+            "scope": {
+                "total_products": 1,
+                "classid_candidates": 1,
+                "skipped_by_classid": 0,
+            },
+            "summary": {
+                "postulated": 1,
+                "already_in_hc": 0,
+                "not_eligible": 0,
+                "errors": 0,
+            },
+            "requests_created": 1,
+            "results": [],
+        }
+
+        response = self.client.post(reverse("api_hc_run_evaluation"), format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], "success")
+        self.assertEqual(response.data["data"]["batch_id"], "batch-1")
+
+    def test_api_run_evaluation_forbids_non_staff_user(self):
+        """Test API endpoint denies non-staff users even with token"""
+        regular_user = Dojo_User.objects.create_user(
+            username="regular_api_user",
+            email="regular_api@test.com",
+            password="testpass123",
+            is_staff=False,
+        )
+        regular_token = Token.objects.create(user=regular_user)
+
+        api_client = APIClient()
+        api_client.credentials(HTTP_AUTHORIZATION="Token " + regular_token.key)
+
+        response = api_client.post(reverse("api_hc_run_evaluation"), format="json")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data["status"], "forbidden")
