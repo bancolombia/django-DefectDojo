@@ -224,14 +224,14 @@ def dojo_ratelimit_view(key="user", rate=None, method=['DELETE', 'PATCH', 'POST'
             if GeneralSettings.get_value('ENABLE_RATE_LIMITER_VIEW', False) is True:
                 limiter_block = GeneralSettings.get_value('RATE_LIMITER_BLOCK_VIEW', block)
                 limiter_rate = GeneralSettings.get_value('RATE_LIMITER_RATE_VIEW', rate)
-                limiter_lockout = GeneralSettings.get_value('RATE_LIMITER_ACCOUNT_LOCKOUT_VIEW', True)
+                limiter_lockout = GeneralSettings.get_value('RATE_LIMITER_ACCOUNT_LOCKOUT_VIEW', False)
                 old_limited = getattr(request, "lusernameited", False)
                 ratelimited = is_ratelimited(request=request, fn=fn,
                                             key=key, rate=limiter_rate, method=method,
                                             increment=True)
                 request.limited = ratelimited or old_limited
                 if ratelimited and limiter_block:
-                    if True:
+                    if limiter_lockout:
                         username = request.user.username
                         if username:
                             dojo_user = Dojo_User.objects.filter(username=username).first()
