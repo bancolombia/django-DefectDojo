@@ -156,14 +156,15 @@ class EvaluateProductForHCTest(TestCase):
         
         self.assertIn(result["recommendation"], ["postulated", "already_in_hc"])
     
-    def test_r1_eligible_medium_criticality(self):
-        """R1: Products with medium criticality are eligible"""
+    def test_r1_not_eligible_medium_criticality(self):
+        """R1: Products with medium criticality are not eligible"""
         self.product.business_criticality = "medium"
         self.product.save()
         
         result = evaluate_product_for_hc(self.product)
         
-        self.assertIn(result["recommendation"], ["postulated", "already_in_hc"])
+        self.assertEqual(result["recommendation"], "not_eligible")
+        self.assertIn("R1", result["reason"])
     
     @patch('dojo.engine_participation.helpers.get_product_security_posture')
     def test_r2_already_in_hc(self, mock_security_posture):
@@ -438,7 +439,7 @@ class EligibleCriticalitiesTest(TestCase):
         """Test that eligible criticalities are correctly defined"""
         self.assertIn("very high", ELIGIBLE_CRITICALITIES)
         self.assertIn("high", ELIGIBLE_CRITICALITIES)
-        self.assertIn("medium", ELIGIBLE_CRITICALITIES)
+        self.assertNotIn("medium", ELIGIBLE_CRITICALITIES)
         
         self.assertNotIn("low", ELIGIBLE_CRITICALITIES)
         self.assertNotIn("very low", ELIGIBLE_CRITICALITIES)
