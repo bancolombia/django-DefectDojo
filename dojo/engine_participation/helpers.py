@@ -2,7 +2,7 @@
 Helpers for HC (Hacking Continuo) Participation module.
 
 This module evaluates products for HC participation based on business rules:
-- R1: Only products with business_criticality in (very high, high, medium) are eligible
+- R1: Only products with business_criticality in (very high, high) are eligible
 - R2: If product is already in Hacking Continuo → document, don't postulate
 - R3: If passes validations → postulate to HC
 """
@@ -26,7 +26,7 @@ from dojo.api_v2.security_posture.helper import get_product_security_posture
 
 logger = get_task_logger(__name__)
 
-ELIGIBLE_CRITICALITIES = ("very high", "high", "medium")
+ELIGIBLE_CRITICALITIES = ("very high", "high")
 ACTIVE_HC_REQUEST_STATUSES = ("Pending", "Reviewed")
 HC_BMC_APPLICATION_CLASSID_MARKER = "CLASSID: BMC_APPLICATION"
 HC_STATUS_TRANSITIONS = {
@@ -98,7 +98,7 @@ def evaluate_product_for_hc(product: Product) -> dict:
     Evaluates a single product for HC participation.
     
     Business Rules:
-    - R1: Only products with business_criticality in (very high, high, medium) are eligible
+    - R1: Only products with business_criticality in (very high, high) are eligible
     - R2: If the product is already in Hacking Continuo → document, don't postulate
     - R3: If passes R1 and R2 validations → postulate to HC
     
@@ -134,7 +134,7 @@ def evaluate_product_for_hc(product: Product) -> dict:
         result["recommendation"] = HCParticipation.RECOMMENDATION_CHOICES[2][0]  # not_eligible
         result["reason"] = (
             f"R1: Business criticality '{criticality or 'Not defined'}' "
-            f"is not eligible. Only High/Medium/Very High are eligible."
+            f"is not eligible. Only High/Very High are eligible."
         )
         return result
     
