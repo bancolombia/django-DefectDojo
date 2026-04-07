@@ -3070,9 +3070,9 @@ class Finding(models.Model):
     @property
     def transfer_finding(self):
         if self.findings:
-            tf = self.findings.first().transfer_findings
-            if tf:
-                return tf
+            if tf := self.findings.first():
+                if hasattr(tf, "transfer_findings") and tf.transfer_findings:
+                    return tf.transfer_findings
         return None
 
     def compute_hash_code(self):

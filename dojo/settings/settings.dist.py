@@ -1345,6 +1345,7 @@ DJANGO_MIDDLEWARE_CLASSES = [
     "dojo.middleware.AuditlogMiddleware",
     "crum.CurrentRequestUserMiddleware",
     "dojo.request_cache.middleware.RequestCacheMiddleware",
+    "dojo.request_cache.middleware.SessionRecoveryMiddleware",
     # "dojo.middleware.LongRunningRequestAlertMiddleware", # Disable middleware
 ]
 
