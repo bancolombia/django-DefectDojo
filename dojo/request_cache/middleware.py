@@ -3,7 +3,12 @@ from threading import Lock
 
 from django.core.cache.backends.base import BaseCache
 from django.core.cache.backends.locmem import LocMemCache
+from django.shortcuts import redirect
+from django.core.signing import BadSignature
 from django.utils.deprecation import MiddlewareMixin
+from django.contrib.auth import logout
+import logging
+logger = logging.getLogger(__name__)
 
 # Attribution 1: This code has been taken from https://github.com/anexia-it/django-request-cache, which has
 # been published under the MIT License. Since this project hasn't been updated for more than a year,
@@ -43,3 +48,22 @@ class RequestCacheMiddleware(MiddlewareMixin):
 
     def process_request(self, request):
         request.cache = RequestCache()
+
+
+class SessionRecoveryMiddleware(MiddlewareMixin):
+    def process_exception(self, request, exception):
+        if isinstance(exception, BadSignature):
+            logger.error("Invalid session detected. Forcing logout.")
+
+            try:
+                logout(request)
+            except Exception:
+                pass
+
+            response = redirect("/auth/login/azuread-tenant-oauth2/")
+            response.delete_cookie("sessionid")
+            response.delete_cookie("csrftoken")
+
+            return response
+
+        return None
