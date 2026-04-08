@@ -6,7 +6,7 @@ from celery.utils.log import get_task_logger
 from dateutil.relativedelta import relativedelta
 from django.conf import settings
 from django.core.management import call_command
-from django.db.models import Count, Prefetch, Q
+from django.db.models import Count, Prefetch
 from django.urls import reverse
 from django.utils import timezone
 
@@ -222,48 +222,3 @@ def evaluate_pro_proposition(*args, **kwargs):
 @app.task
 def clear_sessions(*args, **kwargs):
     call_command("clearsessions")
-
-
-def _get_prisma_scope_tag(finding: Finding) -> str | None:
-    engagement_name = (finding.test.engagement.name or "").lower()
-    impact = (finding.impact or "").lower()
-
-    if "host" in engagement_name:
-        return "hosts"
-    if "sha256:" in impact:
-        return "images"
-    if "arn:aws:lambda" in impact:
-        return "lambdas"
-    return None
-
-
-@app.task
-def update_findings_tags_prisma_flow(*args, **kwargs):
-    findings = (
-        Finding.objects.select_related("test", "test__engagement")
-        .prefetch_related("tags", "test__tags")
-        .filter(Q(tags__isnull=True) | Q(tags__name="prisma"))
-        .distinct()
-    )
-
-    updated_count = 0
-
-    for finding in findings:
-        finding_tags = set(finding.tags.names())
-        test_tags = set(finding.test.tags.names())
-
-        if not finding_tags and "devsecops" in test_tags:
-            finding.tags.set(sorted(test_tags), clear=True)
-            updated_count += 1
-            continue
-
-        if (not finding_tags and "ciclo_escaneo" in test_tags) or (
-            "prisma" in finding_tags and "ciclo_escaneo" in test_tags
-        ):
-            scope_tag = _get_prisma_scope_tag(finding)
-            if scope_tag:
-                finding.tags.set(["prisma", scope_tag], clear=True)
-                updated_count += 1
-
-    logger.info("Total findings updated in prisma tag flow: %s", updated_count)
-    return updated_count
