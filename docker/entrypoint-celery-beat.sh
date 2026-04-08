@@ -31,4 +31,4 @@ python3 manage.py check
 exec celery --app=dojo \
     beat \
   --pidfile= \
-  --schedule=celerybeat-schedule
+  --schedule=/var/run/defectdojo/celerybeat-schedule
