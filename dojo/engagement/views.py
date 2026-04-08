@@ -511,6 +511,7 @@ class ViewEngagement(View):
         cred_eng = Cred_Mapping.objects.filter(
             engagement=eng.id).select_related("cred_id").order_by("cred_id")
 
+        has_ciclo_escaneo_test = eng.test_set.filter(tags__name="ciclo_escaneo").exists()
         add_breadcrumb(parent=eng, top_level=False, request=request)
 
         title = ""
@@ -537,6 +538,7 @@ class ViewEngagement(View):
                 "cred_eng": cred_eng,
                 "network": network,
                 "preset_test_type": preset_test_type,
+                "has_ciclo_escaneo_test": has_ciclo_escaneo_test,
             })
 
     def post(self, request, eid, *args, **kwargs):
@@ -598,6 +600,7 @@ class ViewEngagement(View):
         cred_eng = Cred_Mapping.objects.filter(
             engagement=eng.id).select_related("cred_id").order_by("cred_id")
 
+        has_ciclo_escaneo_test = eng.test_set.filter(tags__name="ciclo_escaneo").exists()
         add_breadcrumb(parent=eng, top_level=False, request=request)
 
         title = ""
@@ -624,6 +627,7 @@ class ViewEngagement(View):
                 "cred_eng": cred_eng,
                 "network": network,
                 "preset_test_type": preset_test_type,
+                "has_ciclo_escaneo_test": has_ciclo_escaneo_test,
                 'risk_pending': settings.RISK_PENDING
             })
 
@@ -2280,21 +2284,21 @@ def excel_export(request):
 
 
 @login_required
-def sync_ecr_scan_cycle(request, eid):
+def sync_scan_cycle(request, eid):
     """
     AJAX view to sync scan cycle ecr
     Requires edit engagement authorization
     """
     engagement = get_object_or_404(Engagement, id=eid)
     
-    if user_has_permission_or_403(request.user, engagement, Permissions.Engagement_Edit):
+    if user_has_permission_or_403(request.user, engagement, Permissions.Engagement_View):
         return JsonResponse({
             'success': False, 
             'error': 'Dont have permissions'
         }, status=403)
     
     try:
-        result = _sync_ecr_scan_cycle_logic(engagement, request)
+        result = _sync_scan_cycle_logic(engagement, request)
         if result:
             return JsonResponse({
                 'success': True,
@@ -2310,18 +2314,36 @@ def sync_ecr_scan_cycle(request, eid):
         }, status=500)
 
 
-def _sync_ecr_scan_cycle_logic(engagement, request):
+def _sync_scan_cycle_logic(engagement, request):
     """
     Send a request to sync scan cycle report
     for engagement
     """
     logger.info(f"Syncing ECR for engagement: {engagement.id} - {engagement.name}")
+
+    description_values = {}
+    for line in (engagement.description or "").splitlines():
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        description_values[key.strip().upper()] = value.strip()
+
+    provider = description_values.get("PROVIDER").lower()
+    type_scan = description_values.get("ITEM").lower()
     
     base_url = f"{settings.PROVIDER_CORE_ENGINE}engine-backend/extractor/api/v1/syncScanCycle"
     headers = {}
-    user_token = Token.objects.get(user=request.user)
+    user_token = Token.objects.get(user=User.objects.get(username=settings.OPERATIVE_USER))
     headers["Authorization"] = user_token.key
-    res = requests.post(f"{base_url}?provider=prisma&typeScan=images&repository={engagement.name}", headers=headers)
+
+    params = {"provider": provider}
+    if provider.lower() == "tenable":
+        params["dnsname"] = engagement.name
+    else:
+        params["typeScan"] = type_scan
+        params["repository"] = engagement.name
+
+    res = requests.post(base_url, params=params, headers=headers)
 
     if (res.status_code == 200):
         return True

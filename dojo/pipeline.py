@@ -88,7 +88,7 @@ def search_azure_groups(kwargs, token, soc):
     group_names = []
     if "groups" not in kwargs["response"] or kwargs["response"]["groups"] == "":
         logger.warning("No groups in response. Stopping to update product type of user based on azureAD")
-        return
+        return group_names
     group_ids = kwargs["response"]["groups"]
     for group_from_response in group_ids:
         try:
