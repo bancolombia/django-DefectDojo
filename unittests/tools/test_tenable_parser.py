@@ -327,7 +327,7 @@ class TestTenableParser(DojoTestCase):
                 for endpoint in finding.unsaved_endpoints:
                     endpoint.clean()
             self.assertEqual(2, len(findings))
-            self.assertEqual("Info", findings[0].severity)
+            self.assertEqual("Critical", findings[0].severity)
 
     def test_parse_issue_11102(self):
         with (get_unit_tests_scans_path("tenable") / "issue_11102.csv").open(encoding="utf-8") as testfile:
