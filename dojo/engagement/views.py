@@ -373,6 +373,7 @@ def delete_engagement(request, eid):
                 if get_setting("ASYNC_OBJECT_DELETE"):
                     async_del = async_delete()
                     async_del.delete(engagement)
+                    logger.debug(f"DELETE ASYNC: Engagement {engagement.id} deletion has been scheduled in the background by user {request.user.id}")
                     message = "Engagement and relationships will be removed in the background."
                 else:
                     message = "Engagement and relationships removed."

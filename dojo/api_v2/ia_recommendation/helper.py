@@ -72,7 +72,7 @@ def get_ia_recommendation(fid, user):
     url = GeneralSettings.get_value("HOST_IA_RECOMMENDATION_CORE")
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
     body = {
-        "agent_id": GeneralSettings.get_value("ia_agent_id", "marvin_ia_recommendation_agent"),
+        "agent_id": GeneralSettings.get_value("IA_AGENT_ID", "marvin_ia_recommendation_agent"),
         "thread_id": thread_id,
         "messages": fid,
         "metadata": {
