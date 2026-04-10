@@ -3518,6 +3518,7 @@ def calculate_possible_related_actions_for_similar_finding(
 dojo_ratelimit_view()
 @user_is_authorized(Finding, Permissions.Finding_View, "fid")
 def generate_token_generative_ia(request, fid):
+    version = GeneralSettings.get_value("HOST_IA_RECOMMENDATION_VERSION", "v1")
     error_response = {
     "status": "Ok",
     "ia_recommendations": (
@@ -3552,14 +3553,18 @@ def generate_token_generative_ia(request, fid):
     body = {
         "thread_id": "",
         "metadata": {
-            "user_id": "string"
+            "user_id": request.user.email
         },
         "if_exists": "raise"
     }
-
+    if version == "v2":
+        body["metadata"].update({
+            "agent_id": GeneralSettings.get_value("IA_AGENT_ID", "agent_id"),
+            "consumer": ""
+            }) 
     logger.debug("IA RECOMMENDATION: get recomendation by finding: %s", fid)
     response = requests.request("POST",
-                                url=f"{url}/core/api/v1/threads",
+                                url=f"{url}/core/api/{version}/threads",
                                 headers=headers,
                                 json=body,
                                 verify=settings.VERIFY_REQUEST_ENABLED
@@ -3574,17 +3579,24 @@ def generate_token_generative_ia(request, fid):
     url = GeneralSettings.get_value("HOST_IA_RECOMMENDATION_CORE")
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
     body = {
-        "agent_id": GeneralSettings.get_value("ia_agent_id", "marvin_ia_recommendation_agent"),
+        "agent_id": GeneralSettings.get_value("IA_AGENT_ID", "agent_id"),
         "thread_id": thread_id,
         "messages": fid,
         "metadata": {
-            "user_id": "string"
+            "user_id": request.user.email,
+            "consumer": ""
         }
     }
 
+    if version == "v2":
+        body["metadata"].update({
+            "user_id": request.user.email,
+            "consumer": ""
+            })
+
     logger.debug("IA RECOMMENDATION: get recomendation by finding: %s", fid)
     response = requests.request("POST",
-                                url=f"{url}/core/api/v1/runs",
+                                url=f"{url}/core/api/{version}/runs",
                                 headers=headers,
                                 json=body,
                                 verify=settings.VERIFY_REQUEST_ENABLED
