@@ -158,7 +158,6 @@ class TenableCSVParser:
         data_check_type = row.get("Check Type", "")
         data_version = row.get("Version", "")
         data_custom_id = row.get("Custom Id", "NA")
-        data_company = row.get("Company", "")
         if data_custom_id != "NA":
             try:
                 data_custom_id_decoded = base64.b64decode(data_custom_id).decode("utf-8")
@@ -208,10 +207,9 @@ class TenableCSVParser:
         + "<p><strong>Check Type:</strong> " + str(data_check_type) + "</p>"
         + "<p><strong>Version:</strong> " + str(data_version) + "</p>"
         + "<p><strong>Custom Id:</strong> " + (custom_id_clean if custom_id_clean else data_custom_id_decoded) + "</p>"
-        + "<p><strong>Company:</strong> " + str(data_company) + "</p>"
     )
 
-    def get_severity_by_vpr(self, vpr_score: float):
+    def get_severity_by_vpr(self, vpr_score: float, risk_factor: str):
         severity_mapping = {
             1: "Info",
             2: "Low",
@@ -220,6 +218,10 @@ class TenableCSVParser:
             5: "Critical",
         }
         try:
+
+            if vpr_score in (None, '') and risk_factor not in (None, ''):
+                return risk_factor
+
             score = float(vpr_score) if vpr_score not in (None, '') else 0.0
             if score >= 9.0:
                 return severity_mapping.get(5)
@@ -252,7 +254,7 @@ class TenableCSVParser:
             if title is None or title == "":
                 continue
             # severity: Could come from "Severity" or "Risk"
-            raw_severity = self.get_severity_by_vpr(row.get("Vulnerability Priority Rating", 0))
+            raw_severity = self.get_severity_by_vpr(row.get("Vulnerability Priority Rating", 0), row.get("Risk Factor"))
             # this could actually be a int, so try to convert
             # and swallow the exception if it's a string a move on
             with contextlib.suppress(ValueError):
@@ -290,7 +292,6 @@ class TenableCSVParser:
                 severity_justification += f"{field}: {row.get(field, 'N/A')}\n"
 
             mitigation = str(row.get("Solution", row.get("definition.solution", row.get("Steps to Remediate", "N/A"))))
-            impact = row.get("Object Class", "No Class Defined")
             references = row.get("See Also", row.get("definition.see_also", "N/A"))
             references += "\nTenable Plugin ID: " + row.get("Plugin", "N/A")
             references += "\nPlugin Information: " + row.get("Plugin Information", "N/A")
@@ -316,7 +317,6 @@ class TenableCSVParser:
                     # cwe=cwe,
                     epss_score=epss_score,
                     mitigation=mitigation,
-                    impact=impact,
                     references=references,
                     severity_justification=severity_justification,
                 )

@@ -14,9 +14,9 @@ def validation_status_permission(finding, permissions):
         "Transfer_Finding_Finding_Add": helper_tf.enable_flow_transfer_finding,
     }
 
-    for perm in permissions[:]:
-        if perm in button_dict:
-            function_action = button_dict[perm]
+    for perm in list(permissions):
+        if perm.name in button_dict:
+            function_action = button_dict[perm.name]
             if not function_action(finding=finding):
                 permissions.remove(perm)
 

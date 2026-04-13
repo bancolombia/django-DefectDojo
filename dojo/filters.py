@@ -1688,6 +1688,15 @@ class ApiFindingFilter(DojoFilter):
         method="filter_priority_string",
         label="Priority (String)",
         help_text="Comma-separated list of priorities (e.g., 'Very Critical,Critical')")
+    transfer_finding = BooleanFilter(method="filter_transfer_finding")
+
+
+    def filter_transfer_finding(self, queryset, name, value):
+        if value:
+            return queryset.filter(findings__transfer_findings__isnull=False).distinct()
+        else:
+            return queryset.filter(findings__transfer_findings__isnull=True).distinct()
+
 
     def filter_priority_string(self, queryset, name, value):
         if not value:

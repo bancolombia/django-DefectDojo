@@ -797,6 +797,9 @@ def parser_ia_recommendation(ia_recommendation: dict = {}):
     markdown_code = ""
     context = {}
     try:
+        if "content" in ia_recommendation["data"]:
+            ia_recommendation = ia_recommendation["data"]["content"][0]
+
         if recomendations := ia_recommendation["data"].get("recommendations", ""):
             markdown_code = "\n###✅ Recommendations\n"
             markdown_code += recomendations + "\n"

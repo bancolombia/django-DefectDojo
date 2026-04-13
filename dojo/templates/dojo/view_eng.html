@@ -47,13 +47,6 @@
                                             </a>
                                         {% endif %}
                                     </li>
-                                    {% if "ecr" in eng.name|lower %}
-                                        <li role="presentation">
-                                            <a rel="noopener noreferrer" href="#" onclick="syncECRScanCycle({{ eng.id }}); return false;">
-                                            <i class="fa-solid fa-refresh"></i> Sync ECR Scan Cycle
-                                            </a>
-                                        </li>
-                                    {% endif %}
                                 {% endif %}
                                 <!-- <li role="presentation">
                                     <a rel="noopener noreferrer" href="{% url 'engagement_report' eng.id %}?title=&active=1&verified=1&false_p=2&duplicate=2">
@@ -70,6 +63,13 @@
                                     <i class="fa-solid fa-clock-rotate-left"></i> View History
                                     </a>
                                 </li>
+                                {% if has_ciclo_escaneo_test and "_hosts." not in eng.name %}
+                                        <li role="presentation">
+                                            <a rel="noopener noreferrer" href="#" onclick="syncScanCycle({{ eng.id }}); return false;">
+                                            <i class="fa-solid fa-refresh"></i> Sync Scan Cycle
+                                            </a>
+                                        </li>
+                                {% endif %}
                                 {% if eng|has_object_permission:"Engagement_Edit" %}
                                     <li role="separator" class="divider"></li>
                                     <li role="presentation">
@@ -1110,7 +1110,7 @@
 
         {% include 'dojo/snippets/risk_acceptance_actions_snippet_js.html' %}
 
-        function syncECRScanCycle(engagementId) {
+        function syncScanCycle(engagementId) {
             var btn = event.target.closest('a');
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sincronizando...';
             btn.style.opacity = '0.6';
@@ -1119,7 +1119,7 @@
             fetch(`/engagement/${engagementId}/sync_ecr/?_=${Date.now()}`)
             .then(response => response.json())
             .then(data => {
-                btn.innerHTML = '<i class="fa-solid fa-refresh"></i> Sync ECR Scan Cycle';
+                btn.innerHTML = '<i class="fa-solid fa-refresh"></i> Sync Scan Cycle';
                 btn.style.opacity = '1';
                 btn.style.pointerEvents = 'auto';
                 
@@ -1131,7 +1131,7 @@
                 }
             })
             .catch(error => {
-                btn.innerHTML = '<i class="fa-solid fa-refresh"></i> Sync ECR Scan Cycle';
+                btn.innerHTML = '<i class="fa-solid fa-refresh"></i> Sync Scan Cycle';
                 btn.style.opacity = '1';
                 btn.style.pointerEvents = 'auto';
                 alert('Error on request: ' + error);
