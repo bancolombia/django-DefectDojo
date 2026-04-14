@@ -159,7 +159,7 @@ tzdata==2026.1
 jsonschema-specifications==2025.9.1
 googleapis-common-protos==1.74.0
 grpcio==1.80.0
-zipp==3.23.0
+zipp==3.23.1
 prompt_toolkit==3.0.52
 prometheus_client==0.25.0
 typing_extensions==4.15.0
