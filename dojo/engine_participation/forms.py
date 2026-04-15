@@ -35,8 +35,6 @@ class RunHCEvaluationForm(forms.Form):
 
 
 class HCParticipationDiscussionForm(forms.ModelForm):
-    """Form for adding discussions/comments to HC participation requests"""
-    
     class Meta:
         model = HCParticipationDiscussion
         fields = ["content"]
@@ -53,8 +51,7 @@ class HCParticipationDiscussionForm(forms.ModelForm):
 
 
 class EditHCParticipationForm(forms.ModelForm):
-    """Form for editing HC participation requests (admin only)"""
-    
+ 
     class Meta:
         model = HCParticipation
         fields = [

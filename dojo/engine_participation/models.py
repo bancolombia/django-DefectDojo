@@ -5,13 +5,6 @@ from django.utils.translation import gettext as _
 
 
 class HCParticipation(models.Model):
-    """
-    Stores HC (Hacking Continuo) participation requests for products.
-    Similar to FindingExclusion but for HC postulation workflow.
-    
-    Workflow: Pending → Reviewed → Approved/Rejected
-    """
-    
     STATUS_CHOICES = [
         ("Pending", "Pending"),
         ("Reviewed", "Reviewed"),
@@ -24,6 +17,13 @@ class HCParticipation(models.Model):
         ("postulated", "Postulated to HC"),
         ("already_in_hc", "Already in Hacking Continuous"),
         ("not_eligible", "Not eligible"),
+    ]
+    
+    BUSSINESS_CRITICALITY_CHOICES = [
+        ("low", "Low"),
+        ("medium", "Medium"),
+        ("high", "High"),
+        ("very high", "Very High"),
     ]
     
     uuid = models.UUIDField(default=uuid.uuid4, primary_key=True)
@@ -43,6 +43,7 @@ class HCParticipation(models.Model):
     
     business_criticality = models.CharField(
         max_length=20,
+        choices=BUSSINESS_CRITICALITY_CHOICES,
         null=True,
         blank=True,
         help_text=_("Business criticality at evaluation time")
@@ -151,8 +152,6 @@ class HCParticipation(models.Model):
 
 
 class HCParticipationDiscussion(models.Model):
-    """Discussion/comments for HC participation requests"""
-    
     hc_participation = models.ForeignKey(
         HCParticipation,
         on_delete=models.CASCADE,
@@ -173,8 +172,6 @@ class HCParticipationDiscussion(models.Model):
 
 
 class HCParticipationLog(models.Model):
-    """Audit log for HC participation status changes"""
-    
     hc_participation = models.ForeignKey(
         HCParticipation,
         on_delete=models.CASCADE,

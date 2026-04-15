@@ -1,11 +1,3 @@
-"""
-Views for HC (Hacking Continuo) Participation module.
-
-Provides UI for:
-- Listing HC participation requests
-- Running evaluations (admin only)
-- Reviewing, approving, and rejecting requests
-"""
 from django.contrib import messages
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
@@ -35,8 +27,6 @@ from dojo.notifications.helper import create_notification
 
 
 def hc_participations(request: HttpRequest) -> HttpResponse:
-    """List all HC participation requests"""
-    
     hc_requests = HCParticipation.objects.select_related(
         "product",
         "product__prod_type",
@@ -62,8 +52,6 @@ def hc_participations(request: HttpRequest) -> HttpResponse:
 
 
 def show_hc_participation(request: HttpRequest, hcid: str) -> HttpResponse:
-    """Show HC participation request details"""
-    
     hc_participation = get_object_or_404(
         HCParticipation.objects.select_related(
             "product",
@@ -104,8 +92,6 @@ def show_hc_participation(request: HttpRequest, hcid: str) -> HttpResponse:
 
 @require_POST
 def add_hc_discussion(request: HttpRequest, hcid: str) -> HttpResponse:
-    """Add discussion/comment to HC participation request"""
-    
     hc_participation = get_object_or_404(HCParticipation, pk=hcid)
 
     form = HCParticipationDiscussionForm(request.POST)
@@ -127,8 +113,6 @@ def add_hc_discussion(request: HttpRequest, hcid: str) -> HttpResponse:
 
 @require_POST
 def delete_hc_discussion(request: HttpRequest, hcid: str, did: int) -> HttpResponse:
-    """Delete a discussion from HC participation request"""
-    
     discussion = get_object_or_404(
         HCParticipationDiscussion,
         pk=did,
@@ -152,8 +136,6 @@ def delete_hc_discussion(request: HttpRequest, hcid: str, did: int) -> HttpRespo
 
 @require_POST
 def review_hc_participation(request: HttpRequest, hcid: str) -> HttpResponse:
-    """Mark HC participation request as reviewed"""
-    
     if not is_in_group(request.user, HCConstants.REVIEWERS_GROUP.value):
         raise PermissionDenied
     
@@ -204,8 +186,6 @@ def review_hc_participation(request: HttpRequest, hcid: str) -> HttpResponse:
 
 @require_POST
 def approve_hc_participation_request(request: HttpRequest, hcid: str) -> HttpResponse:
-    """Approve HC participation request"""
-    
     if not is_in_group(request.user, HCConstants.APPROVERS_GROUP.value):
         raise PermissionDenied
     
@@ -243,8 +223,6 @@ def approve_hc_participation_request(request: HttpRequest, hcid: str) -> HttpRes
 
 @require_POST
 def reject_hc_participation_request(request: HttpRequest, hcid: str) -> HttpResponse:
-    """Reject HC participation request"""
-    
     if not is_in_group(request.user, HCConstants.REVIEWERS_GROUP.value) and \
        not is_in_group(request.user, HCConstants.APPROVERS_GROUP.value):
         raise PermissionDenied
@@ -283,7 +261,6 @@ def reject_hc_participation_request(request: HttpRequest, hcid: str) -> HttpResp
 
 @require_POST
 def run_hc_evaluation(request: HttpRequest) -> HttpResponse:
-    """Manually trigger HC participation evaluation (admin only)."""
     if not request.user.is_superuser and not request.user.is_staff:
         raise PermissionDenied
     

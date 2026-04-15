@@ -1,11 +1,3 @@
-"""
-Helpers for HC (Hacking Continuo) Participation module.
-
-This module evaluates products for HC participation based on business rules:
-- R1: Only products with business_criticality in (very high, high) are eligible
-- R2: If product is already in Hacking Continuo → document, don't postulate
-- R3: If passes validations → postulate to HC
-"""
 import uuid
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -23,6 +15,7 @@ from dojo.models import Product, Dojo_Group
 from dojo.group.queries import get_group_members_for_group
 from dojo.notifications.helper import create_notification
 from dojo.api_v2.security_posture.helper import get_product_security_posture
+from dojo.engine_participation.models import HCParticipation, HCParticipationLog
 
 logger = get_task_logger(__name__)
 
@@ -46,7 +39,6 @@ class InvalidHCParticipationTransition(Exception):
 
 
 def get_hc_reviewers_members():
-    """Get members of the HC reviewers group"""
     reviewer_group = Dojo_Group.objects.filter(
         name=HCConstants.REVIEWERS_GROUP.value
     ).first()
@@ -59,7 +51,6 @@ def get_hc_reviewers_members():
 
 
 def get_hc_approvers_members():
-    """Get members of the HC approvers group"""
     approvers_group = Dojo_Group.objects.filter(
         name=HCConstants.APPROVERS_GROUP.value
     ).first()
@@ -72,14 +63,12 @@ def get_hc_approvers_members():
 
 
 def has_valid_comments(hc_participation, user) -> bool:
-    """Check if user has added comments before taking action"""
     if user.is_superuser:
         return True
     
     for comment in hc_participation.discussions.all():
         if comment.author == user:
             return True
-    
     return False
 
 
@@ -94,19 +83,6 @@ def _validate_hc_status_transition(current_status: str, target_status: str) -> N
 
 
 def evaluate_product_for_hc(product: Product) -> dict:
-    """
-    Evaluates a single product for HC participation.
-    
-    Business Rules:
-    - R1: Only products with business_criticality in (very high, high) are eligible
-    - R2: If the product is already in Hacking Continuo → document, don't postulate
-    - R3: If passes R1 and R2 validations → postulate to HC
-    
-    Returns:
-        dict with evaluation results
-    """
-    from dojo.engine_participation.models import HCParticipation
-    
     result = {
         "product_id": product.id,
         "product_name": product.name,
@@ -133,19 +109,19 @@ def evaluate_product_for_hc(product: Product) -> dict:
     if not criticality or criticality.lower() not in ELIGIBLE_CRITICALITIES:
         result["recommendation"] = HCParticipation.RECOMMENDATION_CHOICES[2][0]  # not_eligible
         result["reason"] = (
-            f"R1: Business criticality '{criticality or 'Not defined'}' "
+            f"Business criticality '{criticality or 'Not defined'}' "
             f"is not eligible. Only High/Very High are eligible."
         )
         return result
     
     if security_posture.get("is_in_hacking_continuos", False):
         result["recommendation"] = HCParticipation.RECOMMENDATION_CHOICES[1][0]  # already_in_hc
-        result["reason"] = "R2: Product is already in Hacking Continuous. Documented, no postulation required."
+        result["reason"] = "Product is already in Hacking Continuous. Documented, no postulation required."
         return result
     
     result["recommendation"] = HCParticipation.RECOMMENDATION_CHOICES[0][0]  # postulated
     result["reason"] = (
-        f"R3: Product eligible for Hacking Continuous postulation. "
+        f"Product eligible for Hacking Continuous postulation. "
         f"Criticality: {criticality}. Requires review and approval."
     )
     
@@ -153,9 +129,6 @@ def evaluate_product_for_hc(product: Product) -> dict:
 
 
 def _process_single_product(product: Product, batch_id: uuid.UUID, user) -> dict:
-    """Process a single product evaluation (used for parallel processing)"""
-    from dojo.engine_participation.models import HCParticipation
-    
     try:
         evaluation_result = evaluate_product_for_hc(product)
         
@@ -189,18 +162,6 @@ def _process_single_product(product: Product, batch_id: uuid.UUID, user) -> dict
 
 
 def run_hc_participation_evaluation(user=None) -> dict:
-    """
-    Runs the HC participation evaluation for all products.
-    Only creates requests for products that are postulated (eligible and not in HC).
-    
-    Args:
-        user: Optional - The user executing the evaluation (None for automated tasks)
-    
-    Returns:
-        dict with summary and detailed results
-    """
-    from dojo.engine_participation.models import HCParticipation
-    
     batch_id = uuid.uuid4()
     
     total_products = Product.objects.count()
@@ -307,7 +268,6 @@ def run_hc_participation_evaluation(user=None) -> dict:
 
 
 def _notify_reviewers_of_new_requests(requests, batch_id):
-    """Send notifications to reviewers about new HC participation requests"""
     reviewers = get_hc_reviewers_members()
     
     if not reviewers:
@@ -334,9 +294,6 @@ def _notify_reviewers_of_new_requests(requests, batch_id):
 
 
 def mark_hc_participation_reviewed(hc_participation, user):
-    """Move an HC participation request from Pending to Reviewed."""
-    from dojo.engine_participation.models import HCParticipation, HCParticipationLog
-
     with transaction.atomic():
         locked_hc_participation = HCParticipation.objects.select_for_update().get(pk=hc_participation.pk)
         _validate_hc_status_transition(locked_hc_participation.status, "Reviewed")
@@ -363,12 +320,7 @@ def mark_hc_participation_reviewed(hc_participation, user):
 
 
 def approve_hc_participation(hc_participation, user):
-    """
-    Approve an HC participation request.
-    This marks the product as postulated/approved for HC.
-    """
-    from dojo.engine_participation.models import HCParticipation, HCParticipationLog
-    
+ 
     with transaction.atomic():
         hc_participation = HCParticipation.objects.select_for_update().get(pk=hc_participation.pk)
         _validate_hc_status_transition(hc_participation.status, "Approved")
@@ -408,9 +360,6 @@ def approve_hc_participation(hc_participation, user):
 
 
 def reject_hc_participation(hc_participation, user):
-    """Reject an HC participation request"""
-    from dojo.engine_participation.models import HCParticipation, HCParticipationLog
-
     with transaction.atomic():
         hc_participation = HCParticipation.objects.select_for_update().get(pk=hc_participation.pk)
         _validate_hc_status_transition(hc_participation.status, "Rejected")
@@ -454,12 +403,6 @@ def reject_hc_participation(hc_participation, user):
 
 
 def get_latest_hc_evaluation_for_product(product_id: int) -> dict:
-    """
-    Gets the latest HC participation evaluation for a specific product.
-    Used for integration with security_posture.
-    """
-    from dojo.engine_participation.models import HCParticipation
-    
     try:
         evaluation = HCParticipation.objects.filter(
             product_id=product_id
@@ -487,11 +430,6 @@ def get_latest_hc_evaluation_for_product(product_id: int) -> dict:
 
 @app.task
 def run_monthly_hc_evaluation():
-    """
-    Celery task to run monthly HC participation evaluation.
-    Evaluates all products and creates requests for eligible ones.
-    No user validation required - this is an automated scheduled task.
-    """
     logger.info("Starting monthly HC participation evaluation...")
     
     try:
