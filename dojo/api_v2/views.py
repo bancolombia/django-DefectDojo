@@ -2306,6 +2306,17 @@ class ProductTypeViewSet(
         data = report_generate(request, product_type, options)
         report = serializers.ReportGenerateSerializer(data)
         return Response(report.data)
+    
+   
+    @action(
+        detail=False, methods=["get"], permission_classes=[IsAuthenticated],
+    )
+    def all(self, request):
+        paginator = self.pagination_class()
+        product_types = Product_Type.objects.all().values("id", "name")
+        paginated_data = paginator.paginate_queryset(data=product_types, request)
+        serializer = serializers.ProductTypeAllSerializer(paginated_data, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
 
 # Authorization: object-based
@@ -3571,7 +3582,7 @@ class TransferFindingViewSet(prefetch.PrefetchListMixin,
                              prefetch.PrefetchRetrieveMixin,
                              DojoModelViewSet):
     queryset = TransferFinding.objects.all().order_by('id')
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated, permissions.UserHasTransferFindingPermission,)
     serializer_class = TransferFindingSerializer
     filter_backends = (DjangoFilterBackend,)
     filterset_fields = ["id",
@@ -3717,7 +3728,7 @@ class TransferFindingFindingsViewSet(prefetch.PrefetchListMixin,
                              prefetch.PrefetchRetrieveMixin,
                              DojoModelViewSet):
     queryset = TransferFindingFinding.objects.all()
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated, permissions.UserHasTransferFindingFindingPermission)
     serializer_class = TransferFindingFindingsSerializer
     filter_backends = (DjangoFilterBackend,)
     filterset_fields = ["id"]
@@ -3775,7 +3786,7 @@ class TransferFindingFindingsViewSet(prefetch.PrefetchListMixin,
 
 
 class SchemaOa3View(SpectacularAPIView):
-    permission_classes = [permissions.UserHasViewSwaggerDocumentation]
+    permnission_classes = [permissions.UserHasViewSwaggerDocumentation]
 
 
 class SwaggerUiOa3View(SpectacularSwaggerView):

@@ -1072,6 +1072,11 @@ class ProductTypeSerializer(serializers.ModelSerializer):
         model = Product_Type
         fields = "__all__"
 
+class ProductTypeAllSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Product_Type
+        fields = ["id", "name"]
+
 class ProductOfProductTypes(serializers.ModelSerializer):
     id = serializers.IntegerField()
     name = serializers.CharField()

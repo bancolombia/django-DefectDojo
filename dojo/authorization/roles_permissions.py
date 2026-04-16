@@ -165,6 +165,8 @@ class Permissions(IntEnum):
     Transfer_Finding_Finding_Edit = 2806
     Transfer_Finding_Finding_Delete = 2807
     Transfer_Finding_Finding_Add = 2808
+    Transfer_Finding_Finding_Accept = 2809
+    Transfer_Finding_Finding_Reject = 2810
 
     Api_v2_Key = 2901
     Swagger_Documentation = 2902
@@ -274,6 +276,8 @@ class Permissions(IntEnum):
             Permissions.Transfer_Finding_Finding_Edit,
             Permissions.Transfer_Finding_Finding_Delete,
             Permissions.Transfer_Finding_Finding_Add,
+            Permissions.Transfer_Finding_Finding_Accept,
+            Permissions.Transfer_Finding_Finding_Reject,
         }
 
     @classmethod
@@ -283,6 +287,8 @@ class Permissions(IntEnum):
             Permissions.Transfer_Finding_Finding_Edit,
             Permissions.Transfer_Finding_Finding_Delete,
             Permissions.Transfer_Finding_Finding_Add,
+            Permissions.Transfer_Finding_Finding_Accept,
+            Permissions.Transfer_Finding_Finding_Reject,
         }
 
     @classmethod
@@ -572,6 +578,8 @@ def get_roles_with_permissions():
             Permissions.Transfer_Finding_Finding_Edit,
             Permissions.Transfer_Finding_Finding_Delete,
             Permissions.Transfer_Finding_Finding_Add,
+            Permissions.Transfer_Finding_Finding_Accept,
+            Permissions.Transfer_Finding_Finding_Reject,
             Permissions.Swagger_Documentation,
             Permissions.Api_v2_Key,
             Permissions.Defect_Dojo_Documentation,
@@ -747,6 +755,8 @@ def get_roles_with_permissions():
             Permissions.Transfer_Finding_Finding_Edit,
             Permissions.Transfer_Finding_Finding_Delete,
             Permissions.Transfer_Finding_Finding_Add,
+            Permissions.Transfer_Finding_Finding_Accept,
+            Permissions.Transfer_Finding_Finding_Reject,
             Permissions.Metrics_Panel_Admin,
             Permissions.Metrics_Scan_Cycle,
             Permissions.Finding_Add_Recommendation,
