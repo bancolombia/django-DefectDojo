@@ -135,7 +135,8 @@ class EvaluateProductForHCTest(TestCase):
         result = evaluate_product_for_hc(self.product)
         
         self.assertEqual(result["recommendation"], "not_eligible")
-        self.assertIn("R1", result["reason"])
+        self.assertIn("Business criticality 'low'", result["reason"])
+        self.assertIn("is not eligible", result["reason"])
     
     def test_r1_not_eligible_none_criticality(self):
         """R1: Products with no criticality are not eligible"""
@@ -145,7 +146,8 @@ class EvaluateProductForHCTest(TestCase):
         result = evaluate_product_for_hc(self.product)
         
         self.assertEqual(result["recommendation"], "not_eligible")
-        self.assertIn("R1", result["reason"])
+        self.assertIn("Business criticality 'Not defined'", result["reason"])
+        self.assertIn("is not eligible", result["reason"])
     
     def test_r1_eligible_high_criticality(self):
         """R1: Products with high criticality are eligible"""
@@ -164,7 +166,8 @@ class EvaluateProductForHCTest(TestCase):
         result = evaluate_product_for_hc(self.product)
         
         self.assertEqual(result["recommendation"], "not_eligible")
-        self.assertIn("R1", result["reason"])
+        self.assertIn("Business criticality 'medium'", result["reason"])
+        self.assertIn("is not eligible", result["reason"])
     
     @patch('dojo.engine_participation.helpers.get_product_security_posture')
     def test_r2_already_in_hc(self, mock_security_posture):
@@ -184,7 +187,7 @@ class EvaluateProductForHCTest(TestCase):
         result = evaluate_product_for_hc(self.product)
         
         self.assertEqual(result["recommendation"], "already_in_hc")
-        self.assertIn("R2", result["reason"])
+        self.assertIn("already in Hacking Continuous", result["reason"])
         self.assertTrue(result["was_in_hacking_continuous"])
     
     @patch('dojo.engine_participation.helpers.get_product_security_posture')
@@ -205,7 +208,7 @@ class EvaluateProductForHCTest(TestCase):
         result = evaluate_product_for_hc(self.product)
         
         self.assertEqual(result["recommendation"], "postulated")
-        self.assertIn("R3", result["reason"])
+        self.assertIn("eligible for Hacking Continuous postulation", result["reason"])
         self.assertFalse(result["was_in_hacking_continuous"])
 
 
