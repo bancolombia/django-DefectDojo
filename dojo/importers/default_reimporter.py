@@ -1,4 +1,5 @@
 import logging
+from itertools import chain
 
 from django.core.files.uploadedfile import TemporaryUploadedFile
 from django.core.serializers import serialize
@@ -141,7 +142,12 @@ class DefaultReImporter(BaseImporter, DefaultReImporterOptions):
         # Update the test progress to reflect that the import has completed
         logger.debug("REIMPORT_SCAN: Updating Test progress")
         self.update_test_progress()
-        finding_ids = [finding.id for finding in new_findings]
+        findings_for_priority_update = chain(
+            new_findings,
+            reactivated_findings,
+            untouched_findings,
+        )
+        finding_ids = [finding.id for finding in findings_for_priority_update]
         BaseImporter.update_priority_epss_kev.apply_async(args=[finding_ids])
         logger.debug("REIMPORT_SCAN: Done")
         return (
