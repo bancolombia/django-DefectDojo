@@ -361,11 +361,6 @@ class TenableCSVParser:
                 # finding
                 find = dupes[dupe_key]
 
-            # Determine if there is more details to be included in the
-            # description
-            plugin_output = str(row.get("Plugin Output", row.get("output", "")))
-            if plugin_output != "":
-                find.description += f"\n\n{plugin_output}"
             # Process any CVEs
             detected_cve = self._format_cve(str(row.get("CVE", row.get("definition.cve", ""))))
             if detected_cve:
