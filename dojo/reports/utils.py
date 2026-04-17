@@ -210,12 +210,10 @@ def configure_values_excel(finding, worksheet, excludes_list, allowed_foreign_ke
     worksheet.cell(row=row_num, column=col_num, value=tags_value)
     col_num += 1
     # classification
-    if "tenable" in tags_value or "engine_iac" in tags_value:
-        classification = finding.impact
+    if "tenable" in tags_value or "prisma" in tags_value:
+        classification = extract_field_from_text_regex(finding.test.engagement.description, "ITEM")
     else:
-        tags_list = [tag for tag in tags_value.split("; \n") 
-                    if tag not in ["black_list", "white_list"]]
-        classification = tags_list[0].upper() if tags_list else ""
+        classification = extract_field_from_text_regex(finding.test.engagement.product.description, "ITEM")
     worksheet.cell(row=row_num, column=col_num, value=classification)
     col_num += 1
 
@@ -322,10 +320,8 @@ def configure_values_csv(finding, excludes_list, allowed_foreign_keys, allowed_a
     tags_value = tags_value.removesuffix("; ")
     fields.append(tags_value)
     # Classification
-    if "tenable" in tags_value or "engine_iac" in tags_value:
-        classification = finding.impact
+    if "tenable" in tags_value or "prisma" in tags_value:
+        classification = extract_field_from_text_regex(finding.test.engagement.description, "ITEM")
     else:
-        tags_list = [tag for tag in tags_value.split("; ")
-                    if tag not in ["black_list", "white_list"]]
-        classification = tags_list[0].upper() if tags_list else ""
+        classification = extract_field_from_text_regex(finding.test.engagement.product.description, "ITEM")
     fields.append(classification)
