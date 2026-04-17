@@ -1729,10 +1729,7 @@ CELERY_BEAT_SCHEDULE = {
                             minute=CELERY_CRON_CLEAR_SESSIONS.split()[1], 
                             day_of_week=CELERY_CRON_CLEAR_SESSIONS.split()[2]),
     },
-    # "monthly_hc_participation_evaluation": {
-    #     "task": "dojo.engine_participation.helpers.run_monthly_hc_evaluation",
-    #     "schedule": crontab(hour=20, minute=00, day_of_month=1),  # TEMP: Testing at 16:05 UTC (11:05 local)
-    # },
+
     # 'jira_status_reconciliation': {
     #     'task': 'dojo.tasks.jira_status_reconciliation_task',
     #     'schedule': timedelta(hours=12),

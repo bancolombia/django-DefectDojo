@@ -172,6 +172,7 @@ def review_hc_participation(request: HttpRequest, hcid: str) -> HttpResponse:
         recipients=approvers,
         icon="clipboard-check",
         color_icon="#17a2b8",
+        alert_only=True,
     )
     
     messages.add_message(
