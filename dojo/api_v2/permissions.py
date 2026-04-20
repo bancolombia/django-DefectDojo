@@ -1293,15 +1293,15 @@ class UserHasTransferFindingFindingPermission(permissions.BasePermission):
         transfer_finding_id = view.kwargs.get("pk", None)
         if self.path_transfer_finding_finding_post.match(request.path):
             return check_post_permission(
-                request, TransferFinding, "transfer_findings", Permissions.Transfer_Finding_Finding_Add,
+                request, Finding, "findings", Permissions.Transfer_Finding_Finding_Add,
             )
         if self.path_transfer_finding_finding_change_status.match(request.path):
-            return check_patch_permission(request, TransferFindingFinding, transfer_finding_id, Permissions.Transfer_Finding_Finding_Accept)
+            return check_patch_permission(request, TransferFinding, transfer_finding_id, Permissions.Transfer_Finding_Finding_Accept)
         if self.path_transfer_finding_finding.match(
             request.path,
         ):
             if request.method in ["PATCH", "PUT"]:
-                return check_patch_permission(request, TransferFindingFinding, transfer_finding_id, Permissions.Transfer_Finding_Finding_Edit)
+                return check_patch_permission(request, TransferFinding, transfer_finding_id, Permissions.Transfer_Finding_Finding_Edit)
 
         return False
 

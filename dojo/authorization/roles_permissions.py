@@ -255,6 +255,7 @@ class Permissions(IntEnum):
             Permissions.Transfer_Finding_Add,
             Permissions.Finding_Code_Review,
             Permissions.Finding_Add_Recommendation,
+            Permissions.Transfer_Finding_Finding_Add,
         }.union(cls.get_finding_group_permissions())
 
     @classmethod

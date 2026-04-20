@@ -2125,7 +2125,12 @@ class EngagementByProductResponseSerializer(serializers.ModelSerializer):
                   "team_manager",
                   "prod_type")
 
+class EngagementByProductResponseSerializer(serializers.ModelSerializer):
 
+    class Meta:
+        model = Engagement
+        fields = ["id", "name"]
+        
 class ProductSerializer(serializers.ModelSerializer):
     # findings_count = serializers.SerializerMethodField()
     # findings_list = serializers.SerializerMethodField()

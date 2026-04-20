@@ -31,7 +31,6 @@ class Notification:
     @staticmethod
     def transfer_finding_request(transfer_finding: TransferFinding):
         title = f"{transfer_finding.title[:30]} Acceptance"
-        pid = transfer_finding.origin_product.id
         create_notification(
             event='transfer_finding',
             title=title,
@@ -41,9 +40,9 @@ class Notification:
             description=f"Acceptance request for <b>{transfer_finding.title}</b> for the findings:",
             recipients=[transfer_finding.accepted_by.get_username()],
             icon="check-circle",
-            color_icon="#1B30DE",
+            color_icon="#DE9F16",
             owner=transfer_finding.owner,
-            url=reverse("view_transfer_finding", args=(pid,)))
+            url=reverse("view_details_transfer_finding", args=(transfer_finding.id,)))
 
     
     @staticmethod

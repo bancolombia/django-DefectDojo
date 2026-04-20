@@ -737,7 +737,18 @@ class EngagementViewSet(
                 pass
         return response
 
-
+    @extend_schema(
+        responses={status.HTTP_200_OK: serializers.EngagementByProductResponseSerializer},
+    )
+    @action(
+        detail=True, methods=["get"], permission_classes=[IsAuthenticated],
+    )
+    def engagement_by_product(self, request, pk):
+        paginator = self.pagination_class()
+        data = Engagement.objects.filter(product=pk).values("id", "name")
+        paginated_data = paginator.paginate_queryset(data, request)
+        serializer = serializers.EngagementByProductResponseSerializer(paginated_data, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
 # @extend_schema_view(**schema_with_prefetch())
 # Nested models with prefetch make the response schema too long for Swagger UI
@@ -2314,7 +2325,7 @@ class ProductTypeViewSet(
     def all(self, request):
         paginator = self.pagination_class()
         product_types = Product_Type.objects.all().values("id", "name")
-        paginated_data = paginator.paginate_queryset(data=product_types, request)
+        paginated_data = paginator.paginate_queryset(product_types, request)
         serializer = serializers.ProductTypeAllSerializer(paginated_data, many=True)
         return paginator.get_paginated_response(serializer.data)
 
@@ -3741,8 +3752,10 @@ class TransferFindingFindingsViewSet(prefetch.PrefetchListMixin,
         data = request.data
         serializer = TransferFindingFindingCreateSerializer(data=data)
         if serializer.is_valid():
+            transfer_finding = serializer.validated_data.get("transfer_findings")
             created = serializer.save()
             instance = TransferFindingFindingsSerializer(created, many=True)
+            NotificationTransferFinding.transfer_finding_request(transfer_finding)
         else:
             return http_response.bad_request(data=instance.errors)
         return http_response.created(message="Transfer Finding Finding Created", data=instance.data)
