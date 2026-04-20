@@ -512,7 +512,7 @@ class ViewEngagement(View):
         cred_eng = Cred_Mapping.objects.filter(
             engagement=eng.id).select_related("cred_id").order_by("cred_id")
 
-        has_ciclo_escaneo_test = eng.test_set.filter(tags__name="ciclo_escaneo").exists()
+        has_ciclo_escaneo_test = eng.test_set.filter(tags__name="ciclo_escaneo").exclude(tags__name__iexact="transferred").exists()
         add_breadcrumb(parent=eng, top_level=False, request=request)
 
         title = ""
@@ -601,7 +601,7 @@ class ViewEngagement(View):
         cred_eng = Cred_Mapping.objects.filter(
             engagement=eng.id).select_related("cred_id").order_by("cred_id")
 
-        has_ciclo_escaneo_test = eng.test_set.filter(tags__name="ciclo_escaneo").exists()
+        has_ciclo_escaneo_test = eng.test_set.filter(tags__name="ciclo_escaneo").exclude(tags__name__iexact="transferred").exists()
         add_breadcrumb(parent=eng, top_level=False, request=request)
 
         title = ""

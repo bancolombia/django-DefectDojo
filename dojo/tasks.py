@@ -6,7 +6,7 @@ from celery.utils.log import get_task_logger
 from dateutil.relativedelta import relativedelta
 from django.conf import settings
 from django.core.management import call_command
-from django.db.models import Count, Prefetch
+from django.db.models import Count, Prefetch, Q
 from django.urls import reverse
 from django.utils import timezone
 
@@ -222,3 +222,61 @@ def evaluate_pro_proposition(*args, **kwargs):
 @app.task
 def clear_sessions(*args, **kwargs):
     call_command("clearsessions")
+
+
+def _get_prisma_scope_tag(finding: Finding) -> str | None:
+    engagement_name = (finding.test.engagement.name or "").lower()
+    impact = (finding.impact or "").lower()
+
+    if "host" in engagement_name:
+        return "hosts"
+    if "sha256:" in impact:
+        return "images"
+    if "arn:aws:lambda" in impact:
+        return "lambdas"
+    return None
+
+
+@app.task
+def update_findings_without_tags(*args, **kwargs):
+    logger.info("Starting update of findings without tags")
+    findings = (
+        Finding.objects.annotate(tags_count=Count("tags", distinct=True))
+        .filter(
+            Q(tags_count=0)
+            | Q(tags_count=1, tags__name="prisma")
+        )
+        .distinct()
+    )
+
+    logger.info("Total findings to evaluate for without tags: %s", findings.count())
+
+    updated_count = 0
+
+    for finding in findings:
+        finding_tags = {tag.name for tag in finding.tags.all()}
+        test_tags = {tag.name for tag in finding.test.tags.all()}
+
+        if (not finding_tags and "ciclo_escaneo" in test_tags and "Twistlock Image Scan" in finding.test.scan_type) or (
+            "prisma" in finding_tags and "ciclo_escaneo" in test_tags
+        ):
+            scope_tag = _get_prisma_scope_tag(finding)
+            if scope_tag:
+                new_tags = {"prisma", scope_tag}
+                if finding_tags != new_tags:
+                    finding.tags.set(sorted(new_tags), clear=True)
+                    updated_count += 1
+        else:
+            scan_type = (finding.test.scan_type or "").lower()
+            tag_from_parser = next(
+                (tag for key, tag in settings.DD_CUSTOM_TAG_PARSER.items() if key in scan_type),
+                None,
+            )
+            if tag_from_parser:
+                new_tags = {tag_from_parser}
+                if finding_tags != new_tags:
+                    finding.tags.set(sorted(new_tags), clear=True)
+                    updated_count += 1
+
+    logger.info("Completed update of findings without tags. Total updated: %s", updated_count)
+    return updated_count

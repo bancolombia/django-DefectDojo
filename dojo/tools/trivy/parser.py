@@ -274,7 +274,7 @@ class TrivyParser:
                         elif (cvss_v2_score := cvssclass.get("V2Score")) is not None:
                             severity = self.convert_cvss_score(cvss_v2_score)
                         else:
-                            severity = self.convert_cvss_score(None)
+                            severity = TRIVY_SEVERITIES[vuln["Severity"]]
                     else:
                         severity = TRIVY_SEVERITIES[vuln["Severity"]]
                     if target_class in {"os-pkgs", "lang-pkgs"}:
