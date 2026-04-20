@@ -3799,7 +3799,7 @@ class TransferFindingFindingsViewSet(prefetch.PrefetchListMixin,
 
 
 class SchemaOa3View(SpectacularAPIView):
-    permnission_classes = [permissions.UserHasViewSwaggerDocumentation]
+    permnission_classe = [permissions.UserHasViewSwaggerDocumentation]
 
 
 class SwaggerUiOa3View(SpectacularSwaggerView):
