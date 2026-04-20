@@ -1,8 +1,12 @@
+from django.conf import settings
 from django.db.models.base import Model as Model
 from django.db.models.query import QuerySet
 from django.views import View
 from django.contrib import messages
 from django.urls import reverse_lazy, reverse
+from dojo.decorators import dojo_ratelimit_view
+from django.middleware.csrf import get_token
+from dojo.utils import add_breadcrumb
 from django.views.generic.edit import UpdateView
 from django.http import HttpResponse, HttpRequest
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -73,3 +77,18 @@ class TransferFindingUpdateView(View):
             return redirect_to_return_url_or_else(request, reverse("view_transfer_finding", args=(transfer_finding.destination_product.id,)))
 
         return render(request, self.get_template(), {'form': form})
+
+
+@dojo_ratelimit_view()
+def view_transfer_finding_v2(request: HttpRequest, pk: int) -> HttpResponse:
+    page_name = ('view_details_transfer_finding')
+    user = request.user.id
+    cookie_csrftoken = get_token(request)
+    cookie_sessionid = request.COOKIES.get('sessionid', '')
+    base_params = f"?csrftoken={cookie_csrftoken}&sessionid={cookie_sessionid}"
+    base_params += f"&transfer={pk}"
+    add_breadcrumb(title=page_name, request=request)
+    return render(request, 'dojo/generic_view.html', {
+        'actions': page_name,
+        'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/findings/detail-transfer{base_params}",
+        'user': user})

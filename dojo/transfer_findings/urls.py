@@ -9,5 +9,9 @@ urlpatterns = [
     ),
     path("transfer_finding/<int:pk>/edit/",
          views.TransferFindingUpdateView.as_view(),
-         name="transferfinding_update_form")
+         name="transferfinding_update_form"),
+
+    path("view_details_transfer_finding/<int:pk>/",
+            views.view_transfer_finding_v2,
+         name="view_details_transfer_finding")
 ]

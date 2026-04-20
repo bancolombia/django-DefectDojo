@@ -1072,6 +1072,11 @@ class ProductTypeSerializer(serializers.ModelSerializer):
         model = Product_Type
         fields = "__all__"
 
+class ProductTypeAllSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Product_Type
+        fields = ["id", "name"]
+
 class ProductOfProductTypes(serializers.ModelSerializer):
     id = serializers.IntegerField()
     name = serializers.CharField()
@@ -2120,7 +2125,12 @@ class EngagementByProductResponseSerializer(serializers.ModelSerializer):
                   "team_manager",
                   "prod_type")
 
+class EngagementByProductResponseSerializer(serializers.ModelSerializer):
 
+    class Meta:
+        model = Engagement
+        fields = ["id", "name"]
+        
 class ProductSerializer(serializers.ModelSerializer):
     # findings_count = serializers.SerializerMethodField()
     # findings_list = serializers.SerializerMethodField()

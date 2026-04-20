@@ -376,17 +376,23 @@ def custom_permissions_transfer_findings(user, obj, permission):
         return True
 
     def rule_permissions_transferfinding_accepted(obj, permission):
-        transfer_finding_finding = obj.transfer_findings.filter(findings__risk_status__in=["Transfer Accepted", "Transfer Expired"])
-        result = False
+        transfer_finding_finding = obj.transfer_findings.filter(findings__risk_status__in=["Transfer Expired", "Transfer Rejected", "Transfer Pending", "Risk Active"])
         if transfer_finding_finding:
             if permission in [Permissions.Transfer_Finding_View,
                               Permissions.Transfer_Finding_Finding_View,
-                              Permissions.Transfer_Finding_Finding_Edit,
+                              Permissions.Transfer_Finding_Finding_Accept,
+                              Permissions.Transfer_Finding_Finding_Reject,
                               Permissions.Transfer_Finding_Finding_Delete]:
-                result = True
+                return True
+        elif permission in [
+                            Permissions.Transfer_Finding_Finding_Add,
+                            Permissions.Transfer_Finding_View,
+                            Permissions.Transfer_Finding_Edit,
+                            Permissions.Transfer_Finding_Delete,
+                            Permissions.Transfer_Finding_Add]:
+            return True
         else:
-            result = True
-        return result
+            return False
 
     member = get_product_type_member(user, obj.destination_product_type)
     if member is not None and role_has_permission(member.role.id, permission):
