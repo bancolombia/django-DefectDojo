@@ -929,7 +929,7 @@ def check_priorization():
     )
 
     logger.info(
-        f"Identified {len(all_vulnerabilities)} vulnerabilities for prioritization."
+        f"Identified {all_vulnerabilities.count()} vulnerabilities for prioritization."
     )
 
     # Identify priority vulnerabilities
@@ -942,7 +942,7 @@ def check_priorization():
         .distinct("cve", "test__scan_type", "severity")
         .filter(priority=0)
     )
-    logger.info(f"Identified {len(missing_findings)} findings with priority 0 to update.")
+    logger.info(f"Identified {missing_findings.count()} findings with priority 0 to update.")
     identify_priority_vulnerabilities(missing_findings, True)
 
 
