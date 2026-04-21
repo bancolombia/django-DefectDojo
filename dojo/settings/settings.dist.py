@@ -512,9 +512,12 @@ env = environ.FileAwareEnv(
                      Component Version,Engagement Name,Service contains,
                      Vulnerability ID from tool,File path contains"""),
     DD_ENABLE_FILTER_FOR_TAG_RED_TEAM=(bool, False),
-    # Reviewer and approver groups
+    # Reviewer and approver groups (for Finding Exclusion / Whitelist)
     DD_REVIEWER_GROUP_NAMES=(str, ""),
     DD_APPROVER_GROUP_NAMES=(str, ""),
+    # HC Participation reviewer and approver groups
+    DD_HC_REVIEWER_GROUP_NAME=(str, ""),
+    DD_HC_APPROVER_GROUP_NAME=(str, ""),
     
     # When enabled, force the password field to be required for creating/updating users
     DD_REQUIRE_PASSWORD_ON_USER=(bool, True),
@@ -1197,9 +1200,13 @@ FOOTER_VERSION = env("DD_FOOTER_VERSION")
 FORCE_LOWERCASE_TAGS = env("DD_FORCE_LOWERCASE_TAGS")
 MAX_TAG_LENGTH = env("DD_MAX_TAG_LENGTH")
 
-# Approver and reviewer group names
+# Approver and reviewer group names (for Finding Exclusion / Whitelist)
 APPROVER_GROUP_NAME = env("DD_APPROVER_GROUP_NAMES")
 REVIEWER_GROUP_NAME = env("DD_REVIEWER_GROUP_NAMES")
+
+# HC Participation reviewer and approver groups (defaults to same as Whitelist if not set)
+HC_REVIEWER_GROUP_NAME = env("DD_HC_REVIEWER_GROUP_NAME") or REVIEWER_GROUP_NAME
+HC_APPROVER_GROUP_NAME = env("DD_HC_APPROVER_GROUP_NAME") or APPROVER_GROUP_NAME
 PROVIDERS_CYBERSECURITY_EMAIL = env("DD_PROVIDERS_CYBERSECURITY_EMAIL")
 PRIORIZATION_FIELD_WEIGHTS = env("DD_PRIORIZATION_FIELD_WEIGHTS")
 

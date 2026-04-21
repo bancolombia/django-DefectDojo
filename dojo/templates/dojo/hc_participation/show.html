@@ -1,0 +1,406 @@
+{% extends "base.html" %}
+{% load authorization_tags %}
+{% load display_tags %}
+{% load humanize %}
+{% load i18n %}
+{% block add_styles %}
+    {{ block.super }}
+    .tooltip-inner {
+        max-width: 650px;
+    }
+    .process-timeline-horizontal {
+        margin-top: 20px;
+        margin-left: 10px;
+    }
+    .timeline-row {
+        position: relative;
+        display: flex;
+    }
+    .timeline-step {
+        position: relative;
+        text-align: center;
+        padding: 20px;
+        background-color: #f4f4f4;
+        opacity: 0.5;
+        border-right: 1px solid #ddd;
+        width: 33.3%;
+    }
+    .timeline-step:last-child {
+        border-right: none;
+    }
+    .timeline-step.active {
+        opacity: 1;
+        background-color: #e9ecef;
+    }
+    .timeline-step.danger {
+        opacity: 1;
+        background-color: #e9ecef;
+    }
+    .timeline-step::before {
+        content: '';
+        position: absolute;
+        top: -10px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 20px;
+        height: 20px;
+        background-color: #6c757d;
+        border-radius: 50%;
+    }
+    .timeline-step.active::before {
+        background-color: #28a745;
+    }
+    .timeline-step.danger::before {
+        background-color: #d11d38;
+    }
+    .timeline-content {
+        position: relative;
+        z-index: 1;
+    }
+    .discussion-item {
+        display: block;
+        width: 100%;
+        margin-bottom: 10px;
+    }
+    .discussion-right {
+        align-self: flex-end;
+        text-align: end;
+        background-color: #e6f2ff;
+        border-radius: 10px;
+        padding: 10px;
+        width: 300px;
+        margin-left: auto;
+    }
+    .discussion-left {
+        align-self: flex-start;
+        background-color: #f0f0f0;
+        border-radius: 10px;
+        padding: 10px;
+        width: 300px;
+        margin-right: auto;
+    }
+    .sticky-form {
+        position: sticky;
+        bottom: 0;
+        background-color: white;
+        padding: 15px;
+        border-top: 1px solid #ddd;
+        z-index: 1000;
+    }
+    .cli-log-container {
+        font-family: monospace;
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    .cli-log-line {
+        margin-bottom: 2px;
+    }
+    .log-date {
+        color: #6c757d;
+    }
+    .log-user {
+        color: #212529;
+    }
+    .log-status {
+        padding: 2px 5px;
+        border-radius: 3px;
+        color: white;
+    }
+{% endblock %}
+
+{% block content %}
+{{ block.super }}
+<div id="main-hc-participation">
+    <div class="panel panel-default">
+        <div class="panel-heading">
+            <div class="clearfix">
+                <h3 class="pull-left finding-title">
+                    <i class="fa-solid fa-bullseye"></i> {{ hc_participation.product.name }}
+                    <small>Last Status Update: {{ hc_participation.last_status_update | naturalday }}, </small>
+                    <small>Created: {{ hc_participation.create_date | naturalday }}</small>
+                </h3>
+                <div class="dropdown pull-right">
+                    <button class="btn btn-primary dropdown-toggle" type="button" id="dropdownMenu1"
+                            data-toggle="dropdown" aria-expanded="true">
+                        <span class="fa-solid fa-bars"></span>
+                        <span class="caret"></span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-right" aria-labelledby="dropdownMenu1"> 
+                        {% if can_review_hc_participation %}
+                            {% if hc_participation.status == 'Pending' %}
+                            <li>
+                                <form method="post" action="{% url 'review_hc_participation' hc_participation.uuid %}" style="margin: 0;">
+                                    {% csrf_token %}
+                                    <button type="submit" class="dropdown-item btn btn-link" style="width: 100%; text-align: left;">
+                                        <i class="fa-solid fa-circle-check"></i> Mark as Reviewed
+                                    </button>
+                                </form>
+                            </li>
+                            {% endif %}
+                        {% endif %}
+                    
+                        {% if can_approve_hc_participation %}
+                            {% if hc_participation.status == 'Reviewed' %}
+                            <li>
+                                <form method="post" action="{% url 'approve_hc_participation' hc_participation.uuid %}" style="margin: 0;">
+                                    {% csrf_token %}
+                                    <button type="submit" class="dropdown-item btn btn-link" style="width: 100%; text-align: left;">
+                                        <i class="fa-solid fa-circle-exclamation"></i> Approve HC Participation
+                                    </button>
+                                </form>
+                            </li>
+                            {% endif %}
+                        {% endif %}
+                    
+                        {% if can_reject_hc_participation %}
+                            {% if hc_participation.status != 'Approved' and hc_participation.status != 'Rejected' and hc_participation.status != 'Cancelled' %}
+                            <li>
+                                <form method="post" action="{% url 'reject_hc_participation' hc_participation.uuid %}" style="margin: 0;">
+                                    {% csrf_token %}
+                                    <button type="submit" class="dropdown-item btn btn-link" style="width: 100%; text-align: left;">
+                                        <i class="fa-solid fa-circle-xmark"></i> Reject HC Participation
+                                    </button>
+                                </form>
+                            </li>
+                            {% endif %}
+                        {% endif %}
+
+                    </ul>  
+                </div>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table id="notes" class="table-striped table table-condensed table-hover centered">
+                <tr>
+                    <th>Product</th>
+                    <th>Product Type</th>
+                    <th>Criticality</th>
+                    <th>Was in HC</th>
+                    <th>Recommendation</th>
+                    <th>Status</th>
+                    <th>Created by</th>
+                    <th>Created at</th>
+                </tr>
+                <tr>
+                    <td><a href="{% url 'view_product' hc_participation.product.id %}">{{ hc_participation.product.name }}</a></td>
+                    <td>{{ hc_participation.product.prod_type.name }}</td>
+                    <td>{{ hc_participation.business_criticality|default:"-" }}</td>
+                    <td>
+                        {% if hc_participation.was_in_hacking_continuous %}
+                            <span class="text-success"><i class="fa fa-check"></i> Yes</span>
+                        {% else %}
+                            <span class="text-muted"><i class="fa fa-times"></i> No</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ hc_participation.get_recommendation_display }}</td>
+                    <td>
+                        {% if hc_participation.status in "Pending,Approved,Rejected,Reviewed,Cancelled" %}
+                            <span style="background-color: 
+                                {% if hc_participation.status == 'Pending' %}#1B30DE
+                                {% elif hc_participation.status == 'Approved' %}#096C11
+                                {% elif hc_participation.status == 'Rejected' %}#d11d38
+                                {% elif hc_participation.status == 'Cancelled' %}#6c757d
+                                {% else %}#b97a0c
+                                {% endif %}" 
+                                class="pass_fail Pass">
+                                {{ hc_participation.status }}
+                            </span>
+                        {% else %}
+                            {{ hc_participation.status }}
+                        {% endif %}
+                    </td>
+                    <td>{{ hc_participation.created_by.username|default:"System" }}</td>
+                    <td>{{ hc_participation.create_date|date:"d M Y H:i" }}</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <div class="view-finding">
+        <div class="panel panel-default">
+            <div class="panel-heading">
+                <h4>Reason <span class="pull-right"><a rel="noopener noreferrer" data-toggle="collapse" href="#vuln_desc"><i
+                        class="glyphicon glyphicon-chevron-up"></i></a></span></h4>
+            </div>
+            <div id="vuln_desc" class="panel-body finding-description collapse in">
+                <pre>{{ hc_participation.reason }}</pre>
+            </div>
+        </div>
+
+        {% if hc_participation.security_posture_data %}
+        <div class="panel panel-default">
+            <div class="panel-heading">
+                <h4>Security Posture (at evaluation time) <span class="pull-right"><a rel="noopener noreferrer" data-toggle="collapse" href="#vuln_posture"><i
+                        class="glyphicon glyphicon-chevron-up"></i></a></span></h4>
+            </div>
+            <div id="vuln_posture" class="panel-body finding-description collapse in">
+                <table class="table table-condensed">
+                    <tr>
+                        <th width="30%">Active Findings</th>
+                        <td>{{ hc_participation.security_posture_data.counter_active_findings|default:0 }}</td>
+                    </tr>
+                    <tr>
+                        <th>Total Findings</th>
+                        <td>{{ hc_participation.security_posture_data.counter_total_findings|default:0 }}</td>
+                    </tr>
+                    <tr>
+                        <th>Status</th>
+                        <td>{{ hc_participation.security_posture_data.status|default:"-" }}</td>
+                    </tr>
+                    <tr>
+                        <th>DevSecOps Adoption</th>
+                        <td>
+                            {% for tag in hc_participation.security_posture_data.adoption_devsecops %}
+                                <span class="label label-info">{{ tag }}</span>
+                            {% empty %}
+                                -
+                            {% endfor %}
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="panel panel-default">
+            <div class="panel-heading">
+                <h4>Process <span class="pull-right"><a rel="noopener noreferrer" data-toggle="collapse" href="#vuln_procs"><i
+                        class="glyphicon glyphicon-chevron-up"></i></a></span></h4>
+            </div>
+            <div id="vuln_procs" class="panel-body finding-description collapse in">
+                {% if hc_participation %}
+                <div class="container-fluid process-timeline-horizontal">
+                    <div class="row timeline-row">
+                        <div class="col-4 timeline-step {% if hc_participation.create_date %}active{% endif %}">
+                            <div class="timeline-content">
+                                <pre><strong>Created</strong></pre>
+                                <p>
+                                    <pre>{{ hc_participation.create_date|date:"d M Y H:i" }}</pre>
+                                    <br>
+                                    <pre><strong>By:</strong> {{ hc_participation.created_by.username|default:"System" }}</pre>
+                                </p>
+                            </div>
+                        </div>
+                        <div class="col-4 timeline-step {% if hc_participation.reviewed_at %}active{% endif %}">
+                            <div class="timeline-content">
+                                <pre><strong>Reviewed</strong></pre>
+                                <p>
+                                    {% if hc_participation.reviewed_at %}
+                                        <pre>{{ hc_participation.reviewed_at|date:"d M Y H:i" }}</pre>
+                                        <br>
+                                        <pre><strong>By:</strong> {{ hc_participation.reviewed_by.username }}</pre>
+                                    {% else %}
+                                        <pre>Pending review</pre>
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="col-4 timeline-step {% if hc_participation.final_status == 'Approved' %}active{% elif hc_participation.final_status == 'Rejected' %}danger{% endif %}">
+                            <div class="timeline-content">
+                                <pre><strong>Final Status</strong></pre>
+                                <p>
+                                    {% if hc_participation.final_status %}
+                                        {% if hc_participation.final_status == 'Approved' %}
+                                            <pre class="text-success"><strong>Approved</strong></pre>
+                                            <br>
+                                            <pre>{{ hc_participation.approved_at|date:"d M Y H:i" }}</pre>
+                                            <br>
+                                            <pre><strong>By:</strong> {{ hc_participation.approved_by.username }}</pre>
+                                        {% else %}
+                                            <pre class="text-danger"><strong>Rejected</strong></pre>
+                                            <br>
+                                            <pre>{{ hc_participation.status_updated_at|date:"d M Y H:i" }}</pre>
+                                            <br>
+                                            <pre><strong>By:</strong> {{ hc_participation.rejected_by.username }}</pre>
+                                        {% endif %}
+                                    {% else %}
+                                        <pre>Awaiting Decision</pre>
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="panel panel-default">
+            <div class="panel-heading">
+                <h4>Change History <span class="pull-right"><a rel="noopener noreferrer" data-toggle="collapse" href="#vuln_history"><i
+                        class="glyphicon glyphicon-chevron-up"></i></a></span></h4>
+            </div>
+            <div id="vuln_history" class="panel-body finding-description collapse in">
+                <div class="cli-log-container">
+                    {% for log in logs %}
+                        <div class="cli-log-line">
+                            <span class="log-date">[{{ log.changed_at|date:"d M Y H:i" }}]</span>
+                            <span class="log-user">{{ log.changed_by.username }}:</span>
+                            Status changed from
+                            <span class="log-status" style="background-color: {% if log.previous_status == 'Pending' %}#1B30DE{% elif log.previous_status == 'Approved' %}#096C11{% elif log.previous_status == 'Rejected' %}#d11d38{% elif log.previous_status == 'Cancelled' %}#6c757d{% elif log.previous_status == 'Reviewed' %}#b97a0c{% else %}#6c757d{% endif %};">
+                                {{ log.previous_status|default:"New" }}
+                            </span>
+                            to
+                            <span class="log-status" style="background-color: {% if log.current_status == 'Pending' %}#1B30DE{% elif log.current_status == 'Approved' %}#096C11{% elif log.current_status == 'Rejected' %}#d11d38{% elif log.current_status == 'Cancelled' %}#6c757d{% elif log.current_status == 'Reviewed' %}#b97a0c{% else %}#6c757d{% endif %};">
+                                {{ log.current_status }}
+                            </span>
+                            {% if log.notes %}<span class="text-muted"> - {{ log.notes }}</span>{% endif %}
+                        </div>
+                    {% empty %}
+                        <div class="cli-log-line">No history found.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="panel panel-default">
+            <div class="panel-heading">
+                <h4>Discussion <span class="pull-right"><a rel="noopener noreferrer" data-toggle="collapse" href="#vuln_disc"><i
+                        class="glyphicon glyphicon-chevron-up"></i></a></span></h4>
+            </div>
+            <div id="vuln_disc" class="panel-body finding-description collapse in">
+                {% for discussion in discussions %}
+                    <div class="discussion-item {% if discussion.author == request.user %}discussion-right{% else %}discussion-left{% endif %}">
+                        <div class="discussion-header">
+                            <strong>{{ discussion.author.username }}</strong>
+                            <small class="text-muted">{{ discussion.created_at|date:"F d, Y H:i" }}</small>
+                        </div>
+                        <div class="discussion-content">
+                            {{ discussion.content|linebreaks }}
+                            {% if discussion.author == request.user %}
+                            <div class="dropup">
+                                <button class="btn btn-link dropdown-toggle" type="button" id="dropdownMenu{{ discussion.id }}" data-toggle="dropdown" aria-expanded="true">
+                                    <span class="fa-solid fa-ellipsis-h"></span>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-right z-3" aria-labelledby="dropdownMenu{{ discussion.id }}">
+                                    <li>
+                                        <form method="post" action="{% url 'delete_hc_discussion' hc_participation.uuid|stringformat:'s' discussion.id %}" style="margin: 0;">
+                                            {% csrf_token %}
+                                            <button type="submit" class="dropdown-item text-danger btn btn-link" style="width: 100%; text-align: left;">
+                                                <i class="fa-solid fa-trash"></i> Delete
+                                            </button>
+                                        </form>
+                                    </li>
+                                </ul>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% empty %}
+                    <p>There are no discussions yet.</p>
+                {% endfor %}
+                
+                <div class="sticky-form">
+                    <form method="post" action="{% url 'add_hc_discussion' hc_participation.uuid|stringformat:'s' %}">
+                        {% csrf_token %}
+                        <div class="form-group">
+                            <textarea name="content" class="form-control" rows="3" placeholder="Add a comment..." required></textarea>
+                        </div>
+                        <button type="submit" class="btn" label="Submit" name="Submit" value="Submit">Submit</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
