@@ -1,0 +1,121 @@
+"""
+Helper module for Azure DevOps integration, specifically for sprint management.
+This module provides utilities to fetch sprint information from Azure DevOps API
+using the official azure-devops Python SDK.
+"""
+
+import logging
+from datetime import datetime
+from typing import Optional
+
+import pytz
+from django.conf import settings
+from azure.devops.connection import Connection
+from azure.devops.v7_1.work.models import TeamContext
+from msrest.authentication import BasicAuthentication
+
+logger = logging.getLogger(__name__)
+
+
+class AzureDevOpsSprintHelper:
+    """Helper class to interact with Azure DevOps API for sprint information using the SDK"""
+
+    def __init__(self, organization_url: str, project: str, team: str, pat: str):
+        """
+        Initialize Azure DevOps helper.
+
+        Args:
+            organization_url: Azure DevOps organization URL (e.g., https://dev.azure.com/myorg)
+            project: Project name in Azure DevOps
+            team: Team name in Azure DevOps
+            pat: Personal Access Token for authentication
+        """
+        self.project = project
+        self.team = team
+        credentials = BasicAuthentication("", pat)
+        connection = Connection(base_url=organization_url.rstrip("/"), creds=credentials)
+        self._work_client = connection.clients.get_work_client()
+
+    def get_next_sprint_start_date(self) -> Optional[datetime]:
+        """
+        Fetch the start date of the next sprint from Azure DevOps.
+
+        The "next sprint" is the first future iteration after the current one.
+
+        Returns:
+            datetime object with the start date of the next sprint, or None if not found.
+
+        Raises:
+            Exception: If the SDK call fails.
+        """
+        iterations = self._get_team_iterations()
+
+        if not iterations:
+            logger.warning("No iterations found in Azure DevOps")
+            return None
+
+        current_sprint = None
+        next_sprint = None
+
+        for iteration in iterations:
+            if getattr(iteration.attributes, "time_frame", None) == "current":
+                current_sprint = iteration
+                break
+
+        if current_sprint and current_sprint.attributes.finish_date:
+            current_end = current_sprint.attributes.finish_date
+            if isinstance(current_end, str):
+                current_end = datetime.fromisoformat(current_end.replace("Z", "+00:00"))
+
+            for iteration in iterations:
+                attrs = iteration.attributes
+                iter_start = getattr(attrs, "start_date", None)
+                time_frame = getattr(attrs, "time_frame", None)
+                if iter_start and time_frame == "future":
+                    if isinstance(iter_start, str):
+                        iter_start = datetime.fromisoformat(iter_start.replace("Z", "+00:00"))
+                    if iter_start > current_end:
+                        if next_sprint is None:
+                            next_sprint = iteration
+                        else:
+                            next_start = next_sprint.attributes.start_date
+                            if isinstance(next_start, str):
+                                next_start = datetime.fromisoformat(next_start.replace("Z", "+00:00"))
+                            if iter_start < next_start:
+                                next_sprint = iteration
+        else:
+            # No current sprint: pick first future iteration
+            for iteration in iterations:
+                if getattr(iteration.attributes, "time_frame", None) == "future":
+                    next_sprint = iteration
+                    break
+
+        if next_sprint:
+            start_date = next_sprint.attributes.start_date
+            if start_date:
+                if isinstance(start_date, str):
+                    utc_date = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+                    tz = pytz.timezone(settings.TIME_ZONE)
+                    start_date = utc_date.astimezone(tz)
+                logger.info(f"Next sprint start date: {start_date}")
+                return start_date
+
+        logger.warning("Could not determine next sprint start date")
+        return None
+
+    def _get_team_iterations(self) -> list:
+        """
+        Fetch all iterations for the team using the Azure DevOps SDK.
+
+        Returns:
+            List of TeamSettingsIteration objects.
+
+        Raises:
+            Exception: If the SDK call fails.
+        """
+        team_context = TeamContext(project=self.project, team=self.team)
+        logger.debug(f"Fetching iterations for project='{self.project}' team='{self.team}'")
+        iterations = self._work_client.get_team_iterations(team_context) or []
+        logger.debug(f"Found {len(iterations)} iterations in Azure DevOps")
+        return iterations
+

@@ -9,11 +9,13 @@ from django.core.management import call_command
 from django.db.models import Count, Prefetch, Q
 from django.urls import reverse
 from django.utils import timezone
+from django.core.cache import cache
 
 from dojo.celery import app
-from dojo.models import Alerts, Announcement, Endpoint, Engagement, Finding, Product, System_Settings, User
+from dojo.models import Alerts, Announcement, Endpoint, Engagement, Finding, Product, System_Settings, User, GeneralSettings
 from dojo.notifications.helper import create_notification
 from dojo.utils import calculate_grade, sla_compute_and_notify
+from dojo.azure_devops_helper import AzureDevOpsSprintHelper
 
 logger = get_task_logger(__name__)
 deduplicationLogger = logging.getLogger("dojo.specific-loggers.deduplication")
@@ -280,3 +282,72 @@ def update_findings_without_tags(*args, **kwargs):
 
     logger.info("Completed update of findings without tags. Total updated: %s", updated_count)
     return updated_count
+
+@app.task
+def update_next_sprint_start_date(*args, **kwargs):
+    logger.info("Starting update of next sprint start date for findings with Azure DevOps Sprint SLA")
+    try:    
+        if not all([
+            settings.AZURE_DEVOPS_ORGANIZATION_URL,
+            settings.AZURE_DEVOPS_OFFICES_LOCATION,
+            settings.AZURE_DEVOPS_TOKEN,
+        ]):
+            logger.warning("Azure DevOps sprint sync enabled but missing configuration")
+            return None
+        
+        # Extract project and team from AZURE_DEVOPS_OFFICES_LOCATION
+        # Format: "project/team,location1,location2,..."
+        locations = settings.AZURE_DEVOPS_OFFICES_LOCATION.split(",")
+        project = locations[0].strip()
+        team = GeneralSettings.get_value("AZURE_DEVOPS_SPRINT_SLA_START_DATE_TEAM", default="Default Team")
+                
+        helper = AzureDevOpsSprintHelper(
+            organization_url=settings.AZURE_DEVOPS_ORGANIZATION_URL,
+            project=project,
+            team=team,
+            pat=settings.AZURE_DEVOPS_TOKEN,
+        )
+        cache_key = "azure_devops_next_sprint_start_date"
+        sprint_start_date = helper.get_next_sprint_start_date()
+        cache.set(cache_key, sprint_start_date, 5 * 24 * 60 * 60) # Cache for 5 days
+        logger.info(f"Next sprint start date updated in cache: {sprint_start_date}")
+
+        findings = Finding.objects.filter(active=True).filter(test__tags__name__in=GeneralSettings.get_value("AZURE_DEVOPS_SPRINT_SLA_START_DATE_TEST_TAGS")).filter(sla_start_date__isnull=True)
+        findings_to_update = []
+        total_processed = 0
+        max_batch_size = 1000
+
+        logger.info(f"Total findings to update with next sprint start date: {findings.count()}")
+
+        for finding in findings:
+            finding.sla_start_date = sprint_start_date
+            finding.set_sla_expiration_date()
+            findings_to_update.append(finding)
+
+            if len(findings_to_update) >= max_batch_size:
+                Finding.objects.bulk_update(
+                    findings_to_update,
+                    ["sla_start_date", "sla_expiration_date"],
+                    batch_size=500,
+                )
+                total_processed += len(findings_to_update)
+                logger.info(
+                    f"Updated batch of {len(findings_to_update)} findings with sprint SLA dates "
+                    f"(total: {total_processed}). Progress: {total_processed}/{findings.count()} ({(total_processed/findings.count())*100:.2f}%)"
+                )
+                findings_to_update = []
+
+        if findings_to_update:
+            Finding.objects.bulk_update(
+                findings_to_update,
+                ["sla_start_date", "sla_expiration_date"],
+                batch_size=500,
+            )
+            total_processed += len(findings_to_update)
+
+        logger.info(
+            f"Finished updating {total_processed} findings with sprint SLA dates"
+        )
+    except Exception as e:
+        logger.error(f"Failed to get next sprint start date: {str(e)}")
+        return None
