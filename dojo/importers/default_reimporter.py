@@ -9,7 +9,7 @@ import dojo.finding.helper as finding_helper
 import dojo.jira_link.helper as jira_helper
 from dojo.importers.base_importer import BaseImporter, Parser
 from dojo.importers.options import ImporterOptions
-from dojo.importers.utils import get_or_create_component, decode_datetime, encode_datetime
+from dojo.importers.utils import get_or_create_component, encode_datetime
 from dojo.models import (
     Development_Environment,
     Finding,
@@ -148,7 +148,7 @@ class DefaultReImporter(BaseImporter, DefaultReImporterOptions):
             untouched_findings,
         )
         finding_ids = [finding.id for finding in findings_for_priority_update]
-        BaseImporter.update_priority_epss_kev.apply_async(args=[finding_ids])
+        BaseImporter.update_priority_epss_kev.apply_async(args=(finding_ids, self.test))
         logger.debug("REIMPORT_SCAN: Done")
         return (
             self.test,

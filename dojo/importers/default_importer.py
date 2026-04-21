@@ -151,7 +151,7 @@ class DefaultImporter(BaseImporter, DefaultImporterOptions):
         logger.debug("IMPORT_SCAN: Updating Test progress")
         self.update_test_progress()
         finding_ids = [finding.id for finding in new_findings]
-        BaseImporter.update_priority_epss_kev.apply_async(args=[finding_ids])
+        BaseImporter.update_priority_epss_kev.apply_async(args=(finding_ids, self.test))
         logger.debug("IMPORT_SCAN: Done")
         return self.test, 0, len(new_findings), len(closed_findings), 0, 0, test_import_history
 

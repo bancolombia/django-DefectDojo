@@ -202,6 +202,7 @@ env = environ.FileAwareEnv(
     DD_SAML2_ENABLED=(bool, False),
     DD_CELERY_CRON_CLEAR_SESSIONS=(str, "0 0 0"),
     DD_CELERY_CRON_UPDATE_FINDINGS_WITHOUT_TAGS=(str, "0 0 * * *"),  # every day at midnight
+    DD_CELERY_CRON_SCHEDULE_UPDATE_NEXT_SPRINT_START_DATE=(str, "0 20 * * *"),  # every day at 20:00
     # Allows to override default SAML authentication backend. Check https://djangosaml2.readthedocs.io/contents/setup.html#custom-user-attributes-processing
     DD_SAML2_AUTHENTICATION_BACKENDS=(str, "djangosaml2.backends.Saml2Backend"),
     # Force Authentication to make SSO possible with SAML2
@@ -1648,6 +1649,7 @@ CELERY_CRON_CHECK_PRIORIZATION = env("DD_CELERY_CRON_CHECK_PRIORIZATION")
 CELERY_CRON_STATUS_FINDINGS_PRIORIZATION = env("DD_CELERY_CRON_STATUS_FINDINGS_PRIORIZATION")
 CELERY_CRON_CLEAR_SESSIONS = env("DD_CELERY_CRON_CLEAR_SESSIONS")
 CELERY_CRON_UPDATE_FINDINGS_WITHOUT_TAGS = env("DD_CELERY_CRON_UPDATE_FINDINGS_WITHOUT_TAGS")
+CELERY_CRON_SCHEDULE_UPDATE_NEXT_SPRINT_START_DATE = env("DD_CELERY_CRON_SCHEDULE_UPDATE_NEXT_SPRINT_START_DATE")
 CELERY_LOG_LEVEL = env("DD_CELERY_LOG_LEVEL")
 
 if len(env("DD_CELERY_BROKER_TRANSPORT_OPTIONS")) > 0:
@@ -1741,6 +1743,15 @@ CELERY_BEAT_SCHEDULE = {
             day_of_week=CELERY_CRON_UPDATE_FINDINGS_WITHOUT_TAGS.split()[4]
         )
     },
+    "update_next_sprint_start_date": {
+        "task": "dojo.tasks.update_next_sprint_start_date",
+        "schedule": crontab(
+            minute=CELERY_CRON_SCHEDULE_UPDATE_NEXT_SPRINT_START_DATE.split()[0],
+            hour=CELERY_CRON_SCHEDULE_UPDATE_NEXT_SPRINT_START_DATE.split()[1], 
+            day_of_month=CELERY_CRON_SCHEDULE_UPDATE_NEXT_SPRINT_START_DATE.split()[2], 
+            month_of_year=CELERY_CRON_SCHEDULE_UPDATE_NEXT_SPRINT_START_DATE.split()[3], 
+            day_of_week=CELERY_CRON_SCHEDULE_UPDATE_NEXT_SPRINT_START_DATE.split()[4]),
+    }
     # 'jira_status_reconciliation': {
     #     'task': 'dojo.tasks.jira_status_reconciliation_task',
     #     'schedule': timedelta(hours=12),
