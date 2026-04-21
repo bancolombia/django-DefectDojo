@@ -560,6 +560,11 @@
                                                         {% trans "Vulnerability Black & White Lists" %}
                                                     </a>
                                                 </li>
+                                                <li>
+                                                    <a rel="noopener noreferrer" href="{% url 'hc_participations' %}">
+                                                        {% trans "HC Participation Requests" %}
+                                                    </a>
+                                                </li>
                                                 {% if request.user|has_permission_to_reclassify_orphans %}
                                                     <li>
                                                         <a rel="noopener noreferrer" href="{% url 'orphans_reclassification' %}">

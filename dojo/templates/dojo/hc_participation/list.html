@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% load authorization_tags %}
+{% load event_tags %}
+{% block add_styles %}
+<style>
+    .filters .form-group {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    .filters .form-control {
+        width: 100%;
+        max-width: 500px;
+    }
+</style>
+{% endblock %}
+{% block content %}
+    {{ block.super }}
+    <div class="row">
+        <div class="col-md-2">
+            <div class="panel panel-default filters">
+                {% if filtered.form %}
+                    <div class="panel-heading">Filters</div>
+                    <form method="get" class="panel-body">
+                        {% for field in filtered.form.visible_fields %}
+                            <div class="form-group">
+                                {{ field.errors }}
+                                <label for="{{ field.auto_id }}" style="display: block;">{{ field.label }}</label>
+                                {% with placeholder="placeholder:"|add:field.label %}
+                                    {{ field|addcss:"class:form-control input-sm"|addcss:placeholder }}
+                                {% endwith %}
+                            </div>
+                        {% endfor %}
+                        <div class="text-center">
+                            <input type="submit" class="btn btn-secondary inline top" label="submit" value="Apply"/><br/><br/>
+                            <a href="{% url 'hc_participations' %}"> [Clear Filters] </a>
+                        </div>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+        <div class="col-md-10">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <span class="fa-solid fa-bullseye"></span> {{ name }}
+                    <span class="pull-right text-muted small">
+                        <i class="fa fa-clock"></i> Monthly automatic evaluation (1st day, 6:00 AM)
+                    </span>
+                </div>
+            </div>
+            {% if hc_requests %}
+            <div class="panel panel-default table-responsive">
+                <table id="hc-requests" class="tablesorter-bootstrap table table-condensed table-striped">
+                    <thead>
+                        <tr>
+                            <th>Product</th>
+                            <th>Product Type</th>
+                            <th>Criticality</th>
+                            <th>Recommendation</th>
+                            <th>Created Date</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for hc in hc_requests %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'hc_participation' hc.uuid %}">{{ hc.product.name }}</a>
+                                </td>
+                                <td>{{ hc.product.prod_type.name }}</td>
+                                <td>{{ hc.business_criticality|default:"-" }}</td>
+                                <td>{{ hc.get_recommendation_display }}</td>
+                                <td>{{ hc.create_date|date:"d M Y H:i" }}</td>
+                                <td>
+                                    {% if hc.status in "Pending,Approved,Rejected,Reviewed,Cancelled" %}
+                                        <span style="background-color: 
+                                            {% if hc.status == 'Pending' %}#1B30DE
+                                            {% elif hc.status == 'Approved' %}#096C11
+                                            {% elif hc.status == 'Rejected' %}#d11d38
+                                            {% elif hc.status == 'Cancelled' %}#6c757d
+                                            {% else %}#b97a0c
+                                            {% endif %}" 
+                                            class="pass_fail Pass">
+                                            {{ hc.status }}
+                                        </span>
+                                    {% else %}
+                                        {{ hc.status }}
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="clearfix">
+                {% include "dojo/paging_snippet.html" with page=hc_requests page_size=True %}
+            </div>
+            {% else %}
+                No HC participation requests found.
+            {% endif %}
+        </div>
+    </div>   
+{% endblock %}
