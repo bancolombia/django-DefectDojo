@@ -99,7 +99,7 @@ opentelemetry-semantic-conventions==0.62b0
 opentelemetry-instrumentation==0.62b0
 django-redis==6.0.0
 pandas==3.0.2
-pyarrow==23.0.1
+pyarrow==24.0.0
 # Pinning Dependencies
 azure-core==1.39.0
 protobuf==6.33.5
