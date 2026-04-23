@@ -328,7 +328,7 @@ def update_next_sprint_start_date(*args, **kwargs):
             logger.warning("Failed to retrieve next sprint start date from Azure DevOps")
             return None
             
-        cache.set(cache_key, sprint_start_date, 5 * 24 * 60 * 60) # Cache for 5 days
+        cache.set(cache_key, sprint_start_date, 1 * 24 * 60 * 60) # Cache for 1 day
         logger.info(f"Next sprint start date updated in cache: {sprint_start_date}")
 
         # Use .values_list() with only needed fields and iterator() to minimize memory footprint
