@@ -486,7 +486,7 @@ def update_finding_prioritization_per_cve(
     if priority_zero:
         findings = findings.filter(priority=0)
     else:
-        findings = findings.filter(priority_tag_filter).filter(
+        findings = findings.filter(
             active=settings.CELERY_CRON_STATUS_FINDINGS_PRIORIZATION
         )
 

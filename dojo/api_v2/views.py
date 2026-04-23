@@ -3757,7 +3757,7 @@ class TransferFindingFindingsViewSet(prefetch.PrefetchListMixin,
             instance = TransferFindingFindingsSerializer(created, many=True)
             NotificationTransferFinding.transfer_finding_request(transfer_finding)
         else:
-            return http_response.bad_request(data=instance.errors)
+            return http_response.bad_request(data=serializer.errors)
         return http_response.created(message="Transfer Finding Finding Created", data=instance.data)
 
     @extend_schema(

@@ -71,8 +71,8 @@ class RiskAcceptanceEngagementViewSet(prefetch.PrefetchListMixin,
         ra_engagement = get_object_or_404(RiskAcceptanceEngagement, id=pk)
         query = helper_ra_engagement.render_rule(ra_engagement)
         page = self.paginate_queryset(query)
+        serializer = FindingRenderRuleSerializer(page if page is not None else query, many=True)
         if page is not None:
-            serializer = FindingRenderRuleSerializer(query, many=True) 
             return self.get_paginated_response(serializer.data)
         return http_response.ok(serializer.data)
     
