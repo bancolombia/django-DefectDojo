@@ -883,6 +883,7 @@ SOCIAL_AUTH_PIPELINE = (
     "social_core.pipeline.social_auth.social_user",
     "social_core.pipeline.user.get_username",
     "social_core.pipeline.social_auth.associate_by_email",
+    "dojo.pipeline.cleanup_old_social_auth",
     "dojo.pipeline.create_user",
     "dojo.pipeline.modify_permissions",
     "social_core.pipeline.social_auth.associate_user",
