@@ -439,7 +439,7 @@ def update_finding_prioritization_per_cve(
     known_exploited,
     ransomware_used,
     kev_date_added,
-    priority_zero
+    priority_zero,
 ) -> None:
 
     priority_cve_severity_filter = Q()
@@ -473,20 +473,22 @@ def update_finding_prioritization_per_cve(
                 else (Q(severity=severity) & Q(cve=vulnerability_id) & ~Q(cve=None))
             )
         else:
-            priority_cve_severity_filter = (Q(severity=severity) & Q(cve=vulnerability_id) & ~Q(cve=None)) | (
-                Q(vuln_id_from_tool=vulnerability_id) & ~Q(vuln_id_from_tool=None)
-            )
+            priority_cve_severity_filter = (
+                Q(severity=severity) & Q(cve=vulnerability_id) & ~Q(cve=None)
+            ) | (Q(vuln_id_from_tool=vulnerability_id) & ~Q(vuln_id_from_tool=None))
     else:
-        priority_cve_severity_filter = (Q(severity=severity) & Q(cve=None))
+        priority_cve_severity_filter = Q(severity=severity) & Q(cve=None)
 
-    findings = (
-        Finding.objects.filter(priority_cve_severity_filter, test__scan_type=scan_type)
+    findings = Finding.objects.filter(
+        priority_cve_severity_filter, test__scan_type=scan_type
     )
 
     if priority_zero:
         findings = findings.filter(priority=0)
     else:
-        findings = findings.filter(priority_tag_filter).filter(active=settings.CELERY_CRON_STATUS_FINDINGS_PRIORIZATION)
+        findings = findings.filter(priority_tag_filter).filter(
+            active=settings.CELERY_CRON_STATUS_FINDINGS_PRIORIZATION
+        )
 
     # Process in chunks to avoid memory issues
     MAX_BATCH_SIZE = 5000
@@ -584,7 +586,7 @@ def identify_priority_vulnerabilities(findings, priority_zero) -> int:
                 known_exploited,
                 ransomware_used,
                 kev_date_added,
-                priority_zero
+                priority_zero,
             ),
         )
 
@@ -912,7 +914,7 @@ def generate_cve_kev_dict():
 
 @app.task
 def check_priorization():
-    # Get all vulnerabilities with priority tag filter
+    # Process general prioritization
     logger.info("Starting vulnerability prioritization check...")
     vulnerability_identifier_regex = r"^[A-Z][A-Z0-9_]+-[A-Z0-9].*$"
     vulnerability_identifier_filter = Q(cve__iregex=vulnerability_identifier_regex) | Q(
@@ -925,17 +927,27 @@ def check_priorization():
         .filter(priority_tag_filter)
         .order_by("cve", "test__scan_type", "severity")
         .distinct("cve", "test__scan_type", "severity")
-        .exclude(
-            tags__name__icontains=settings.CELERY_CRON_PRIORITY_EXCLUDED_TAGS_FILTER
-        )
     )
 
     logger.info(
         f"Identified {all_vulnerabilities.count()} vulnerabilities for prioritization."
     )
-
-    # Identify priority vulnerabilities
     identify_priority_vulnerabilities(all_vulnerabilities, False)
+
+    # Process hacking tags prioritization
+    logger.info("Starting vulnerability prioritization check hacking tags...")
+    hacking_vulnerabilities = (
+        Finding.objects.filter(active=settings.CELERY_CRON_STATUS_FINDINGS_PRIORIZATION)
+        .filter(vulnerability_identifier_filter)
+        .filter(tags__name__icontains=Constants.TAG_HACKING.value)
+        .exclude(
+            tags__name__icontains=settings.CELERY_CRON_PRIORITY_EXCLUDED_TAGS_FILTER
+        )
+    )
+    logger.info(
+        f"Identified {hacking_vulnerabilities.count()} vulnerabilities with hacking tags for prioritization."
+    )
+    identify_priority_vulnerabilities(hacking_vulnerabilities, False)
 
     # Process missing findings prioritization zero
     missing_findings = (
@@ -944,7 +956,9 @@ def check_priorization():
         .distinct("cve", "test__scan_type", "severity")
         .filter(priority=0)
     )
-    logger.info(f"Identified {missing_findings.count()} findings with priority 0 to update.")
+    logger.info(
+        f"Identified {missing_findings.count()} findings with priority 0 to update."
+    )
     identify_priority_vulnerabilities(missing_findings, True)
 
 
