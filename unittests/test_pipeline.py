@@ -4,7 +4,7 @@ from social_core.backends.azuread_tenant import AzureADTenantOAuth2
 from django.contrib.auth import get_user_model
 from social_django.models import UserSocialAuth
 from unittest import mock
-from dojo.pipeline import update_product_type_azure_devops
+from dojo.pipeline import update_product_type_azure_devops, cleanup_old_social_auth
 from azure.devops.v7_1.graph.models import GraphSubject, GraphGroup
 from dojo.models import Product_Type_Member, Product_Type
 import logging
@@ -24,6 +24,10 @@ class PipelineTest(DojoTestCase):
         )
         settings.AZURE_DEVOPS_OFFICES_LOCATION = "office1,office2,office3,office4,office5"
         settings.AZURE_DEVOPS_JOBS_TITLE = "job1,jobleader-job3-job4,test"
+        self.backend = mock.Mock()
+        self.backend.name = "azuread-tenant"
+        user_model = get_user_model()
+        self.user = user_model._default_manager.create_user(username="test", password="pwd")
 
     def dummy_search_azure_groups(self, *args, **kwargs):
         return ["dummy_group_name"]
@@ -46,11 +50,9 @@ class PipelineTest(DojoTestCase):
         return mock_resp
 
     def test_error_call_microsoft_grapqh_update_product_type_azure_devops(self):
-        user_model = get_user_model()
-        user = user_model._default_manager.create_user(username="test", password="pwd")
         UserSocialAuth.objects.create(
             uid=uuid.uuid4(),
-            user=user,
+            user=self.user,
             provider="azuread-oauth2",
             extra_data={"access_token": "test", "resource": "url_graph"},
         )
@@ -67,7 +69,7 @@ class PipelineTest(DojoTestCase):
 
         with self.assertRaises(Exception) as context:
             update_product_type_azure_devops(
-                backend, None, user, None, None, **kwargs
+                backend, None, self.user, None, None, **kwargs
             )
         self.assertIn(
             "Could not call microsoft graph API or save groups to member: Invalid URL ",
@@ -80,11 +82,9 @@ class PipelineTest(DojoTestCase):
     @mock.patch("requests.get")
     @mock.patch("dojo.pipeline.Connection")
     def test_ok_update_product_type_azure_devops(self, mock_connection, mock_get):
-        user_model = get_user_model()
-        user = user_model._default_manager.create_user(username="test", password="pwd")
         UserSocialAuth.objects.create(
             uid=uuid.uuid4(),
-            user=user,
+            user=self.user,
             provider="azuread-oauth2",
             extra_data={
                 "access_token": "test",
@@ -129,12 +129,38 @@ class PipelineTest(DojoTestCase):
         Product_Type.objects.get_or_create(name="CDE - test")
 
         update_product_type_azure_devops(
-            AzureADTenantOAuth2(), None, user, None, None, **kwargs
+            AzureADTenantOAuth2(), None, self.user, None, None, **kwargs
         )
         user_product_types_names = [
             prod.product_type.name
             for prod in Product_Type_Member.objects.select_related("user").filter(
-                user=user
+                user=self.user
             )
         ]
         self.assertEqual(user_product_types_names, ["CDE - test"])
+
+
+    def test_cleanup_deletes_old_auths(self):
+            current_auth = UserSocialAuth.objects.create(
+                user=self.user, provider=self.backend.name, uid="current_uid"
+            )
+            old_auth = UserSocialAuth.objects.create(
+                user=self.user, provider=self.backend.name, uid="old_uid"
+            )
+
+            cleanup_old_social_auth(
+                strategy=None, backend=self.backend, uid="current_uid", user=self.user
+            )
+
+            self.assertTrue(
+                UserSocialAuth.objects.filter(user=self.user, provider=self.backend.name, uid="current_uid").exists()
+            )
+            self.assertFalse(
+                UserSocialAuth.objects.filter(user=self.user, provider=self.backend.name, uid="old_uid").exists()
+            )
+
+    def test_cleanup_no_user(self):
+        result = cleanup_old_social_auth(
+            strategy=None, backend=self.backend, uid="any", user=None
+        )
+        self.assertEqual(result, {})

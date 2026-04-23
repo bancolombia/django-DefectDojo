@@ -10,6 +10,8 @@ from social_core.backends.google import GoogleOAuth2
 
 from dojo.authorization.roles_permissions import Permissions, Roles
 from dojo.models import Dojo_Group, Dojo_Group_Member, Product, Product_Member, Product_Type,Product_Type_Member,Global_Role, Role, UserContactInfo
+from social_django.models import UserSocialAuth
+from django.contrib.auth import logout
 from dojo.product.queries import get_authorized_products
 from azure.devops.connection import Connection
 from msrest.authentication import BasicAuthentication
@@ -470,3 +472,19 @@ def create_user(strategy, details, backend, user=None, *args, **kwargs):
         return None
     details["username"] = sanitize_username(details.get("username"))
     return social_core.pipeline.user.create_user(strategy, details, backend, user, args, kwargs)
+
+
+
+def cleanup_old_social_auth(strategy, backend, uid, user=None, request=None, *args, **kwargs):
+
+    if not user:
+        return {}
+
+    old_auths = UserSocialAuth.objects.filter(
+        user=user,
+        provider=backend.name
+    ).exclude(uid=uid)
+
+    if old_auths.exists():
+        old_auths.delete()
+    return {}
