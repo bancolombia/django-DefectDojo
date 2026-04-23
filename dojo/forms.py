@@ -127,10 +127,16 @@ from dojo.utils import (
 )
 from dojo.validators import ImporterFileExtensionValidator, tag_validator
 from dojo.widgets import TableCheckboxWidget
+from dojo.engine_tools.helpers import (
+    calculate_priority_epss_kev_finding,
+    get_severity_risk_map,
+    get_risk_priority_epss_kev_data,
+)
 
 logger = logging.getLogger(__name__)
 
 RE_DATE = re.compile(r"(\d{4})-(\d\d?)-(\d\d?)$")
+CVE_PRIORITY_PATTERN = re.compile(r"^CVE-\d{4}-\d+")
 
 FINDING_STATUS = (
     ("verified", "Verified"),
@@ -739,9 +745,9 @@ class ImportScanForm(forms.Form):
     commit_hash = forms.CharField(max_length=100, required=False, help_text="Commit that was scanned.")
     build_id = forms.CharField(max_length=100, required=False, help_text="ID of the build that was scanned.")
     api_scan_configuration = forms.ModelChoiceField(Product_API_Scan_Configuration.objects, required=False, label="API Scan Configuration")
-    service = forms.CharField(max_length=200, required=False,
+    service = forms.CharField(max_length=200, required=True,
         help_text="A service is a self-contained piece of functionality within a Product. "
-                  "This is an optional field which is used in deduplication and closing of old findings when set.")
+                  "This field is required and is used in deduplication and closing of old findings when set.")
     source_code_management_uri = forms.URLField(max_length=600, required=False, help_text="Resource link to source code")
     tags = TagField(required=False, help_text="Add tags that help describe this scan.  "
                     "Choose from the list or add new tags. Press Enter key to add.")
@@ -884,7 +890,7 @@ class ReImportScanForm(forms.Form):
     commit_hash = forms.CharField(max_length=100, required=False, help_text="Commit that was scanned.")
     build_id = forms.CharField(max_length=100, required=False, help_text="ID of the build that was scanned.")
     api_scan_configuration = forms.ModelChoiceField(Product_API_Scan_Configuration.objects, required=False, label="API Scan Configuration")
-    service = forms.CharField(max_length=200, required=False, help_text="A service is a self-contained piece of functionality within a Product. This is an optional field which is used in deduplication of findings when set.")
+    service = forms.CharField(max_length=200, required=True, help_text="A service is a self-contained piece of functionality within a Product. This field is required and is used in deduplication of findings when set.")
     source_code_management_uri = forms.URLField(max_length=600, required=False, help_text="Resource link to source code")
     apply_tags_to_findings = forms.BooleanField(
         help_text="If set to True, the tags will be applied to the findings",
@@ -1589,10 +1595,11 @@ class AddFindingForm(forms.ModelForm):
         choices=EFFORT_FOR_FIXING_CHOICES,
         error_messages={
             "invalid_choice": EFFORT_FOR_FIXING_INVALID_CHOICE})
+    priority = forms.FloatField(label="Priority (Auto-calculated)", required=False, disabled=True, help_text="Priority will be calculated based on EPSS, KEV, and severity data")
 
     # the only reliable way without hacking internal fields to get predicatble ordering is to make it explicit
     field_order = ("title", "date", "cwe", "vulnerability_ids", "severity", "cvssv3", "cvssv3_score", "cvssv4", "cvssv4_score", "description", "mitigation", "impact", "request", "response", "steps_to_reproduce",
-                   "severity_justification", "endpoints", "endpoints_to_add", "references", "active", "verified", "false_p", "duplicate", "out_of_scope",
+                   "severity_justification", "endpoints", "endpoints_to_add", "references", "priority", "active", "verified", "false_p", "duplicate", "out_of_scope",
                    "risk_accepted", "under_defect_review")
 
     def __init__(self, *args, **kwargs):
@@ -1635,6 +1642,41 @@ class AddFindingForm(forms.ModelForm):
 
         return cleaned_data
 
+    def apply_priority(self, finding: Finding) -> Finding:
+        if (
+            GeneralSettings.get_value(
+                "ENABLE_UPDATE_PRIORITY_EPSS_KEV_ON_IMPORT_SCAN", False
+            )
+            is False
+        ):
+            return finding
+
+        vulnerability_ids = self.cleaned_data.get("vulnerability_ids", "").split()
+        cve_candidate = finding.cve or (vulnerability_ids[0] if vulnerability_ids else None)
+        if cve_candidate and not finding.cve:
+            finding.cve = cve_candidate
+
+        df_risk_score = None
+        epss_dict = None
+        kev_dict = None
+        if cve_candidate and CVE_PRIORITY_PATTERN.match(cve_candidate):
+            df_risk_score, epss_dict, kev_dict = get_risk_priority_epss_kev_data()
+
+        priority, epss_score, epss_percentile, known_exploited, ransomware_used, kev_date_added, _ = calculate_priority_epss_kev_finding(
+            finding,
+            get_severity_risk_map(),
+            df_risk_score,
+            epss_dict,
+            kev_dict,
+        )
+        finding.priority = priority
+        finding.epss_score = epss_score
+        finding.epss_percentile = epss_percentile
+        finding.known_exploited = known_exploited
+        finding.ransomware_used = ransomware_used
+        finding.kev_date_added = kev_date_added
+        return finding
+
     def clean_tags(self):
         tag_validator(self.cleaned_data.get("tags"))
         return self.cleaned_data.get("tags")
@@ -1645,7 +1687,7 @@ class AddFindingForm(forms.ModelForm):
                    "under_review", "reviewers", "cve", "inherited_tags",
                    "review_requested_by", "is_mitigated", "jira_creation",
                    "jira_change", "endpoints", "sla_start_date",
-                   "component", "test")
+                   "component", "test", "priority")
 
 
 class AdHocFindingForm(forms.ModelForm):

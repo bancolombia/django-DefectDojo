@@ -2995,7 +2995,7 @@ def validate_type_file(file, allowed_exts):
         return file
 
 def azure_devops_sprint_sla_start_date_enabled(test):
-    if not GeneralSettings.get_status(
+    if not GeneralSettings.get_value(
         "ENABLE_AZURE_DEVOPS_SPRINT_SLA_START_DATE", default=False
     ):
         logger.info(
