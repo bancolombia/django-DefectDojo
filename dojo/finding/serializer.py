@@ -26,5 +26,19 @@ class RecommendationSerializer(serializers.Serializer):
 
 class FindingBulkUpdateSLAStartDateSerializer(serializers.Serializer):
     tags = serializers.CharField(max_length=200)
-    priority_classification = serializers.CharField()
+    priority_classification = serializers.CharField(
+        help_text="Comma-separated priority labels. Valid values: Unknown, Medium Low, High, Critical, Very Critical",
+    )
     date = serializers.DateField()
+
+    VALID_PRIORITY_VALUES = {"Unknown", "Medium Low", "High", "Critical", "Very Critical"}
+
+    def validate_priority_classification(self, value):
+        priorities = [p.strip() for p in value.split(",") if p.strip()]
+        invalid = [p for p in priorities if p not in self.VALID_PRIORITY_VALUES]
+        if invalid:
+            raise serializers.ValidationError(
+                f"Invalid priority values: {invalid}. "
+                f"Valid values are: {sorted(self.VALID_PRIORITY_VALUES)}"
+            )
+        return value

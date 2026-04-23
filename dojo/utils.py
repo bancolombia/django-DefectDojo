@@ -1506,7 +1506,7 @@ def async_bulk_update_sla_start_date(tags, priority_classification, sla_start_da
     Returns:
         int: Number of findings updated
     """
-    from dojo.filters import FindingPriorityFilter
+    from dojo.filters import FindingPriorityFilter  # noqa: PLC0415 — local import to avoid circular dependency
 
     tags_list = [tag.strip() for tag in tags.split(",") if tag.strip()]
 
@@ -2995,7 +2995,10 @@ def validate_type_file(file, allowed_exts):
         return file
 
 def azure_devops_sprint_sla_start_date_enabled(test):
-    if not GeneralSettings.get_value(
+    """Check if Azure DevOps Sprint SLA start date feature is enabled for the given test.
+    NOTE: This function calls test.tags.all() — call it once per import, not per-finding.
+    """
+    if not GeneralSettings.get_status(
         "ENABLE_AZURE_DEVOPS_SPRINT_SLA_START_DATE", default=False
     ):
         logger.info(

@@ -311,8 +311,8 @@ def update_next_sprint_start_date(*args, **kwargs):
         
         team = GeneralSettings.get_value("AZURE_DEVOPS_SPRINT_SLA_START_DATE_TEAM", default="Default Team")
         
-        # Extract project and team from AZURE_DEVOPS_OFFICES_LOCATION
-        # Format: "project/team,location1,location2,..."
+        # Extract project from AZURE_DEVOPS_OFFICES_LOCATION
+        # Format: "project,location1,location2,..." (team is read from GeneralSettings)
         locations = settings.AZURE_DEVOPS_OFFICES_LOCATION.split(",")
         project = locations[0].strip()
                 

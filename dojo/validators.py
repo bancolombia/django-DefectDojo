@@ -83,12 +83,11 @@ def resolve_persisted_tags(tag_manager, value: str | list[str]) -> list:
         tag_pk = cache.get(django_cache_key)
 
         if tag_pk is not None:
-            # Reconstruct the object as if it came from the DB so Django
-            # does not complain about a "None" database on M2M operations.
-            tag = tag_model(pk=tag_pk, name=tag_name, protected=False)
-            tag._state.adding = False
-            tag._state.db = "default"
-        else:
+            tag = tag_model.objects.filter(pk=tag_pk).first()
+            if tag is None:
+                cache.delete(django_cache_key)
+
+        if tag_pk is None or tag is None:
             field_lookup = {"name": tag_name} if case_sensitive else {"name__iexact": tag_name}
             tag, __ = tag_model.objects.get_or_create(
                 defaults={"name": tag_name, "protected": False},

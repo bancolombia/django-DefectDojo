@@ -62,7 +62,7 @@ class AzureDevOpsSprintHelper:
                 current_sprint = iteration
                 break
 
-        if current_sprint and current_sprint.attributes.finish_date:
+        if current_sprint and getattr(current_sprint.attributes, "finish_date", None):
             current_end = current_sprint.attributes.finish_date
             if isinstance(current_end, str):
                 current_end = datetime.fromisoformat(current_end.replace("Z", "+00:00"))

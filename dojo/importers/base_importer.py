@@ -925,6 +925,7 @@ class BaseImporter(ImporterOptions):
         total_processed = 0
 
         enabled_azure_devops_sprint_sla_start_date = azure_devops_sprint_sla_start_date_enabled(test)
+        next_sprint_start_date = None
         if enabled_azure_devops_sprint_sla_start_date:
             logger.info("IMPORT_SCAN: Azure DevOps Sprint SLA Start Date is enabled, fetching next sprint start date from cache")
             next_sprint_start_date = cache.get("azure_devops_next_sprint_start_date")
