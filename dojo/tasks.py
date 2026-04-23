@@ -15,6 +15,7 @@ from dojo.celery import app
 from dojo.models import Alerts, Announcement, Endpoint, Engagement, Finding, Product, System_Settings, User, GeneralSettings
 from dojo.notifications.helper import create_notification
 from dojo.utils import calculate_grade, sla_compute_and_notify
+from dojo.validators import resolve_persisted_tags
 from dojo.azure_devops_helper import AzureDevOpsSprintHelper
 
 logger = get_task_logger(__name__)
@@ -266,7 +267,7 @@ def update_findings_without_tags(*args, **kwargs):
             if scope_tag:
                 new_tags = {"prisma", scope_tag}
                 if finding_tags != new_tags:
-                    finding.tags.set(sorted(new_tags), clear=True)
+                    finding.tags.set(resolve_persisted_tags(finding.tags, sorted(new_tags)), clear=True)
                     updated_count += 1
         else:
             scan_type = (finding.test.scan_type or "").lower()
@@ -277,7 +278,7 @@ def update_findings_without_tags(*args, **kwargs):
             if tag_from_parser:
                 new_tags = {tag_from_parser}
                 if finding_tags != new_tags:
-                    finding.tags.set(sorted(new_tags), clear=True)
+                    finding.tags.set(resolve_persisted_tags(finding.tags, sorted(new_tags)), clear=True)
                     updated_count += 1
 
     logger.info("Completed update of findings without tags. Total updated: %s", updated_count)
@@ -287,6 +288,13 @@ def update_findings_without_tags(*args, **kwargs):
 def update_next_sprint_start_date(*args, **kwargs):
     logger.info("Starting update of next sprint start date for findings with Azure DevOps Sprint SLA")
     try:    
+        if not GeneralSettings.get_value(
+        "ENABLE_AZURE_DEVOPS_SPRINT_SLA_START_DATE", default=False
+        ):
+            logger.info("Azure DevOps sprint SLA start date update is disabled")
+            return None
+
+        # Validate configuration early
         if not all([
             settings.AZURE_DEVOPS_ORGANIZATION_URL,
             settings.AZURE_DEVOPS_OFFICES_LOCATION,
@@ -295,11 +303,18 @@ def update_next_sprint_start_date(*args, **kwargs):
             logger.warning("Azure DevOps sprint sync enabled but missing configuration")
             return None
         
+        # Cache configuration lookups to avoid repeated database calls
+        test_tags = GeneralSettings.get_value("AZURE_DEVOPS_SPRINT_SLA_START_DATE_TEST_TAGS")
+        if not test_tags:
+            logger.warning("AZURE_DEVOPS_SPRINT_SLA_START_DATE_TEST_TAGS not configured")
+            return None
+        
+        team = GeneralSettings.get_value("AZURE_DEVOPS_SPRINT_SLA_START_DATE_TEAM", default="Default Team")
+        
         # Extract project and team from AZURE_DEVOPS_OFFICES_LOCATION
         # Format: "project/team,location1,location2,..."
         locations = settings.AZURE_DEVOPS_OFFICES_LOCATION.split(",")
         project = locations[0].strip()
-        team = GeneralSettings.get_value("AZURE_DEVOPS_SPRINT_SLA_START_DATE_TEAM", default="Default Team")
                 
         helper = AzureDevOpsSprintHelper(
             organization_url=settings.AZURE_DEVOPS_ORGANIZATION_URL,
@@ -309,17 +324,37 @@ def update_next_sprint_start_date(*args, **kwargs):
         )
         cache_key = "azure_devops_next_sprint_start_date"
         sprint_start_date = helper.get_next_sprint_start_date()
+        if sprint_start_date is None:
+            logger.warning("Failed to retrieve next sprint start date from Azure DevOps")
+            return None
+            
         cache.set(cache_key, sprint_start_date, 5 * 24 * 60 * 60) # Cache for 5 days
         logger.info(f"Next sprint start date updated in cache: {sprint_start_date}")
 
-        findings = Finding.objects.filter(active=True).filter(test__tags__name__in=GeneralSettings.get_value("AZURE_DEVOPS_SPRINT_SLA_START_DATE_TEST_TAGS")).filter(sla_start_date__isnull=True)
+        # Use .values_list() with only needed fields and iterator() to minimize memory footprint
+        # This avoids loading full Finding objects into memory unnecessarily
+        max_batch_size = 1000
+        findings_queryset = (
+            Finding.objects
+            .filter(active=True, sla_start_date__isnull=True)
+            .filter(test__tags__name__in=test_tags)
+            .select_related('test__engagement__product__prod_type')  # Optimize related object access
+            .only('id', 'sla_start_date', 'sla_expiration_date', 'test__engagement__product__prod_type', 'tags')
+            .order_by('id')
+        )
+        
+        total_findings = findings_queryset.count()
+        if total_findings == 0:
+            logger.info("No findings to update with next sprint start date")
+            return 0
+
+        logger.info(f"Total findings to update with next sprint start date: {total_findings}")
+
         findings_to_update = []
         total_processed = 0
-        max_batch_size = 1000
 
-        logger.info(f"Total findings to update with next sprint start date: {findings.count()}")
-
-        for finding in findings:
+        # Use iterator() to stream results and reduce memory usage
+        for finding in findings_queryset.iterator(chunk_size=max_batch_size):
             finding.sla_start_date = sprint_start_date
             finding.set_sla_expiration_date()
             findings_to_update.append(finding)
@@ -333,10 +368,11 @@ def update_next_sprint_start_date(*args, **kwargs):
                 total_processed += len(findings_to_update)
                 logger.info(
                     f"Updated batch of {len(findings_to_update)} findings with sprint SLA dates "
-                    f"(total: {total_processed}). Progress: {total_processed}/{findings.count()} ({(total_processed/findings.count())*100:.2f}%)"
+                    f"(total: {total_processed}/{total_findings}). Progress: {(total_processed/total_findings)*100:.2f}%"
                 )
                 findings_to_update = []
 
+        # Final batch
         if findings_to_update:
             Finding.objects.bulk_update(
                 findings_to_update,
@@ -348,6 +384,7 @@ def update_next_sprint_start_date(*args, **kwargs):
         logger.info(
             f"Finished updating {total_processed} findings with sprint SLA dates"
         )
+        return total_processed
     except Exception as e:
         logger.error(f"Failed to get next sprint start date: {str(e)}")
         return None

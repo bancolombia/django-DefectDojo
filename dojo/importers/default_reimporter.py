@@ -18,7 +18,7 @@ from dojo.models import (
     Test_Import,
      System_Settings
 )
-from dojo.validators import clean_tags
+from dojo.validators import clean_tags, resolve_persisted_tags
 
 logger = logging.getLogger(__name__)
 deduplicationLogger = logging.getLogger("dojo.specific-loggers.deduplication")
@@ -686,7 +686,7 @@ class DefaultReImporter(BaseImporter, DefaultReImporterOptions):
             self.endpoint_manager.chunk_endpoints_and_disperse(finding, self.endpoints_to_add)
         # Parsers must use unsaved_tags to store tags, so we can clean them
         if finding.unsaved_tags:
-            finding.tags = clean_tags(finding.unsaved_tags)
+            finding.tags.set(resolve_persisted_tags(finding.tags, clean_tags(finding.unsaved_tags)))
         # Process any files
         if finding_from_report.unsaved_files:
             finding.unsaved_files = finding_from_report.unsaved_files

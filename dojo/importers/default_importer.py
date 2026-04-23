@@ -19,7 +19,7 @@ from dojo.models import (
     System_Settings
 )
 from dojo.notifications.helper import create_notification
-from dojo.validators import clean_tags
+from dojo.validators import clean_tags, resolve_persisted_tags
 
 logger = logging.getLogger(__name__)
 deduplicationLogger = logging.getLogger("dojo.specific-loggers.deduplication")
@@ -228,7 +228,7 @@ class DefaultImporter(BaseImporter, DefaultImporterOptions):
             # Process any endpoints on the endpoint, or added on the form
             self.process_endpoints(finding, self.endpoints_to_add)
             # Parsers must use unsaved_tags to store tags, so we can clean them
-            finding.tags = clean_tags(finding.unsaved_tags)
+            finding.tags.set(resolve_persisted_tags(finding.tags, clean_tags(finding.unsaved_tags)))
             # Process any files
             self.process_files(finding)
             # Process vulnerability IDs

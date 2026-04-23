@@ -703,6 +703,8 @@ def get_risk_priority_epss_kev_data():
 def calculate_priority_epss_kev_finding(
     finding, severity_risk_map, df_risk_score, epss_dict, kev_dict
 ):
+    epss_dict = epss_dict or {}
+    kev_dict = kev_dict or {}
     priority = 0
     epss_score = None
     epss_percentile = None
