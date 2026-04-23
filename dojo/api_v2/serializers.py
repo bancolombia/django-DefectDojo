@@ -1510,20 +1510,67 @@ class TestToFilesSerializer(serializers.Serializer):
 
 
 class TestImportFindingActionSerializer(serializers.ModelSerializer):
+    """Serializer for reading Test_Import_Finding_Action (read-only)"""
     class Meta:
         model = Test_Import_Finding_Action
         fields = "__all__"
 
 
+class TestImportFindingActionWriteSerializer(serializers.ModelSerializer):
+    """Serializer for writing Test_Import_Finding_Action"""
+    finding = serializers.PrimaryKeyRelatedField(
+        queryset=Finding.objects.all(),
+        required=True,
+        help_text="The Finding associated with this action"
+    )
+    action = serializers.ChoiceField(
+        choices=[code for code, _ in IMPORT_ACTIONS],
+        required=True,
+        help_text="Action type: N=created, C=closed, R=reactivated, U=untouched"
+    )
+    
+    class Meta:
+        model = Test_Import_Finding_Action
+        fields = ["finding", "action"]
+
+
 class TestImportSerializer(serializers.ModelSerializer):
-    # findings = TestImportFindingActionSerializer(source='test_import_finding_action', many=True, read_only=True)
+    # Read-only nested representation
     test_import_finding_action_set = TestImportFindingActionSerializer(
         many=True, read_only=True,
+    )
+    # Write-only nested data
+    test_import_finding_action_set_write = TestImportFindingActionWriteSerializer(
+        source="test_import_finding_action_set",
+        many=True, 
+        write_only=True,
+        required=False,
+        help_text="Create Test_Import_Finding_Action records associated with this import"
+    )
+    test = serializers.PrimaryKeyRelatedField(
+        queryset=Test.objects.all(),
+        required=True,
+        help_text="The test this import is associated with (required)"
     )
 
     class Meta:
         model = Test_Import
         fields = "__all__"
+        read_only_fields = ["id", "created", "modified", "findings_affected", "test_import_finding_action_set"]
+
+    def create(self, validated_data):
+        """Create Test_Import and associated Test_Import_Finding_Action records"""
+        actions_data = validated_data.pop('test_import_finding_action_set', [])
+        test_import = Test_Import.objects.create(**validated_data)
+        
+        # Create Test_Import_Finding_Action records
+        for action_data in actions_data:
+            Test_Import_Finding_Action.objects.create(
+                test_import=test_import,
+                **action_data
+            )
+        
+        return test_import
 
 
 class RiskAcceptanceSerializer(serializers.ModelSerializer):
