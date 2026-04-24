@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from dojo.models import Engagement, Product, Product_Type
 
-class EngagementRequestSecuritypostureSerializer(serializers.Serializer):
+class EngagementRequestRiskpostureSerializer(serializers.Serializer):
     engagement_name = serializers.SlugRelatedField(
         slug_field='name',
         queryset=Engagement.objects.all(),
@@ -48,7 +48,7 @@ class EngagementSeveritySerializer(serializers.Serializer):
 
 
 
-class EngagementSecuritypostureSerializer(serializers.Serializer):
+class EngagementRiskpostureSerializer(serializers.Serializer):
     engagement_name = serializers.CharField(required=False)
     engagement_id = serializers.PrimaryKeyRelatedField(
         queryset=Engagement.objects.all(), many=False, allow_null=True,
@@ -69,8 +69,8 @@ class EngagementSecuritypostureSerializer(serializers.Serializer):
     status = serializers.CharField()
 
 
-# Product Security Posture Serializers
-class ProductRequestSecurityPostureSerializer(serializers.Serializer):
+# Product Risk Posture Serializers
+class ProductRequestRiskPostureSerializer(serializers.Serializer):
     product_id = serializers.PrimaryKeyRelatedField(
         queryset=Product.objects.all(), many=False, required=False, allow_null=True,
     )
@@ -103,7 +103,7 @@ class EngagementSummarySerializer(serializers.Serializer):
 
 
 class HCParticipationEvaluationSummarySerializer(serializers.Serializer):
-    """Serializer for HC participation evaluation summary in security posture"""
+    """Serializer for HC participation evaluation summary in risk posture"""
     evaluation_id = serializers.CharField(required=False, allow_null=True)
     evaluation_date = serializers.CharField(required=False, allow_null=True)
     recommendation = serializers.CharField(required=False, allow_null=True)
@@ -112,7 +112,7 @@ class HCParticipationEvaluationSummarySerializer(serializers.Serializer):
     evaluated_by = serializers.CharField(required=False, allow_null=True)
 
 
-class ProductSecurityPostureSerializer(serializers.Serializer):
+class ProductRiskPostureSerializer(serializers.Serializer):
     product_id = serializers.IntegerField()
     product_name = serializers.CharField()
     severity_product = serializers.CharField(required=False, allow_null=True)
@@ -133,8 +133,8 @@ class ProductSecurityPostureSerializer(serializers.Serializer):
         required=False, allow_null=True
     )
 
-# Product Type Security Posture Serializers
-class ProductTypeRequestSecurityPostureSerializer(serializers.Serializer):
+# Product Type Risk Posture Serializers
+class ProductTypeRequestRiskPostureSerializer(serializers.Serializer):
     product_type_id = serializers.PrimaryKeyRelatedField(
         queryset=Product_Type.objects.all(), many=False, required=False, allow_null=True,
     )
@@ -155,7 +155,7 @@ class ProductTypeRequestSecurityPostureSerializer(serializers.Serializer):
         
         return data
     
-class ProductTypeSecurityPostureSerializer(serializers.Serializer):
+class ProductTypeRiskPostureSerializer(serializers.Serializer):
     product_type_id = serializers.IntegerField()
     product_type_name = serializers.CharField()
     counter_active_findings = serializers.IntegerField()

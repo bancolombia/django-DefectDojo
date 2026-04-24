@@ -9,8 +9,8 @@ from dojo.authorization.authorization_decorators import user_is_authorized
 
 
 @dojo_ratelimit_view()
-def engagement_security_posture_view(request: HttpRequest) -> HttpResponse:
-    page_name = ('engagement_security_posture')
+def engagement_risk_posture_view(request: HttpRequest) -> HttpResponse:
+    page_name = ('engagement_risk_posture')
     engagement_id = request.GET.get('engagement_id')
     engagement_name = request.GET.get('engagement_name')
     user = request.user.id
@@ -27,8 +27,8 @@ def engagement_security_posture_view(request: HttpRequest) -> HttpResponse:
 
 
 @dojo_ratelimit_view()
-def product_security_posture_view(request: HttpRequest) -> HttpResponse:
-    page_name = ('product_security_posture')
+def product_risk_posture_view(request: HttpRequest) -> HttpResponse:
+    page_name = ('product_risk_posture')
     product_id = request.GET.get('product_id')
     product_name = request.GET.get('product_name')
     user = request.user.id
@@ -44,8 +44,8 @@ def product_security_posture_view(request: HttpRequest) -> HttpResponse:
         'user': user})
 
 @dojo_ratelimit_view()
-def product_type_security_posture_view(request: HttpRequest) -> HttpResponse:
-    page_name = ('product_type_security_posture')
+def product_type_risk_posture_view(request: HttpRequest) -> HttpResponse:
+    page_name = ('product_type_risk_posture')
     product_type_id = request.GET.get('product_type_id')
     product_type_name = request.GET.get('product_type_name')
     user = request.user.id

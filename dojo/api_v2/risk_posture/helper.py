@@ -28,7 +28,7 @@ def _get_hc_participation_evaluation(product_id: int) -> dict:
         return None
 
 def calculate_posture(result):
-    posture_status_dict = GeneralSettings.get_value("SECURITY_POSTURE_STATUS", {})
+    posture_status_dict = GeneralSettings.get_value("RISK_POSTURE_STATUS", {})
     for key, value in posture_status_dict.items():
         if result <= value:
             return key
@@ -147,7 +147,7 @@ def is_in_hacking_continuous(test, data, test_tags=None, hacking_tags=None, days
             return True
 
         detail = (
-            "SECURITY POSTURE: Test %s has Hacking Continuous tag but last update is older than %s days",
+            "RISK POSTURE: Test %s has Hacking Continuous tag but last update is older than %s days",
             test.id,
             valid_days_tolerance,
         )
@@ -201,7 +201,7 @@ def _resolve_product_type(product_type, product_type_name):
     return None
 
 
-def get_engagement_security_posture(engagement: Engagement, engagement_name: str):
+def get_engagement_risk_posture(engagement: Engagement, engagement_name: str):
     data = {}
     engagement = _resolve_engagement(engagement, engagement_name)
     if not engagement:
@@ -229,7 +229,7 @@ def get_engagement_security_posture(engagement: Engagement, engagement_name: str
     return data
 
 
-def get_product_security_posture(product: Product, product_name: str):
+def get_product_risk_posture(product: Product, product_name: str):
     data = {}
     product = _resolve_product(product, product_name)
     if not product:
@@ -287,7 +287,7 @@ def get_product_security_posture(product: Product, product_name: str):
     return data
 
 
-def get_product_type_security_posture(product_type: Product_Type, product_type_name: str):
+def get_product_type_risk_posture(product_type: Product_Type, product_type_name: str):
     data = {}
     product_type = _resolve_product_type(product_type, product_type_name)
     if not product_type:
