@@ -87,11 +87,6 @@ from dojo.utils import (
     process_tag_notifications,
     redirect_to_return_url_or_else,
 )
-from dojo.engine_tools.helpers import (
-    calculate_priority_epss_kev_finding,
-    get_severity_risk_map,
-)
-
 logger = logging.getLogger(__name__)
 parse_logger = logging.getLogger("dojo")
 deduplicationLogger = logging.getLogger("dojo.specific-loggers.deduplication")
@@ -537,23 +532,13 @@ class AddFindingView(View):
             finding.reporter = request.user
             finding.numerical_severity = Finding.get_numerical_severity(finding.severity)
             finding.tags = context["form"].cleaned_data["tags"]
-            finding.unsaved_vulnerability_ids = context["form"].cleaned_data["vulnerability_ids"].split()
             finding.save()
+            finding_helper.save_vulnerability_ids(
+                finding, context["form"].cleaned_data["vulnerability_ids"].split()
+            )
             # Save and add new endpoints
             finding_helper.add_endpoints(finding, context["form"])
-            severity_risk_map = get_severity_risk_map()
-            (
-                priority,
-                _,
-                _,
-                _,
-                _,
-                _,
-                _,
-            ) = calculate_priority_epss_kev_finding(
-                finding, severity_risk_map, None, None, None
-            )
-            finding.priority = priority
+            context["form"].apply_priority(finding)
             # Save the finding at the end and return
             finding.save()
 
@@ -621,7 +606,6 @@ class AddFindingView(View):
         # Check the validity of all the forms
         if all_forms_valid:
             # if we're removing the "duplicate" in the edit finding screen
-            finding_helper.save_vulnerability_ids(finding, context["form"].cleaned_data["vulnerability_ids"].split())
             # Push things to jira if needed
             finding.save(push_to_jira=push_to_jira)
             # Save the burp req resp
@@ -736,9 +720,13 @@ def add_temp_finding(request, tid, fid):
             finding_helper.update_finding_status(new_finding, request.user)
 
             new_finding.save(dedupe_option=False)
+            finding_helper.save_vulnerability_ids(
+                new_finding, form.cleaned_data["vulnerability_ids"].split()
+            )
 
             # Save and add new endpoints
             finding_helper.add_endpoints(new_finding, form)
+            form.apply_priority(new_finding)
 
             new_finding.save()
             if "jiraform-push_to_jira" in request.POST:

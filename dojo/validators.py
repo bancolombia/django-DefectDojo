@@ -5,12 +5,16 @@ from collections.abc import Callable
 import cvss
 from cvss import CVSS2, CVSS3, CVSS4
 from django.conf import settings
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.validators import FileExtensionValidator
 
 logger = logging.getLogger(__name__)
 
 TAG_PATTERN = re.compile(r'[ ,\'"]')  # Matches spaces, commas, single quotes, double quotes
+
+# TTL (seconds) for cached tag PKs. Tags are rarely deleted; 1 h is a safe default.
+_TAG_CACHE_TTL = 3600
 
 
 def tag_validator(value: str | list[str], exception_class: Callable = ValidationError) -> None:
@@ -47,6 +51,53 @@ def clean_tags(value: str | list[str], exception_class: Callable = ValidationErr
 
     msg = f"Value must be a string or list of strings: {value} - {type(value)}."
     raise exception_class(msg)
+
+
+def resolve_persisted_tags(tag_manager, value: str | list[str]) -> list:
+    if not value:
+        return []
+
+    if isinstance(value, str):
+        tag_names = [value]
+    else:
+        tag_names = value
+
+    case_sensitive = tag_manager.tag_options.case_sensitive
+    force_lowercase = tag_manager.tag_options.force_lowercase
+    tag_model = tag_manager.tag_model
+    model_label = tag_model._meta.label_lower
+    resolved_tags = []
+    seen_names = set()
+
+    for raw_name in tag_names:
+        tag_name = str(raw_name)
+        if force_lowercase:
+            tag_name = tag_name.lower()
+
+        normalized_name = tag_name if case_sensitive else tag_name.lower()
+        if normalized_name in seen_names:
+            continue
+        seen_names.add(normalized_name)
+
+        django_cache_key = f"tagpk:{model_label}:{'cs' if case_sensitive else 'ci'}:{normalized_name}"
+        tag_pk = cache.get(django_cache_key)
+
+        if tag_pk is not None:
+            tag = tag_model.objects.filter(pk=tag_pk).first()
+            if tag is None:
+                cache.delete(django_cache_key)
+
+        if tag_pk is None or tag is None:
+            field_lookup = {"name": tag_name} if case_sensitive else {"name__iexact": tag_name}
+            tag, __ = tag_model.objects.get_or_create(
+                defaults={"name": tag_name, "protected": False},
+                **field_lookup,
+            )
+            cache.set(django_cache_key, tag.pk, _TAG_CACHE_TTL)
+
+        resolved_tags.append(tag)
+
+    return resolved_tags
 
 
 def cvss3_validator(value: str | list[str], exception_class: Callable = ValidationError) -> None:

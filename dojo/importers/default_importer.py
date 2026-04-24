@@ -19,7 +19,7 @@ from dojo.models import (
     System_Settings
 )
 from dojo.notifications.helper import create_notification
-from dojo.validators import clean_tags
+from dojo.validators import clean_tags, resolve_persisted_tags
 
 logger = logging.getLogger(__name__)
 deduplicationLogger = logging.getLogger("dojo.specific-loggers.deduplication")
@@ -151,7 +151,7 @@ class DefaultImporter(BaseImporter, DefaultImporterOptions):
         logger.debug("IMPORT_SCAN: Updating Test progress")
         self.update_test_progress()
         finding_ids = [finding.id for finding in new_findings]
-        BaseImporter.update_priority_epss_kev.apply_async(args=[finding_ids])
+        BaseImporter.update_priority_epss_kev.apply_async(args=(finding_ids, self.test))
         logger.debug("IMPORT_SCAN: Done")
         return self.test, 0, len(new_findings), len(closed_findings), 0, 0, test_import_history
 
@@ -228,7 +228,7 @@ class DefaultImporter(BaseImporter, DefaultImporterOptions):
             # Process any endpoints on the endpoint, or added on the form
             self.process_endpoints(finding, self.endpoints_to_add)
             # Parsers must use unsaved_tags to store tags, so we can clean them
-            finding.tags = clean_tags(finding.unsaved_tags)
+            finding.tags.set(resolve_persisted_tags(finding.tags, clean_tags(finding.unsaved_tags)))
             # Process any files
             self.process_files(finding)
             # Process vulnerability IDs

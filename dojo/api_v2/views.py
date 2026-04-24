@@ -1661,7 +1661,7 @@ class FindingViewSet(
         """
         serializer = FindingBulkUpdateSLAStartDateSerializer(data=request.data)
         if serializer.is_valid():
-            async_bulk_update_sla_start_date.apply_async(args=(serializer.validated_data["tags"], serializer.validated_data["priority"], serializer.validated_data["date"]))
+            async_bulk_update_sla_start_date.apply_async(args=(serializer.validated_data["tags"], serializer.validated_data["priority_classification"], serializer.validated_data["date"]))
             return Response(
                 {"Success": "SLA start date updated successfully."},
                 status=status.HTTP_202_ACCEPTED,
@@ -3757,7 +3757,7 @@ class TransferFindingFindingsViewSet(prefetch.PrefetchListMixin,
             instance = TransferFindingFindingsSerializer(created, many=True)
             NotificationTransferFinding.transfer_finding_request(transfer_finding)
         else:
-            return http_response.bad_request(data=instance.errors)
+            return http_response.bad_request(data=serializer.errors)
         return http_response.created(message="Transfer Finding Finding Created", data=instance.data)
 
     @extend_schema(

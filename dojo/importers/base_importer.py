@@ -9,6 +9,7 @@ from django.core.files.uploadedfile import TemporaryUploadedFile
 from django.db import IntegrityError
 from django.urls import reverse
 from django.utils.timezone import make_aware
+from django.core.cache import cache
 
 import dojo.finding.helper as finding_helper
 from dojo.importers.endpoint_manager import EndpointManager
@@ -35,7 +36,7 @@ from dojo.models import (
 from dojo.notifications.helper import create_notification, EmailNotificationManger
 from dojo.tools.factory import get_parser
 from dojo.tools.parser_test import ParserTest
-from dojo.utils import max_safe
+from dojo.utils import max_safe, azure_devops_sprint_sla_start_date_enabled
 from dojo.engine_tools.helpers import (
     get_risk_priority_epss_kev_data,
     calculate_priority_epss_kev_finding,
@@ -872,9 +873,8 @@ class BaseImporter(ImporterOptions):
                     settings.PROVIDERS_CYBERSECURITY_EMAIL.get("redteam", []).split(":")
                 ),
             )
-
     @app.task
-    def update_priority_epss_kev(finding_ids: list[int]) -> None:
+    def update_priority_epss_kev(finding_ids: list[int], test) -> None:
         """
         Get priority, EPSS score and KEV status update for a list of finding ids
         """
@@ -924,6 +924,13 @@ class BaseImporter(ImporterOptions):
         findings_to_update = []
         total_processed = 0
 
+        enabled_azure_devops_sprint_sla_start_date = azure_devops_sprint_sla_start_date_enabled(test)
+        next_sprint_start_date = None
+        if enabled_azure_devops_sprint_sla_start_date:
+            logger.info("IMPORT_SCAN: Azure DevOps Sprint SLA Start Date is enabled, fetching next sprint start date from cache")
+            next_sprint_start_date = cache.get("azure_devops_next_sprint_start_date")
+            logger.info(f"IMPORT_SCAN: Next Azure DevOps Sprint Start Date from cache: {next_sprint_start_date}")
+
         for finding in findings:
             # Calculate priority and EPSS/KEV data
             (
@@ -940,6 +947,8 @@ class BaseImporter(ImporterOptions):
 
             # Update finding attributes
             finding.priority = priority
+            if enabled_azure_devops_sprint_sla_start_date and next_sprint_start_date:
+                finding.sla_start_date = next_sprint_start_date
             finding.set_sla_expiration_date()
             finding.epss_score = epss_score
             finding.epss_percentile = epss_percentile
@@ -956,6 +965,7 @@ class BaseImporter(ImporterOptions):
                     [
                         "priority",
                         "sla_expiration_date",
+                        "sla_start_date",
                         "epss_score",
                         "epss_percentile",
                         "known_exploited",
@@ -977,6 +987,7 @@ class BaseImporter(ImporterOptions):
                 [
                     "priority",
                     "sla_expiration_date",
+                    "sla_start_date",
                     "epss_score",
                     "epss_percentile",
                     "known_exploited",

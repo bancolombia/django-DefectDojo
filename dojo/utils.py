@@ -75,6 +75,7 @@ from dojo.models import (
     System_Settings,
     Test,
     User,
+    GeneralSettings
 )
 from dojo.notifications.helper import create_notification
 
@@ -1489,61 +1490,81 @@ def reopen_external_issue(find, note, external_issue_provider, **kwargs):
 
 
 @app.task
-def async_bulk_update_sla_start_date(tags, priority, sla_start_date):
+def async_bulk_update_sla_start_date(tags, priority_classification, sla_start_date):
     """
-    bulk update of SLA start dates for findings with specific tags and priority.
+    Bulk update of SLA start dates for findings with specific tags and priority.
     Uses the existing set_sla_expiration_date method from the Finding model.
-    
+
     Args:
-        tags (str): Comma-separated tags or single tag to filter findings
-        priority (float): Priority value to filter findings
+        tags (str): Comma-separated finding tags to filter findings
+        priority_classification (str): Comma-separated priority labels using the same
+            format as the API filter priority_classification
+            (e.g. "Very Critical,Critical").
+            Valid values: Unknown, Medium Low, High, Critical, Very Critical
         sla_start_date (date): New SLA start date to set
-    
+
     Returns:
         int: Number of findings updated
     """
+    from dojo.filters import FindingPriorityFilter  # noqa: PLC0415 — local import to avoid circular dependency
 
-    # Convertir tags a lista para optimización de query
-    tags_list = [tag.strip() for tag in tags.split(',') if tag.strip()] if ',' in tags else [tags.strip()]
+    tags_list = [tag.strip() for tag in tags.split(",") if tag.strip()]
 
-    logger.info("Starting bulk SLA update for tags: %s and priority gte: %s with new SLA start date: %s", tags_list, priority, sla_start_date)
+    priority_map = {
+        "Very Critical": 4,
+        "Critical": 3,
+        "High": 2,
+        "Medium Low": 1,
+        "Unknown": 0,
+    }
+    priorities = [p.strip() for p in priority_classification.split(",") if p.strip()]
+    invalid = [p for p in priorities if p not in priority_map]
+    if invalid:
+        logger.error(
+            "async_bulk_update_sla_start_date: invalid priority values %s. "
+            "Valid values: %s",
+            invalid,
+            list(priority_map.keys()),
+        )
+        return 0
 
-    # Optimización 1: Query más eficiente con prefetch y select_related
-    findings_queryset = (
-        Finding.objects.filter(
-            active=True,
-            tags__name__in=tags_list,  # Usar __in en lugar de __icontains para mejor performance
-        )
-        .annotate(
-            priority_rounded=Round("priority", 2)  # Redondear priority a 2 decimales
-        )
-        .filter(
-            priority_rounded__gte=priority,  # Usar el campo redondeado para la comparación
-        )
-        .select_related(
-            "test__engagement__product__prod_type",  # Prefetch relaciones necesarias para SLA
-            "test__test_type",
-        )
-        .prefetch_related("tags")
-        .distinct()
-    )  # Evitar duplicados por múltiples tags
+    numeric_values = [str(priority_map[p]) for p in priorities]
+
+    logger.info(
+        "Starting bulk SLA update for tags: %s, priority_classification: %s, new SLA start date: %s",
+        tags_list,
+        priorities,
+        sla_start_date,
+    )
+
+    base_qs = Finding.objects.filter(
+        active=True,
+        tags__name__in=tags_list,
+    ).select_related(
+        "test__engagement__product__prod_type",
+        "test__test_type",
+    ).prefetch_related("tags")
+
+    # Delegar el filtro de prioridad a FindingPriorityFilter, igual que en ApiFindingFilter
+    findings_queryset = FindingPriorityFilter().filter(base_qs, numeric_values).distinct()
 
     findings_count = findings_queryset.count()
 
     if findings_count == 0:
-        logger.info("No findings found with tags: %s", tags_list)
+        logger.info(
+            "No findings found with tags: %s and priority_classification: %s",
+            tags_list,
+            priorities,
+        )
         return 0
 
     logger.info("Found %s findings to update SLA start date", findings_count)
 
-    # Optimización 2: Procesar en chunks para mejor manejo de memoria
     CHUNK_SIZE = 10000
     total_updated = 0
 
     try:
-        # Usar transacción para consistencia de datos
         with transaction.atomic():
-            # Optimización 3: Usar iterator() para procesar en chunks sin cargar todo en memoria
             for chunk_start in range(0, findings_count, CHUNK_SIZE):
                 chunk_findings = list(
                     findings_queryset[chunk_start:chunk_start + CHUNK_SIZE].iterator(chunk_size=CHUNK_SIZE)
@@ -1551,43 +1572,36 @@ def async_bulk_update_sla_start_date(tags, priority, sla_start_date):
 
                 findings_to_update = []
 
-                # Optimización 4: Procesar findings en lotes usando el método del modelo
                 for finding in chunk_findings:
-                    # Actualizar la fecha de inicio del SLA
                     finding.sla_start_date = sla_start_date
-
-                    # Usar la función existente del modelo Finding para calcular la fecha de expiración
                     finding.set_sla_expiration_date()
-
                     findings_to_update.append(finding)
 
-                # Optimización 5: Bulk update con campos específicos
                 if findings_to_update:
                     Finding.objects.bulk_update(
-                        findings_to_update, 
-                        ["sla_start_date", "sla_expiration_date"], 
-                        batch_size=CHUNK_SIZE
+                        findings_to_update,
+                        ["sla_start_date", "sla_expiration_date"],
+                        batch_size=CHUNK_SIZE,
                     )
-
                     total_updated += len(findings_to_update)
-
-                    # Log de progreso cada chunk
                     progress_percentage = (total_updated / findings_count) * 100
                     logger.info(
-                        "SLA update progress: %s/%s findings processed (%.1f%%)", 
-                        total_updated, 
+                        "SLA update progress: %s/%s findings processed (%.1f%%)",
+                        total_updated,
                         findings_count,
-                        progress_percentage
+                        progress_percentage,
                     )
 
-        logger.info("Bulk SLA update completed successfully: %s findings updated with tags: %s and priority gte: %s", 
-                   total_updated, tags_list, priority)
-
+        logger.info(
+            "Bulk SLA update completed: %s findings updated with tags: %s and priority_classification: %s",
+            total_updated,
+            tags_list,
+            priorities,
+        )
         return total_updated
 
     except Exception as e:
         logger.error("Error during bulk SLA update: %s", str(e))
-        # Rollback automático por transaction.atomic()
         raise
 
 
@@ -2979,3 +2993,35 @@ def validate_type_file(file, allowed_exts):
             raise ValidationError("Server error")
 
         return file
+
+def azure_devops_sprint_sla_start_date_enabled(test):
+    """Check if Azure DevOps Sprint SLA start date feature is enabled for the given test.
+    NOTE: This function calls test.tags.all() — call it once per import, not per-finding.
+    """
+    if not GeneralSettings.get_status(
+        "ENABLE_AZURE_DEVOPS_SPRINT_SLA_START_DATE", default=False
+    ):
+        logger.info(
+            "ENABLE_AZURE_DEVOPS_SPRINT_SLA_START_DATE is disabled"
+        )
+        return False
+
+    allowed_tags = GeneralSettings.get_value(
+        "AZURE_DEVOPS_SPRINT_SLA_START_DATE_TEST_TAGS", default=None
+    )
+    allowed_tags_lower = {
+        tag.strip().lower() for tag in allowed_tags or [] if str(tag).strip()
+    }
+    if allowed_tags_lower:
+        test_tags = {tag.name.lower() for tag in test.tags.all()}
+        if not test_tags.intersection(allowed_tags_lower):
+            logger.info(
+                "ENABLE_AZURE_DEVOPS_SPRINT_SLA_START_DATE is enabled but test tags do not match AZURE_DEVOPS_SPRINT_SLA_START_DATE_TEST_TAGS"
+            )
+            return False
+    else:
+        logger.info(
+            "ENABLE_AZURE_DEVOPS_SPRINT_SLA_START_DATE is enabled but no tags configured for AZURE_DEVOPS_SPRINT_SLA_START_DATE_TEST_TAGS"
+        )
+        return False
+    return True
