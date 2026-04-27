@@ -94,7 +94,7 @@ opentelemetry-exporter-otlp-proto-common==1.41.0
 opentelemetry-exporter-otlp-proto-grpc==1.41.0
 opentelemetry-exporter-otlp-proto-http==1.41.0
 opentelemetry-instrumentation-wsgi==0.62b0
-opentelemetry-proto==1.41.0
+opentelemetry-proto==1.41.1
 opentelemetry-semantic-conventions==0.62b0
 opentelemetry-instrumentation==0.62b0
 django-redis==6.0.0
