@@ -306,7 +306,7 @@ def send_notification_transfer_finding(transfer_findings, status="accepted"):
         icon=dict_rule[status]["icon"],
         color_icon=dict_rule[status]["color_icon"],
         recipients=[transfer_findings.owner.get_username()],
-        url=reverse("view_transfer_finding", args=(pid,)),
+        url=reverse("product", args=(pid,)),
     )
 
 

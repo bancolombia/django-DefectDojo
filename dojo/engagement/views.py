@@ -1652,7 +1652,7 @@ def add_transfer_finding(request, eid, fid=None):
                 'Transfer Finding saved.',
                 extra_tags='alert-success')
 
-            return redirect_to_return_url_or_else(request, reverse('view_transfer_finding', args=(product.id, )))
+            return redirect_to_return_url_or_else(request, reverse('product', args=(product.id, )))
         else:
             logger.error(form.errors)
     else:

@@ -53,7 +53,7 @@ class TransferFindingDeleteView(View):
         if helper_tf.delete_transfer_finding_finding(transfer_finding):
             request, success = self.process_form(request, transfer_finding, context)
             if success:
-                return redirect_to_return_url_or_else(request, reverse("view_transfer_finding", args=(transfer_finding.destination_product.id,)))
+                return redirect_to_return_url_or_else(request, reverse("product", args=(transfer_finding.destination_product.id,)))
             raise PermissionDenied
         else:
             raise InterruptedError
@@ -74,7 +74,7 @@ class TransferFindingUpdateView(View):
 
         if form.is_valid():
             form.save()
-            return redirect_to_return_url_or_else(request, reverse("view_transfer_finding", args=(transfer_finding.destination_product.id,)))
+            return redirect_to_return_url_or_else(request, reverse("product", args=(transfer_finding.destination_product.id,)))
 
         return render(request, self.get_template(), {'form': form})
 
