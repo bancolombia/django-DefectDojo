@@ -53,7 +53,7 @@ class TransferFindingDeleteView(View):
         if helper_tf.delete_transfer_finding_finding(transfer_finding):
             request, success = self.process_form(request, transfer_finding, context)
             if success:
-                return redirect_to_return_url_or_else(request, reverse("view_transfer_finding", args=(transfer_finding.destination_product.id,)))
+                return redirect_to_return_url_or_else(request, reverse("product", args=(transfer_finding.destination_product.id,)))
             raise PermissionDenied
         else:
             raise InterruptedError
@@ -74,7 +74,7 @@ class TransferFindingUpdateView(View):
 
         if form.is_valid():
             form.save()
-            return redirect_to_return_url_or_else(request, reverse("view_transfer_finding", args=(transfer_finding.destination_product.id,)))
+            return redirect_to_return_url_or_else(request, reverse("product", args=(transfer_finding.destination_product.id,)))
 
         return render(request, self.get_template(), {'form': form})
 
@@ -91,4 +91,18 @@ def view_transfer_finding_v2(request: HttpRequest, pk: int) -> HttpResponse:
     return render(request, 'dojo/generic_view.html', {
         'actions': page_name,
         'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/findings/detail-transfer{base_params}",
+        'user': user})
+
+@dojo_ratelimit_view()
+def view_list_transfer_finding_v2(request: HttpRequest, pk: int) -> HttpResponse:
+    page_name = ('view_list_transfer_finding')
+    user = request.user.id
+    cookie_csrftoken = get_token(request)
+    cookie_sessionid = request.COOKIES.get('sessionid', '')
+    base_params = f"?csrftoken={cookie_csrftoken}&sessionid={cookie_sessionid}"
+    base_params += f"&product={pk}"
+    add_breadcrumb(title=page_name, request=request, top_level=False)
+    return render(request, 'dojo/generic_view.html', {
+        'actions': page_name,
+        'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/findings/list-transfer{base_params}",
         'user': user})

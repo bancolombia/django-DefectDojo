@@ -2108,13 +2108,3 @@ def add_product_group(request, pid):
         "form": group_form,
         "product_tab": product_tab,
     })
-
-
-@dojo_ratelimit_view()
-def view_transfer_finding(request, pid=None):
-    pt = get_object_or_404(Product, id=pid)
-    transfer_finding = TransferFinding.objects.filter(origin_product=pt) | TransferFinding.objects.filter(destination_product=pt).order_by('-id')
-    paginator = Paginator(transfer_finding, 25)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
-    return render(request, 'dojo/view_transfer_finding.html', {'page_obj': page_obj})
