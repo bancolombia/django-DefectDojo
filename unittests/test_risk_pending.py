@@ -309,6 +309,7 @@ class SearchFindingCorrelatedTests(TestCase):
         self.finding2.cve = "CVE-2025-4802"
         self.finding2.vuln_id_from_tool = "CVE-2025-4802"
         self.finding2.tags.add("test_tag")
+        self.finding2.risk_status="Risk Accepted"
         self.finding2.save()
 
         self.risk_acceptance.accepted_findings.add(self.finding2)

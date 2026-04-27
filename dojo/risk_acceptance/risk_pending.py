@@ -630,14 +630,16 @@ def add_finding_correlated(entry_findings, queryset):
             accepted_findings__cve__in=finding.vulnerability_ids,
             accepted_findings__priority=finding.priority,
             accepted_findings__severity=finding.severity,
-            accepted_findings__tags__name__in=tags_enable
+            accepted_findings__tags__name__in=tags_enable,
+            accepted_findings__risk_status="Risk Accepted"
             ).order_by("-created")
         if not risk_acceptance_query.exists():
             risk_acceptance_query = queryset.filter(
                 accepted_findings__vuln_id_from_tool=finding.vuln_id_from_tool,
                 accepted_findings__priority=finding.priority,
                 accepted_findings__severity=finding.severity,
-                accepted_findings__tags__name__in=tags_enable
+                accepted_findings__tags__name__in=tags_enable,
+                accepted_findings__risk_status="Risk Accepted"
                 ).order_by("-created")
         # add finding a risk-acceptance
         if risk_acceptance_query:

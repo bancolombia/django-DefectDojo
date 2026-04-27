@@ -806,7 +806,7 @@ def finding_display_status(finding, event="view"):
             reverse_whitelist = reverse('finding_exclusion', args=(finding_exclusion.pk,))
 
     dict_rule_reverse = {
-        "view_transfer": reverse("view_transfer_finding", args=(finding.test.engagement.product.id, )),
+        "view_transfer": reverse("view_details_transfer_finding", args=(finding.transfer_finding.id, )) if finding.transfer_finding else None,
         "view_risk": reverse_risk_acceptance, 
         "view_review": reverse("clear_finding_review", args=(finding.id, )),
         "view_finding": reverse("view_finding", args=(finding.id, )),
