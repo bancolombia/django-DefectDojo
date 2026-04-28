@@ -115,7 +115,7 @@ six==1.17.0
 attrs==26.1.0
 idna==3.13
 importlib-metadata==8.7.1
-packaging==26.1
+packaging==26.2
 pysaml2==7.5.0
 click-repl==0.3.0
 pycparser==3.0
