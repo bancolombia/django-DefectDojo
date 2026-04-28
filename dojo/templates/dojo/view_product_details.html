@@ -488,11 +488,11 @@
             <td style="width: 160px;"><strong>{% trans "Business Criticality" %}</strong></td>
             <td>{{ prod.get_business_criticality_display|notspecified }}</td>
           </tr>
-          {% if "ENABLE_SECURITY_POSTURE"|general_settings_get_value:"False"%}
+          {% if "ENABLE_RISK_POSTURE"|general_settings_get_value:"False"%}
           <tr>
-              <td style="width: 150px;"><strong>Security Posture</strong></td>
+              <td style="width: 150px;"><strong>Risk Posture</strong></td>
                   <td>
-                        <a href="{% url 'product_security_posture_view' %}?product_id={{ prod.id }}" class="has-popover" data-trigger="hover" data-placement="right" data-container="body" data-original-title="Details security posture">
+                        <a href="{% url 'product_risk_posture_view' %}?product_id={{ prod.id }}" class="has-popover" data-trigger="hover" data-placement="right" data-container="body" data-original-title="Details risk posture">
                       <span style="background-color: #FF7F41;" class="pass_fail Pass">View Details</span></a>
                   </td>
           </tr>

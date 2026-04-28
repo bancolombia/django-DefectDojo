@@ -8,14 +8,14 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.pagination import LimitOffsetPagination
 from django.core.cache import cache
-from dojo.api_v2.security_posture.helper import get_engagement_security_posture, get_product_security_posture, get_product_type_security_posture
-from dojo.api_v2.security_posture.serializers import (
-    EngagementRequestSecuritypostureSerializer,
-    EngagementSecuritypostureSerializer,
-    ProductRequestSecurityPostureSerializer,
-    ProductSecurityPostureSerializer,
-    ProductTypeRequestSecurityPostureSerializer,
-    ProductTypeSecurityPostureSerializer
+from dojo.api_v2.risk_posture.helper import get_engagement_risk_posture, get_product_risk_posture, get_product_type_risk_posture
+from dojo.api_v2.risk_posture.serializers import (
+    EngagementRequestRiskpostureSerializer,
+    EngagementRiskpostureSerializer,
+    ProductRequestRiskPostureSerializer,
+    ProductRiskPostureSerializer,
+    ProductTypeRequestRiskPostureSerializer,
+    ProductTypeRiskPostureSerializer
     )
 from dojo.api_v2.api_error import ApiError
 from dojo.models import Finding
@@ -28,28 +28,28 @@ from dojo.api_v2 import (
 logger = logging.getLogger(__name__)
 
 
-class EngagementSecurityPosture(GenericAPIView):
+class EngagementRiskPosture(GenericAPIView):
     permission_classes = (
         IsAuthenticated,
         permissions.UserHasEngagementPermission,)
-    serializer_class = EngagementSecuritypostureSerializer
+    serializer_class = EngagementRiskpostureSerializer
     pagination_class = LimitOffsetPagination
 
     @extend_schema(
-        request=EngagementRequestSecuritypostureSerializer,
-        responses={status.HTTP_200_OK: EngagementSecuritypostureSerializer},
+        request=EngagementRequestRiskpostureSerializer,
+        responses={status.HTTP_200_OK: EngagementRiskpostureSerializer},
     )
     def get(self, request):
-        serializer = EngagementRequestSecuritypostureSerializer(
+        serializer = EngagementRequestRiskpostureSerializer(
             data=request.query_params)
         if serializer.is_valid():
             engagement = serializer.validated_data.get("engagement_id", None)
             engagement_name = serializer.validated_data.get("engagement_name", None)
-            response = get_engagement_security_posture(engagement, engagement_name)
-            serializer_response = EngagementSecuritypostureSerializer(data=response)
+            response = get_engagement_risk_posture(engagement, engagement_name)
+            serializer_response = EngagementRiskpostureSerializer(data=response)
             if serializer_response.is_valid():
                 return http_response.ok(
-                    message="Engagement Security Posture Retrieved",
+                    message="Engagement Risk Posture Retrieved",
                     data=serializer_response.data)
             else:
                 logger.error(serializer_response.errors)
@@ -60,28 +60,28 @@ class EngagementSecurityPosture(GenericAPIView):
                 message="Invalid serializer", data=serializer.errors)
 
 
-class ProductSecurityPosture(GenericAPIView):
+class ProductRiskPosture(GenericAPIView):
     permission_classes = (
         IsAuthenticated,
         permissions.UserHasProductPermission,)
-    serializer_class = ProductSecurityPostureSerializer
+    serializer_class = ProductRiskPostureSerializer
     pagination_class = LimitOffsetPagination
 
     @extend_schema(
-        request=ProductRequestSecurityPostureSerializer,
-        responses={status.HTTP_200_OK: ProductSecurityPostureSerializer},
+        request=ProductRequestRiskPostureSerializer,
+        responses={status.HTTP_200_OK: ProductRiskPostureSerializer},
     )
     def get(self, request):
-        serializer = ProductRequestSecurityPostureSerializer(
+        serializer = ProductRequestRiskPostureSerializer(
             data=request.query_params)
         if serializer.is_valid():
             product = serializer.validated_data.get("product_id", None)
             product_name = serializer.validated_data.get("product_name", None)
-            response = get_product_security_posture(product, product_name)
-            serializer_response = ProductSecurityPostureSerializer(data=response)
+            response = get_product_risk_posture(product, product_name)
+            serializer_response = ProductRiskPostureSerializer(data=response)
             if serializer_response.is_valid():
                 return http_response.ok(
-                    message="Product Security Posture Retrieved",
+                    message="Product Risk Posture Retrieved",
                     data=serializer_response.data)
             else:
                 logger.error(serializer_response.errors)
@@ -91,28 +91,28 @@ class ProductSecurityPosture(GenericAPIView):
             return http_response.bad_request(
                 message="Invalid serializer", data=serializer.errors)
             
-class ProductTypeSecurityPosture(GenericAPIView):
+class ProductTypeRiskPosture(GenericAPIView):
     permission_classes = (
         IsAuthenticated,
         permissions.UserHasProductTypePermission,)
-    serializer_class = ProductTypeSecurityPostureSerializer
+    serializer_class = ProductTypeRiskPostureSerializer
     pagination_class = LimitOffsetPagination
 
     @extend_schema(
-        request=ProductTypeRequestSecurityPostureSerializer,
-        responses={status.HTTP_200_OK: ProductTypeSecurityPostureSerializer},
+        request=ProductTypeRequestRiskPostureSerializer,
+        responses={status.HTTP_200_OK: ProductTypeRiskPostureSerializer},
     )
     def get(self, request):
-        serializer = ProductTypeRequestSecurityPostureSerializer(
+        serializer = ProductTypeRequestRiskPostureSerializer(
             data=request.query_params)
         if serializer.is_valid():
             product_type = serializer.validated_data.get("product_type_id", None)
             product_type_name = serializer.validated_data.get("product_type_name", None)
-            response = get_product_type_security_posture(product_type, product_type_name)
-            serializer_response = ProductTypeSecurityPostureSerializer(data=response)
+            response = get_product_type_risk_posture(product_type, product_type_name)
+            serializer_response = ProductTypeRiskPostureSerializer(data=response)
             if serializer_response.is_valid():
                 return http_response.ok(
-                    message="Product Type Security Posture Retrieved",
+                    message="Product Type Risk Posture Retrieved",
                     data=serializer_response.data)
             else:
                 logger.error(serializer_response.errors)

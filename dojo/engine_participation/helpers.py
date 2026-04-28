@@ -14,7 +14,7 @@ from dojo.celery import app
 from dojo.models import Product, Dojo_Group
 from dojo.group.queries import get_group_members_for_group
 from dojo.notifications.helper import create_notification
-from dojo.api_v2.security_posture.helper import get_product_security_posture
+from dojo.api_v2.risk_posture.helper import get_product_risk_posture as get_product_security_posture
 from dojo.engine_participation.models import HCParticipation, HCParticipationLog
 
 logger = get_task_logger(__name__)

@@ -13,7 +13,7 @@ from dojo.models import (
     GeneralSettings,
     Product_Type,
 )
-from dojo.api_v2.security_posture.helper import (
+from dojo.api_v2.risk_posture.helper import (
     _apply_total_counters,
     _classify_active_findings,
     _init_priority_counter,
@@ -21,12 +21,12 @@ from dojo.api_v2.security_posture.helper import (
     _increment_bucket,
     calculate_posture,
     adoption_devsecops_include,
-    get_product_security_posture,
-    get_product_type_security_posture,
-    get_engagement_security_posture,
+    get_product_risk_posture,
+    get_product_type_risk_posture,
+    get_engagement_risk_posture,
 )
 
-class SecurityPostureAPITest(TestCase):
+class RiskPostureAPITest(TestCase):
     fixtures = ['dojo_testdata.json']
     
     def setUp(self):
@@ -37,13 +37,13 @@ class SecurityPostureAPITest(TestCase):
         token = Token.objects.get(user__username="admin")
         self.client = APIClient()
         self.client.credentials(HTTP_AUTHORIZATION="Token " + token.key)
-        self.url = reverse('engagement_security_posture')
+        self.url = reverse('engagement_risk_posture')
         
         # Create test data
         self.product_type = Product_Type.objects.get(id=1)
         self.product = Product.objects.first()
         self.engagement = Engagement.objects.first()
-        self.engagement.name = "Test Engagement for Security Posture"
+        self.engagement.name = "Test Engagement for Risk Posture"
         self.engagement.save()
         self.test = Test.objects.first()
         
@@ -88,12 +88,12 @@ class SecurityPostureAPITest(TestCase):
         
         self.setup_general_settings()
         
-        self.url = reverse('engagement_security_posture')
+        self.url = reverse('engagement_risk_posture')
 
     def setup_general_settings(self):
         """Configure GeneralSettings for tests"""
         GeneralSettings.objects.get_or_create(
-            name_key='SECURITY_POSTURE_STATUS',
+            name_key='RISK_POSTURE_STATUS',
             defaults={
                 'value': '{"APETITO": 50, "TOLERANCIA": 100, "EXCEDIDO": 150}',
                 'data_type': 'DICT'
@@ -125,8 +125,8 @@ class SecurityPostureAPITest(TestCase):
         )
         
 
-    def test_get_security_posture_with_engagement_id(self):
-        """Test get security posture with valid engagement_id"""
+    def test_get_risk_posture_with_engagement_id(self):
+        """Test get risk posture with valid engagement_id"""
         response = self.client.get(
             self.url,
             {'engagement_id': self.engagement.id},
@@ -151,8 +151,8 @@ class SecurityPostureAPITest(TestCase):
         self.assertIn('counter_transferred_findings', data)
         self.assertIn('counter_onwhitelist_findings', data)
 
-    def test_get_security_posture_with_engagement_name(self):
-        """Test get security posture with valid engagement_name"""
+    def test_get_risk_posture_with_engagement_name(self):
+        """Test get risk posture with valid engagement_name"""
         response = self.client.get(
             f"{self.url}?engagement_name={self.engagement.name}",
             format='json'
@@ -162,7 +162,7 @@ class SecurityPostureAPITest(TestCase):
         data = response.json()['data']
         self.assertEqual(data['engagement_name'], self.engagement.name)
 
-    def test_get_security_posture_missing_parameters(self):
+    def test_get_risk_posture_missing_parameters(self):
         """Test error when required parameters are missing"""
         response = self.client.get(self.url, format='json')
         print("response", response.json())
@@ -171,7 +171,7 @@ class SecurityPostureAPITest(TestCase):
         self.assertIn('Either engagement_id or engagement_name must be provided', 
                      response.json()['data']["non_field_errors"])
 
-    def test_get_security_posture_invalid_engagement_id(self):
+    def test_get_risk_posture_invalid_engagement_id(self):
         """Test error with non-existent engagement_id"""
         response = self.client.get(
             self.url,
@@ -183,7 +183,7 @@ class SecurityPostureAPITest(TestCase):
         self.assertIn('Invalid pk "99999" - object does not exist.',
                       response.json()['data']["engagement_id"])
 
-    def test_get_security_posture_invalid_engagement_name(self):
+    def test_get_risk_posture_invalid_engagement_name(self):
         """Test error with non-existent engagement_name"""
         response = self.client.get(
             self.url,
@@ -193,7 +193,7 @@ class SecurityPostureAPITest(TestCase):
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_get_security_posture_findings_count(self):
+    def test_get_risk_posture_findings_count(self):
         """Test that findings counts are correct"""
         response = self.client.get(
             self.url,
@@ -211,21 +211,21 @@ class SecurityPostureAPITest(TestCase):
         self.assertEqual(data['counter_findings_by_priority']['unknown'], 4)
 
 
-class ProductSecurityPostureAPITest(TestCase):
+class ProductRiskPostureAPITest(TestCase):
     fixtures = ['dojo_testdata.json']
     
     def setUp(self):
-        """Initial configuration for product security posture tests"""
+        """Initial configuration for product risk posture tests"""
         self.client = APIClient()
         
         token = Token.objects.get(user__username="admin")
         self.client = APIClient()
         self.client.credentials(HTTP_AUTHORIZATION="Token " + token.key)
-        self.url = reverse('product_security_posture')
+        self.url = reverse('product_risk_posture')
         
         self.product_type = Product_Type.objects.get(id=1)
         self.product = Product.objects.first()
-        self.product.name = "Test Product for Security Posture"
+        self.product.name = "Test Product for Risk Posture"
         self.product.business_criticality = "high"
         self.product.save()
         
@@ -265,7 +265,7 @@ class ProductSecurityPostureAPITest(TestCase):
     def setup_general_settings(self):
         """Configure GeneralSettings for tests"""
         GeneralSettings.objects.get_or_create(
-            name_key='SECURITY_POSTURE_STATUS',
+            name_key='RISK_POSTURE_STATUS',
             defaults={
                 'value': '{"APETITO": 50, "TOLERANCIA": 100, "EXCEDIDO": 150}',
                 'data_type': 'DICT'
@@ -297,8 +297,8 @@ class ProductSecurityPostureAPITest(TestCase):
         )
         
 
-    def test_get_product_security_posture_with_product_id(self):
-        """Test get product security posture with valid product_id"""
+    def test_get_product_risk_posture_with_product_id(self):
+        """Test get product risk posture with valid product_id"""
         response = self.client.get(
             self.url,
             {'product_id': self.product.id},
@@ -322,8 +322,8 @@ class ProductSecurityPostureAPITest(TestCase):
         self.assertIn('counter_findings_by_severity', data)
         self.assertIn('adoption_devsecops', data)
 
-    def test_get_product_security_posture_with_product_name(self):
-        """Test get product security posture with valid product_name"""
+    def test_get_product_risk_posture_with_product_name(self):
+        """Test get product risk posture with valid product_name"""
         response = self.client.get(
             f"{self.url}?product_name={self.product.name}",
             format='json'
@@ -333,7 +333,7 @@ class ProductSecurityPostureAPITest(TestCase):
         data = response.json()['data']
         self.assertEqual(data['product_name'], self.product.name)
 
-    def test_get_product_security_posture_missing_parameters(self):
+    def test_get_product_risk_posture_missing_parameters(self):
         """Test error when required parameters are missing"""
         response = self.client.get(self.url, format='json')
 
@@ -341,7 +341,7 @@ class ProductSecurityPostureAPITest(TestCase):
         self.assertIn('Either product_id or product_name must be provided', 
                      response.json()['data']["non_field_errors"])
 
-    def test_get_product_security_posture_invalid_product_id(self):
+    def test_get_product_risk_posture_invalid_product_id(self):
         """Test error with non-existent product_id"""
         response = self.client.get(
             self.url,
@@ -353,7 +353,7 @@ class ProductSecurityPostureAPITest(TestCase):
         self.assertIn('Invalid pk "99999" - object does not exist.',
                       response.json()['data']["product_id"])
 
-    def test_get_product_security_posture_invalid_product_name(self):
+    def test_get_product_risk_posture_invalid_product_name(self):
         """Test error with non-existent product_name"""
         response = self.client.get(
             self.url,
@@ -363,7 +363,7 @@ class ProductSecurityPostureAPITest(TestCase):
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_get_product_security_posture_findings_count(self):
+    def test_get_product_risk_posture_findings_count(self):
         """Test that findings counts are aggregated correctly"""
         response = self.client.get(
             self.url,
@@ -380,7 +380,7 @@ class ProductSecurityPostureAPITest(TestCase):
         self.assertIn('medium_low', data['counter_findings_by_priority'])
         self.assertIn('unknown', data['counter_findings_by_priority'])
 
-    def test_get_product_security_posture_severity_count(self):
+    def test_get_product_risk_posture_severity_count(self):
         """Test that severity counts are aggregated correctly"""
         response = self.client.get(
             self.url,
@@ -397,7 +397,7 @@ class ProductSecurityPostureAPITest(TestCase):
         self.assertIn('low', data['counter_findings_by_severity'])
         self.assertIn('info', data['counter_findings_by_severity'])
 
-    def test_get_product_security_posture_has_result_and_status(self):
+    def test_get_product_risk_posture_has_result_and_status(self):
         """Test that result and status are present in response"""
         response = self.client.get(
             self.url,
@@ -413,7 +413,7 @@ class ProductSecurityPostureAPITest(TestCase):
         self.assertIsInstance(data['result'], (int, float))
         self.assertIsInstance(data['status'], str)
 
-    def test_get_product_security_posture_hacking_continuous(self):
+    def test_get_product_risk_posture_hacking_continuous(self):
         """Test that hacking continuous fields are present"""
         response = self.client.get(
             self.url,
@@ -430,18 +430,18 @@ class ProductSecurityPostureAPITest(TestCase):
         self.assertIn('events', data['events_active_hacking'])
 
 
-class ProductTypeSecurityPostureAPITest(TestCase):
+class ProductTypeRiskPostureAPITest(TestCase):
     fixtures = ['dojo_testdata.json']
 
     def setUp(self):
-        """Initial configuration for product type security posture tests"""
+        """Initial configuration for product type risk posture tests"""
         token = Token.objects.get(user__username="admin")
         self.client = APIClient()
         self.client.credentials(HTTP_AUTHORIZATION="Token " + token.key)
-        self.url = reverse('product_type_security_posture_events')
+        self.url = reverse('product_type_risk_posture_events')
 
         self.product_type = Product_Type.objects.get(id=1)
-        self.product_type.name = "Test Product Type for Security Posture"
+        self.product_type.name = "Test Product Type for Risk Posture"
         self.product_type.save()
 
         self.product = Product.objects.first()
@@ -484,7 +484,7 @@ class ProductTypeSecurityPostureAPITest(TestCase):
     def setup_general_settings(self):
         """Configure GeneralSettings for tests"""
         GeneralSettings.objects.get_or_create(
-            name_key='SECURITY_POSTURE_STATUS',
+            name_key='RISK_POSTURE_STATUS',
             defaults={
                 'value': '{"APETITO": 50, "TOLERANCIA": 100, "EXCEDIDO": 150}',
                 'data_type': 'DICT'
@@ -523,8 +523,8 @@ class ProductTypeSecurityPostureAPITest(TestCase):
             }
         )
 
-    def test_get_product_type_security_posture_with_product_type_id(self):
-        """Test get product type security posture with valid product_type_id"""
+    def test_get_product_type_risk_posture_with_product_type_id(self):
+        """Test get product type risk posture with valid product_type_id"""
         response = self.client.get(
             self.url,
             {'product_type_id': self.product_type.id},
@@ -546,8 +546,8 @@ class ProductTypeSecurityPostureAPITest(TestCase):
         self.assertIn('counter_findings_by_priority', data)
         self.assertIn('counter_findings_by_severity', data)
 
-    def test_get_product_type_security_posture_with_product_type_name(self):
-        """Test get product type security posture with valid product_type_name"""
+    def test_get_product_type_risk_posture_with_product_type_name(self):
+        """Test get product type risk posture with valid product_type_name"""
         response = self.client.get(
             f"{self.url}?product_type_name={self.product_type.name}",
             format='json',
@@ -557,7 +557,7 @@ class ProductTypeSecurityPostureAPITest(TestCase):
         data = response.json()['data']
         self.assertEqual(data['product_type_name'], self.product_type.name)
 
-    def test_get_product_type_security_posture_missing_parameters(self):
+    def test_get_product_type_risk_posture_missing_parameters(self):
         """Test error when required parameters are missing"""
         response = self.client.get(self.url, format='json')
 
@@ -567,7 +567,7 @@ class ProductTypeSecurityPostureAPITest(TestCase):
             response.json()['data']["non_field_errors"],
         )
 
-    def test_get_product_type_security_posture_invalid_product_type_id(self):
+    def test_get_product_type_risk_posture_invalid_product_type_id(self):
         """Test error with non-existent product_type_id"""
         response = self.client.get(
             self.url,
@@ -581,7 +581,7 @@ class ProductTypeSecurityPostureAPITest(TestCase):
             response.json()['data']["product_type_id"],
         )
 
-    def test_get_product_type_security_posture_invalid_product_type_name(self):
+    def test_get_product_type_risk_posture_invalid_product_type_name(self):
         """Test error with non-existent product_type_name"""
         response = self.client.get(
             self.url,
@@ -591,7 +591,7 @@ class ProductTypeSecurityPostureAPITest(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_get_product_type_security_posture_findings_count(self):
+    def test_get_product_type_risk_posture_findings_count(self):
         """Test that findings count keys are present"""
         response = self.client.get(
             self.url,
@@ -608,7 +608,7 @@ class ProductTypeSecurityPostureAPITest(TestCase):
         self.assertIn('medium_low', data['counter_findings_by_priority'])
         self.assertIn('unknown', data['counter_findings_by_priority'])
 
-    def test_get_product_type_security_posture_severity_count(self):
+    def test_get_product_type_risk_posture_severity_count(self):
         """Test that severity count keys are present"""
         response = self.client.get(
             self.url,
@@ -625,7 +625,7 @@ class ProductTypeSecurityPostureAPITest(TestCase):
         self.assertIn('low', data['counter_findings_by_severity'])
         self.assertIn('info', data['counter_findings_by_severity'])
 
-    def test_get_product_type_security_posture_has_result_and_status(self):
+    def test_get_product_type_risk_posture_has_result_and_status(self):
         """Test that result and status are present in response"""
         response = self.client.get(
             self.url,
@@ -642,7 +642,7 @@ class ProductTypeSecurityPostureAPITest(TestCase):
         self.assertIsInstance(data['status'], str)
 
 
-class SecurityPostureHelperUnitTest(TestCase):
+class RiskPostureHelperUnitTest(TestCase):
     """Unit tests para funciones helper del refactor ORM-aggregation."""
     fixtures = ['dojo_testdata.json']
 
@@ -653,7 +653,7 @@ class SecurityPostureHelperUnitTest(TestCase):
 
     def _setup_general_settings(self):
         defaults = [
-            ('SECURITY_POSTURE_STATUS', '{"APETITO": 50, "TOLERANCIA": 100, "EXCEDIDO": 150}', 'DICT'),
+            ('RISK_POSTURE_STATUS', '{"APETITO": 50, "TOLERANCIA": 100, "EXCEDIDO": 150}', 'DICT'),
             ('HACKING_CONTINUOUS_TAGS', 'hacking_continuous', 'LIST'),
             ('DEVSECOPS_ADOPTION_INCLUDE_TAGS', 'engine_iac,engine_container', 'LIST'),
             ('HACKING_CONTINUOUS_DAYS_TOLERANCE', '30', 'INT'),
@@ -823,7 +823,7 @@ class ProductPostureInactiveEngagementTest(TestCase):
 
     def _setup_general_settings(self):
         defaults = [
-            ('SECURITY_POSTURE_STATUS', '{"APETITO": 50, "TOLERANCIA": 100}', 'DICT'),
+            ('RISK_POSTURE_STATUS', '{"APETITO": 50, "TOLERANCIA": 100}', 'DICT'),
             ('HACKING_CONTINUOUS_TAGS', '[]', 'LIST'),
             ('DEVSECOPS_ADOPTION_INCLUDE_TAGS', '["engine_iac"]', 'LIST'),
             ('HACKING_CONTINUOUS_DAYS_TOLERANCE', '30', 'INT'),
@@ -836,13 +836,13 @@ class ProductPostureInactiveEngagementTest(TestCase):
 
     def test_inactive_engagement_findings_not_counted(self):
         """Findings de engagements inactivos no deben aparecer en counter_active_findings."""
-        data = get_product_security_posture(self.product, None)
+        data = get_product_risk_posture(self.product, None)
         self.assertEqual(data['counter_active_findings'], 0)
         self.assertEqual(data['result'], 0.0)
 
     def test_inactive_engagement_fast_path_fields(self):
         """Con 0 engagements activos, todos los campos deben existir con valores por defecto."""
-        data = get_product_security_posture(self.product, None)
+        data = get_product_risk_posture(self.product, None)
         self.assertIn('status', data)
         self.assertIn('adoption_devsecops', data)
         self.assertEqual(data['adoption_devsecops'], [])
@@ -860,7 +860,7 @@ class ProductTypePostureEmptyEngagementsTest(TestCase):
 
     def _setup_general_settings(self):
         defaults = [
-            ('SECURITY_POSTURE_STATUS', '{"APETITO": 50, "TOLERANCIA": 100}', 'DICT'),
+            ('RISK_POSTURE_STATUS', '{"APETITO": 50, "TOLERANCIA": 100}', 'DICT'),
             ('HACKING_CONTINUOUS_TAGS', '[]', 'LIST'),
             ('DEVSECOPS_ADOPTION_INCLUDE_TAGS', '["engine_iac"]', 'LIST'),
             ('HACKING_CONTINUOUS_DAYS_TOLERANCE', '30', 'INT'),
@@ -872,18 +872,18 @@ class ProductTypePostureEmptyEngagementsTest(TestCase):
             )
 
     def test_empty_engagements_returns_zeros(self):
-        data = get_product_type_security_posture(self.product_type, None)
+        data = get_product_type_risk_posture(self.product_type, None)
         self.assertEqual(data['counter_active_findings'], 0)
         self.assertEqual(data['counter_total_findings'], 0)
         self.assertEqual(data['result'], 0.0)
 
     def test_empty_engagements_status_present(self):
-        data = get_product_type_security_posture(self.product_type, None)
+        data = get_product_type_risk_posture(self.product_type, None)
         self.assertIn('status', data)
         self.assertIsInstance(data['status'], str)
 
     def test_empty_engagements_adoption_devsecops_empty(self):
-        data = get_product_type_security_posture(self.product_type, None)
+        data = get_product_type_risk_posture(self.product_type, None)
         self.assertIn('adoption_devsecops', data)
         self.assertEqual(data['adoption_devsecops'], [])
 

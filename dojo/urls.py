@@ -123,8 +123,8 @@ from dojo.tool_type.urls import urlpatterns as tool_type_urls
 from dojo.user.urls import urlpatterns as user_urls
 from dojo.api_v2.manager_cache.urls import urlpatterns as manager_cache_urls
 from dojo.api_v2.metrics.urls import urlpatterns as metrics_general_urls
-from dojo.api_v2.security_posture.urls import urlpatterns as security_posture_urls
-from dojo.security_posture.urls import urlpatterns as security_posture_urls_view
+from dojo.api_v2.risk_posture.urls import urlpatterns as risk_posture_urls
+from dojo.risk_posture.urls import urlpatterns as risk_posture_urls_view
 from dojo.api_v2.notifications.urls import urlpatterns as notifications_email_urls
 from dojo.api_v2.alerts.urls import urlpatterns as alert_urls
 from dojo.api_v2.ia_recommendation.urls import urlpatterns as ia_recommendation_urls
@@ -299,8 +299,8 @@ urlpatterns += [
 
 urlpatterns += manager_cache_urls
 urlpatterns += metrics_general_urls
-urlpatterns += security_posture_urls
-urlpatterns += security_posture_urls_view
+urlpatterns += risk_posture_urls
+urlpatterns += risk_posture_urls_view
 urlpatterns += scope_urls_view 
 urlpatterns += notifications_email_urls
 urlpatterns += engine_participation_api_urls
