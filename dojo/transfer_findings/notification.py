@@ -26,7 +26,7 @@ class Notification:
             icon="check-circle",
             color_icon="#b97a0c",
             owner=transfer_finding.owner,
-            url=reverse("product", args=(pid,)))
+            url=reverse("view_details_transfer_finding", args=(transfer_finding.id,)))
 
     @staticmethod
     def transfer_finding_request(transfer_finding: TransferFinding):
@@ -61,7 +61,7 @@ class Notification:
             icon="check-circle",
             color_icon="#096C11",
             owner=transfer_finding.owner,
-            url=reverse("product", args=(pid,)))
+            url=reverse("view_details_transfer_finding", args=(transfer_finding.id,)))
     
 
     @staticmethod
@@ -80,7 +80,7 @@ class Notification:
             icon="times-circle",
             color_icon="#B90C0C",
             owner=transfer_finding.owner,
-            url=reverse("product", args=(pid,)))
+            url=reverse("view_details_transfer_finding", args=(transfer_finding.id,)))
 
     @staticmethod
     def transfer_finding_finding_remove(transfer_finding: TransferFinding):
@@ -98,4 +98,4 @@ class Notification:
             icon="times-circle",
             color_icon="#B90C0C",
             owner=transfer_finding.owner,
-            url=reverse("product", args=(pid,)))
+            url=reverse("view_details_transfer_finding", args=(transfer_finding.id,)))

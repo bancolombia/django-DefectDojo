@@ -335,7 +335,7 @@ class DefaultImporter(BaseImporter, DefaultImporterOptions):
         
         system_settings = System_Settings.objects.get()
         if system_settings.enable_transfer_finding:
-            old_findings = old_findings.exclude(tags="transferred")
+            old_findings = old_findings.exclude(tags__name__iexact="transferred")
 
         if len(self.test.tags.tags) > 0:
             old_findings = old_findings.filter(test__tags__in=self.test.tags.tags)
