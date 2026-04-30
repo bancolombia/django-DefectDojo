@@ -914,6 +914,19 @@ def generate_cve_kev_dict():
 
 @app.task
 def check_priorization():
+    # Process missing findings prioritization zero
+    logger.info("Starting prioritization check for findings with priority 0...")
+    missing_findings = (
+        Finding.objects.filter(severity__in=["Low", "Medium", "High", "Critical"])
+        .order_by("cve", "test__scan_type", "severity")
+        .distinct("cve", "test__scan_type", "severity")
+        .filter(priority=0)
+    )
+    logger.info(
+        f"Identified {missing_findings.count()} findings with priority 0 to update."
+    )
+    identify_priority_vulnerabilities(missing_findings, True)
+
     # Process general prioritization
     logger.info("Starting vulnerability prioritization check...")
     vulnerability_identifier_regex = r"^[A-Z][A-Z0-9_]+-[A-Z0-9].*$"
@@ -948,18 +961,6 @@ def check_priorization():
         f"Identified {hacking_vulnerabilities.count()} vulnerabilities with hacking tags for prioritization."
     )
     identify_priority_vulnerabilities(hacking_vulnerabilities, False)
-
-    # Process missing findings prioritization zero
-    missing_findings = (
-        Finding.objects.filter(severity__in=["Low", "Medium", "High", "Critical"])
-        .order_by("cve", "test__scan_type", "severity")
-        .distinct("cve", "test__scan_type", "severity")
-        .filter(priority=0)
-    )
-    logger.info(
-        f"Identified {missing_findings.count()} findings with priority 0 to update."
-    )
-    identify_priority_vulnerabilities(missing_findings, True)
 
 
 @app.task
