@@ -89,6 +89,7 @@ from dojo.finding.queries import (
     get_authorized_findings,
     get_authorized_stub_findings,
 )
+from dojo.api_v2.transfer_finding.queries import get_authorized_transfer_finding
 from dojo.finding.views import (
     duplicate_cluster,
     reset_finding_duplicate_status_internal,
@@ -3592,7 +3593,7 @@ class AnnouncementViewSet(
 class TransferFindingViewSet(prefetch.PrefetchListMixin,
                              prefetch.PrefetchRetrieveMixin,
                              DojoModelViewSet):
-    queryset = TransferFinding.objects.all().order_by('id')
+    queryset = TransferFinding.objects.none()
     permission_classes = (IsAuthenticated, permissions.UserHasTransferFindingPermission,)
     serializer_class = TransferFindingSerializer
     filter_backends = (DjangoFilterBackend,)
@@ -3602,6 +3603,12 @@ class TransferFindingViewSet(prefetch.PrefetchListMixin,
                         "origin_product",
                         "origin_engagement",
                         "owner"]
+
+    def get_queryset(self):
+        transfer_finding = get_authorized_transfer_finding(
+            Permissions.Transfer_Finding_View)
+        return transfer_finding
+
     @extend_schema(
         request=TransferFindingCreateSerializer,
         responses={status.HTTP_200_OK: TransferFindingCreateSerializer},
