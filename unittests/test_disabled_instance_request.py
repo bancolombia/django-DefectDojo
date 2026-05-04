@@ -1,8 +1,4 @@
-import json
-from unittest.mock import patch
-
 from django.urls import reverse
-from rest_framework.authtoken.models import Token
 
 from dojo.models import Engagement, Finding, Product, Test, Test_Type, User
 
@@ -10,6 +6,7 @@ from .dojo_test_case import DojoTestCase
 
 
 class DisabledInstanceRequestTests(DojoTestCase):
+
     """Tests for the engagement-level Disabled Instance Request feature."""
 
     fixtures = ["dojo_testdata.json"]
