@@ -67,3 +67,12 @@ class DisabledInstanceRequestTests(DojoTestCase):
         """Sanity check that setUp wired everything correctly."""
         self.assertEqual(Test_Type.objects.filter(name="Tenable Scan").count(), 1)
         self.assertIsNotNone(self.engagement.id)
+
+    def test_button_visible_when_engagement_has_tenable_scan_test(self):
+        """A Tenable Scan test tagged 'ciclo_escaneo' should reveal the action."""
+        self._add_tenable_test(tags=["ciclo_escaneo"])
+
+        response = self.client.get(self.view_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Disabled Instance Request")

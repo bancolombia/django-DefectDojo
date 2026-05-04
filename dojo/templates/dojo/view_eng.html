@@ -70,6 +70,13 @@
                                             </a>
                                         </li>
                                 {% endif %}
+                                {% if show_disabled_instance_request %}
+                                        <li role="presentation">
+                                            <a rel="noopener noreferrer" href="#" onclick="disabledInstanceRequest({{ eng.id }}); return false;">
+                                            <i class="fa-solid fa-ban"></i> Disabled Instance Request
+                                            </a>
+                                        </li>
+                                {% endif %}
                                 {% if eng|has_object_permission:"Engagement_Edit" %}
                                     <li role="separator" class="divider"></li>
                                     <li role="presentation">
