@@ -2411,5 +2411,6 @@ def _disabled_instance_request_logic(engagement, request):
     # TODO: ENDPOINT_TBD — confirm the query-param key with the API contract.
     # Defaulting to `dnsname` to mirror the existing Tenable branch in _sync_scan_cycle_logic.
     params = {"dnsname": engagement.name}
-    res = requests.post(base_url, params=params, headers=headers)
+    # Bound the call so a hung external service cannot pin a uWSGI worker indefinitely.
+    res = requests.post(base_url, params=params, headers=headers, timeout=(5, 10))
     return res.status_code == 200

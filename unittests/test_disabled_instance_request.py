@@ -121,10 +121,12 @@ class DisabledInstanceRequestTests(DojoTestCase):
 
     def test_endpoint_requires_login(self):
         """Unauthenticated GET to the disabled_instance_request endpoint should redirect to login."""
+        from django.conf import settings
+
         self.client.logout()
         url = reverse("disabled_instance_request", args=[self.engagement.id])
 
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, 302)
-        self.assertIn("/login", response.url)
+        self.assertIn(settings.LOGIN_URL, response.url)
