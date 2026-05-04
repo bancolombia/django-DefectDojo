@@ -163,7 +163,7 @@ def get_authorized_product_type_members_for_user(user, permission):
     if request_user.is_superuser:
         return Product_Type_Member.objects.filter(user=user).select_related("role", "product_type")
 
-    if hasattr(request_user, "global_role") and request_user.global_role.role is not None and role_has_permission(request_user.global_role.role.id, permission):
+    if user_has_global_permission(request_user, permission):
         return Product_Type_Member.objects.filter(user=user).select_related("role", "product_type")
 
     product_types = get_authorized_product_types(permission)

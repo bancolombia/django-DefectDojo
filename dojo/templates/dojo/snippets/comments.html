@@ -79,6 +79,57 @@
           <br><br>
         {% endif %}
         {{ note|linebreaks }}
+        {% with attached_files=note|attached_files_for_note:object %}
+        {% if attached_files %}
+          <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e0e0e0;">
+            <strong>Attached Files:</strong>
+            <div style="margin-top: 10px;">
+              {% for file in attached_files %}
+                  {% with file_name=file.file.name|lower %}
+                    {% if ".jpg" in file_name or ".jpeg" in file_name or ".png" in file_name or ".gif" in file_name or ".webp" in file_name %}
+                      <!-- Image file -->
+                      <div style="margin-bottom: 15px;">
+                        <div style="position: relative; display: inline-block;">
+                          <img src="{{ file.file.url }}" alt="{{ file.title }}" data-image-url="{{ file.file.url }}" style="width: 150px; border: 1px solid #ddd; border-radius: 4px; padding: 5px; cursor: zoom-in;">
+                          <button type="button" class="js-expand-note-image" data-image-url="{{ file.file.url }}" aria-label="Expand image" title="Expand image" style="position: absolute; right: 8px; bottom: 8px; width: 40px; height: 40px; border: 0; border-radius: 10px; background: rgba(67, 84, 114, 0.92); color: #fff; display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);">
+                            <i class="fa-solid fa-expand"></i>
+                          </button>
+                        </div>
+                        <br>
+                        <small style="display: block; margin-top: 5px;">
+                          <a href="{% url 'access_file' file.id object.id 'Finding' %}" target="_blank">
+                            <i class="fa-solid fa-download"></i> Download: {{ file.title }}
+                          </a>
+                        </small>
+                      </div>
+                    {% elif ".mp4" in file_name or ".webm" in file_name or ".ogg" in file_name or ".mov" in file_name or ".avi" in file_name %}
+                      <!-- Video file -->
+                      <div style="margin-bottom: 15px;">
+                        <video width="100%" style="max-width: 500px; border: 1px solid #ddd; border-radius: 4px;" controls>
+                          <source src="{{ file.file.url }}" type="video/mp4">
+                          Your browser does not support the video tag.
+                        </video>
+                        <br>
+                        <small style="display: block; margin-top: 5px;">
+                          <a href="{% url 'access_file' file.id object.id 'Finding' %}" target="_blank">
+                            <i class="fa-solid fa-download"></i> Download: {{ file.title }}
+                          </a>
+                        </small>
+                      </div>
+                    {% else %}
+                      <!-- Other file types -->
+                      <div style="margin-bottom: 10px;">
+                        <a href="{% url 'access_file' file.id object.id 'Finding' %}" target="_blank">
+                          <i class="fa-solid fa-paperclip"></i> {{ file.title }}
+                        </a>
+                      </div>
+                    {% endif %}
+                  {% endwith %}
+              {% endfor %}
+            </div>
+          </div>
+        {% endif %}
+        {% endwith %}
       </div>
     </div>
   </div>

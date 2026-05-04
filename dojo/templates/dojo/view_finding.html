@@ -16,6 +16,7 @@
 {% endblock %}
 {% block content %}
     {{ block.super }}
+    {% include 'dojo/view_modal_img.html' %}
 {% user_can_clear_peer_review finding dojo_user as clear_peer_review %}
 <div id="test">
     <div class="panel panel-default">
@@ -1007,14 +1008,29 @@
                             {% for file in files %}
                             <div class="col-md-2" style="text-align: center">
                                 <div class="row">
-                                    {% url 'access_file' fid=file.id oid=finding.id obj_type='Finding' as image_url %}
-                                    <a rel="noopener noreferrer" href="{{ image_url }}" target="_blank" download>
-                                        {% if file|get_thumbnail %}
-                                            <img src="{{ image_url }}" alt="thumbnail" style="width:150px">
+                                    {% url 'access_file' fid=file.id oid=finding.id obj_type='Finding' as file_url %}
+                                    {% with file_name=file.file.name|lower %}
+                                        {% if ".jpg" in file_name or ".jpeg" in file_name or ".png" in file_name or ".gif" in file_name or ".webp" in file_name %}
+                                            <!-- Image file -->
+                                            <div style="position: relative; display: inline-block;">
+                                                <img src="{{ file.file.url }}" alt="thumbnail" data-image-url="{{ file.file.url }}" style="width:150px; border: 1px solid #ddd; border-radius: 4px; cursor: zoom-in;">
+                                                <button type="button" class="js-expand-note-image" data-image-url="{{ file.file.url }}" aria-label="Expand image" title="Expand image" style="position: absolute; right: 8px; bottom: 8px; width: 40px; height: 40px; border: 0; border-radius: 10px; background: rgba(67, 84, 114, 0.92); color: #fff; display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);">
+                                                    <i class="fa-solid fa-expand"></i>
+                                                </button>
+                                            </div>
+                                        {% elif ".mp4" in file_name or ".webm" in file_name or ".ogg" in file_name or ".mov" in file_name or ".avi" in file_name %}
+                                            <!-- Video file -->
+                                            <video width="150" style="border: 1px solid #ddd; border-radius: 4px;" controls>
+                                                <source src="{{ file_url }}" type="video/mp4">
+                                                Your browser does not support the video tag.
+                                            </video>
                                         {% else %}
-                                            <span style="font-size: 50px;" class="glyphicon glyphicon-file"></span>
+                                            <!-- Other file types -->
+                                            <a rel="noopener noreferrer" href="{{ file_url }}" target="_blank" download>
+                                                <span style="font-size: 50px;" class="glyphicon glyphicon-file"></span>
+                                            </a>
                                         {% endif %}
-                                    </a>
+                                    {% endwith %}
                                 </div>
                                 <div class="row">
                                     <caption style="text-align:center">{{ file.title }}</caption>
@@ -1835,6 +1851,14 @@
         
 
             
+    </script>
+    <script type="text/javascript">
+        $(document).on("click", "img[data-image-url], .js-expand-note-image", function() {
+            var imageUrl = $(this).data('image-url');
+            var imgTag = '<img src="' + imageUrl + '" alt="Expanded image" style="max-width: 90vw; max-height: 85vh; width: auto; height: auto; object-fit: contain;">';
+            $("#idDivContectImg").html(imgTag);
+            $('#modalGenericImgId').modal('show');
+        });
     </script>
 
     {% include "dojo/filter_js_snippet.html" %}
