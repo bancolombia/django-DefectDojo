@@ -76,3 +76,20 @@ class DisabledInstanceRequestTests(DojoTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Disabled Instance Request")
+
+    def test_button_visible_when_engagement_has_finding_with_tenable_tag(self):
+        """A Finding tag containing 'tenable' reveals the action even when the parent test is not Tenable."""
+        nessus_type, _ = Test_Type.objects.get_or_create(name="NESSUS Scan")
+        non_tenable_test = Test.objects.create(
+            engagement=self.engagement,
+            scan_type="NESSUS Scan",
+            test_type=nessus_type,
+            target_start="2026-01-01",
+            target_end="2026-01-02",
+        )
+        self._add_finding(test=non_tenable_test, tags=["Tenable_io_finding"])
+
+        response = self.client.get(self.view_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Disabled Instance Request")
