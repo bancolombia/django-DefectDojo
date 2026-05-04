@@ -158,3 +158,37 @@ class DisabledInstanceRequestTests(DojoTestCase):
         call_kwargs = mock_requests.post.call_args.kwargs
         self.assertEqual(call_kwargs["params"], {"dnsname": self.engagement.name})
         self.assertIn("Authorization", call_kwargs["headers"])
+
+    @patch("dojo.engagement.views.Token")
+    @patch("dojo.engagement.views.User")
+    @patch("dojo.engagement.views.requests")
+    def test_endpoint_returns_500_on_external_failure(self, mock_requests, mock_user_cls, mock_token_cls):
+        """When the external API returns non-200, the view returns 500 JSON with success=false."""
+        mock_user_cls.objects.get.return_value = self._get_admin_user()
+        mock_token_cls.objects.get.return_value.key = "fake-operative-token"
+        mock_requests.post.return_value.status_code = 503
+
+        url = reverse("disabled_instance_request", args=[self.engagement.id])
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 500)
+        body = json.loads(response.content)
+        self.assertFalse(body["success"])
+        self.assertIn("error", body)
+
+    @patch("dojo.engagement.views.Token")
+    @patch("dojo.engagement.views.User")
+    @patch("dojo.engagement.views.requests")
+    def test_endpoint_returns_500_on_network_exception(self, mock_requests, mock_user_cls, mock_token_cls):
+        """When requests.post raises (e.g. network error), the view returns 500 JSON with success=false."""
+        mock_user_cls.objects.get.return_value = self._get_admin_user()
+        mock_token_cls.objects.get.return_value.key = "fake-operative-token"
+        mock_requests.post.side_effect = Exception("simulated network failure")
+
+        url = reverse("disabled_instance_request", args=[self.engagement.id])
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 500)
+        body = json.loads(response.content)
+        self.assertFalse(body["success"])
+        self.assertIn("error", body)
