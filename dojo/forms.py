@@ -2311,13 +2311,23 @@ class DeleteEndpointForm(forms.ModelForm):
 class NoteForm(forms.ModelForm):
     entry = forms.CharField(max_length=2400, widget=forms.Textarea(attrs={"rows": 4, "cols": 15}),
                             label="Notes:")
+    edit_evidence_file = forms.FileField(label="Add Evidence/Proof", required=False, widget=forms.widgets.FileInput(attrs={"accept": ".jpg,.png,.pdf,.mp4,.webm,.avi,.mov,.mkv"}))
 
     class Meta:
         model = Notes
         fields = ["entry", "private"]
+    
+    def clean_edit_evidence_file(self):
+        file = self.cleaned_data.get('edit_evidence_file')
+        if file:
+            validate_type_file(file, [".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".mp4", ".webm", ".avi", ".mov", ".mkv"])
+        return file
 
     def __init__(self, *args, **kwargs):
+        show_evidence_upload = kwargs.pop("show_evidence_upload", False)
         super().__init__(*args, **kwargs)
+        if not show_evidence_upload:
+            self.fields.pop("edit_evidence_file", None)
         if disclaimer := get_system_setting("disclaimer_notes"):
             self.disclaimer = disclaimer.strip()
 
@@ -2440,10 +2450,22 @@ class ClearFindingReviewForm(forms.ModelForm):
         error_messages={"required": ("The reason for clearing a review is "
                                      "required, please use the text area "
                                      "below to provide documentation.")})
+    proof_file = forms.FileField(
+        label="Proof/Evidence",
+        required=False,
+        help_text="Attach proof or evidence files for the review response (JPG, PNG, PDF, MP4, WEBM, AVI, MOV, or MKV)",
+        widget=forms.widgets.FileInput(attrs={"accept": ".jpg,.png,.pdf,.mp4,.webm,.avi,.mov,.mkv"}),
+    )
 
     class Meta:
         model = Finding
         fields = ["active", "verified", "false_p", "out_of_scope", "duplicate", "is_mitigated"]
+
+    def clean_proof_file(self):
+        file = self.cleaned_data.get("proof_file")
+        if file is not None:
+            validate_type_file(file, [".jpg", ".png", ".pdf", ".mp4", ".webm", ".avi", ".mov", ".mkv"])
+        return file
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -2477,6 +2499,12 @@ class ReviewFindingForm(forms.Form):
             )
         },
     )
+    proof_file = forms.FileField(
+        label="Proof/Evidence",
+        required=False,
+        help_text="Attach proof or evidence files for the review request (JPG, PNG, PDF, MP4, WEBM, AVI, MOV, or MKV)",
+        widget=forms.widgets.FileInput(attrs={"accept": ".jpg,.png,.pdf,.mp4,.webm,.avi,.mov,.mkv"}),
+    )
     allow_all_reviewers = forms.BooleanField(
         disabled=True,
         required=False,
@@ -2496,9 +2524,11 @@ class ReviewFindingForm(forms.Form):
             role = None
             for tag in finding.tags.all():
                 if tag.name in settings.DD_REVIEWERS_ROLE_TAG:
-                    role = Roles(int(settings.DD_REVIEWERS_ROLE_TAG[tag.name]))
+                    reviewer_role_tag = settings.DD_REVIEWERS_ROLE_TAG[tag.name]
+                    role = Roles(int(reviewer_role_tag)) if reviewer_role_tag != "-1" else None
+                    tag_name = tag.name
                     break
-            users = get_users_authorized_role_permission(finding.test.engagement.product, Permissions.Finding_Code_Review, role) | get_users_for_group(f'Reviewers_{role.name}') if role else get_authorized_users_for_product_and_product_type(None, finding.test.engagement.product, Permissions.Finding_Edit)
+            users = get_users_authorized_role_permission(finding.test.engagement.product, Permissions.Finding_Code_Review, role) | get_users_for_group(f'Reviewers_{role.name}') if role else get_users_for_group(f'Reviewers_{tag_name}') if tag_name else get_authorized_users_for_product_and_product_type(None, finding.test.engagement.product, Permissions.Finding_Edit)
         else:
             users = get_authorized_users(Permissions.Finding_Edit).filter(
                 is_active=True
@@ -2526,6 +2556,12 @@ class ReviewFindingForm(forms.Form):
             msg = "Please select at least one user from the reviewers list"
             raise ValidationError(msg)
         return cleaned_data
+
+    def clean_proof_file(self):
+        file = self.cleaned_data.get("proof_file")
+        if file is not None:
+            validate_type_file(file, [".jpg", ".png", ".pdf", ".mp4", ".webm", ".avi", ".mov", ".mkv"])
+        return file
 
     class Meta:
         fields = ["reviewers", "entry", "allow_all_reviewers"]

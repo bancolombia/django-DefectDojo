@@ -51,6 +51,7 @@ from dojo.transfer_findings.serializers import (
     TransferFindingFindingsSerializer,
     TransferFindingCreateSerializer,
     TransferFindingSerializer,
+    TransferFindingBasicSerializer,
     TransferFindingFindingCreateSerializer,)
 from dojo.finding.serializer import IARecommendationSerializer, FindingBulkUpdateSLAStartDateSerializer
 from dojo.risk_acceptance.serializers import RiskAcceptanceEmailSerializer
@@ -3604,6 +3605,11 @@ class TransferFindingViewSet(prefetch.PrefetchListMixin,
                         "origin_engagement",
                         "owner"]
 
+    def get_serializer_class(self):
+        if self.action == "retrieve":
+            return TransferFindingSerializer
+        return TransferFindingBasicSerializer
+      
     def get_queryset(self):
         transfer_finding = get_authorized_transfer_finding(
             Permissions.Transfer_Finding_View)

@@ -92,6 +92,7 @@ from dojo.models import (
     Endpoint_Status,
     Engagement,
     FileAccessToken,
+    FileUpload,
     Finding,
     TransferFinding,
     Finding_Group,
@@ -1668,7 +1669,7 @@ def request_finding_review(request, fid):
     # in order to review a finding, we need to capture why a review is needed
     # we can do this with a Note
     if request.method == "POST":
-        form = ReviewFindingForm(request.POST, finding=finding, user=user)
+        form = ReviewFindingForm(request.POST, request.FILES, finding=finding, user=user)
 
         if form.is_valid():
             now = timezone.now()
@@ -1680,6 +1681,18 @@ def request_finding_review(request, fid):
             new_note.save()
             findings = form.cleaned_data['findings_review']
 
+            # Process uploaded file if provided
+            uploaded_file = None
+            proof_file = form.cleaned_data.get('proof_file')
+            if proof_file:
+                uploaded_file = FileUpload.objects.create(
+                    title=f"Review Proof - {now.strftime('%Y%m%d_%H%M%S')}",
+                    file=proof_file
+                )
+                # Update note to include file reference
+                new_note.entry += f"\n\n[Attached File: {uploaded_file.title}]"
+                new_note.save()
+
             reviewers = Dojo_User.objects.filter(id__in=form.cleaned_data["reviewers"])
             reviewers_string = ", ".join([f"{user} ({user.id})" for user in reviewers])
             reviewers_usernames = [user.username for user in reviewers]
@@ -1687,6 +1700,9 @@ def request_finding_review(request, fid):
 
             for finding in findings:
                 finding.notes.add(new_note)
+                # Attach uploaded file to finding if provided
+                if uploaded_file:
+                    finding.files.add(uploaded_file)
                 finding.active = True
                 finding.verified = False
                 finding.is_mitigated = False
@@ -1764,7 +1780,7 @@ def clear_finding_review(request, fid):
     # in order to clear a review for a finding, we need to capture why and how it was reviewed
     # we can do this with a Note
     if request.method == "POST":
-        form = ClearFindingReviewForm(request.POST, instance=finding)
+        form = ClearFindingReviewForm(request.POST, request.FILES, instance=finding)
 
         if form.is_valid():
             now = timezone.now()
@@ -1773,6 +1789,16 @@ def clear_finding_review(request, fid):
             new_note.author = request.user
             new_note.date = now
             new_note.save()
+
+            proof_file = form.cleaned_data.get("proof_file")
+            if proof_file:
+                uploaded_file = FileUpload.objects.create(
+                    title=f"Review Proof - {now.strftime('%Y%m%d_%H%M%S')}",
+                    file=proof_file,
+                )
+                new_note.entry += f"\n\n[Attached File: {uploaded_file.title}]"
+                new_note.save()
+                finding.files.add(uploaded_file)
 
             finding = form.save(commit=False)
 

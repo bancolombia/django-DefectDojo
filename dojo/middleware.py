@@ -18,6 +18,8 @@ from dojo.product_announcements import LongRunningRequestProductAnnouncement
 logger = logging.getLogger(__name__)
 
 EXEMPT_URLS = [re.compile(settings.LOGIN_URL.lstrip("/"))]
+# Exempt alert counter endpoint to avoid redirect chain when session expires
+EXEMPT_URLS.append(re.compile(r"^alerts/count$"))
 if hasattr(settings, "LOGIN_EXEMPT_URLS"):
     EXEMPT_URLS += [re.compile(expr) for expr in settings.LOGIN_EXEMPT_URLS]
 
