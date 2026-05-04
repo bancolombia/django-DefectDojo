@@ -292,6 +292,8 @@ def reconcile_tagulous_tag_counts(*args, **kwargs):
     This task compensates for the disabled synchronous count updates in
     tagulous (patched in apps.py to prevent LWLock:MultiXactOffsetSLRU /
     Lock:tuple / Lock:transactionid contention under concurrent imports).
+    
+    Only runs when TAGULOUS_DISABLE_SYNC_COUNT_UPDATES setting is enabled.
 
     For each tagged model field it:
       1. Recomputes counts from the actual M2M through table.
@@ -303,6 +305,11 @@ def reconcile_tagulous_tag_counts(*args, **kwargs):
         App_Analysis, Endpoint, Engagement, Finding,
         Finding_Template, Objects_Product, Product, Test,
     )
+
+    # Skip reconciliation if synchronous updates are enabled
+    if not settings.TAGULOUS_DISABLE_SYNC_COUNT_UPDATES:
+        logger.info("reconcile_tagulous_tag_counts: skipped (synchronous tag count updates are enabled)")
+        return
 
     tagged_fields = [
         (Finding, "tags"),
