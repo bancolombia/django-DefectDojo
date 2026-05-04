@@ -203,6 +203,7 @@ env = environ.FileAwareEnv(
     DD_CELERY_CRON_CLEAR_SESSIONS=(str, "0 0 0"),
     DD_CELERY_CRON_UPDATE_FINDINGS_WITHOUT_TAGS=(str, "0 0 * * *"),  # every day at midnight
     DD_CELERY_CRON_SCHEDULE_UPDATE_NEXT_SPRINT_START_DATE=(str, "0 20 * * *"),  # every day at 20:00
+    DD_CELERY_CRON_RECONCILE_TAG_COUNTS=(str, "*/15 * * * *"),  # every 15 minutes
     # Allows to override default SAML authentication backend. Check https://djangosaml2.readthedocs.io/contents/setup.html#custom-user-attributes-processing
     DD_SAML2_AUTHENTICATION_BACKENDS=(str, "djangosaml2.backends.Saml2Backend"),
     # Force Authentication to make SSO possible with SAML2
@@ -1650,6 +1651,7 @@ CELERY_CRON_CHECK_PRIORIZATION = env("DD_CELERY_CRON_CHECK_PRIORIZATION")
 CELERY_CRON_STATUS_FINDINGS_PRIORIZATION = env("DD_CELERY_CRON_STATUS_FINDINGS_PRIORIZATION")
 CELERY_CRON_CLEAR_SESSIONS = env("DD_CELERY_CRON_CLEAR_SESSIONS")
 CELERY_CRON_UPDATE_FINDINGS_WITHOUT_TAGS = env("DD_CELERY_CRON_UPDATE_FINDINGS_WITHOUT_TAGS")
+CELERY_CRON_RECONCILE_TAG_COUNTS = env("DD_CELERY_CRON_RECONCILE_TAG_COUNTS")
 CELERY_CRON_SCHEDULE_UPDATE_NEXT_SPRINT_START_DATE = env("DD_CELERY_CRON_SCHEDULE_UPDATE_NEXT_SPRINT_START_DATE")
 CELERY_LOG_LEVEL = env("DD_CELERY_LOG_LEVEL")
 
@@ -1752,6 +1754,15 @@ CELERY_BEAT_SCHEDULE = {
             day_of_month=CELERY_CRON_SCHEDULE_UPDATE_NEXT_SPRINT_START_DATE.split()[2], 
             month_of_year=CELERY_CRON_SCHEDULE_UPDATE_NEXT_SPRINT_START_DATE.split()[3], 
             day_of_week=CELERY_CRON_SCHEDULE_UPDATE_NEXT_SPRINT_START_DATE.split()[4]),
+    },
+    "reconcile_tagulous_tag_counts": {
+        "task": "dojo.tasks.reconcile_tagulous_tag_counts",
+        "schedule": crontab(
+            minute=CELERY_CRON_RECONCILE_TAG_COUNTS.split()[0],
+            hour=CELERY_CRON_RECONCILE_TAG_COUNTS.split()[1],
+            day_of_month=CELERY_CRON_RECONCILE_TAG_COUNTS.split()[2],
+            month_of_year=CELERY_CRON_RECONCILE_TAG_COUNTS.split()[3],
+            day_of_week=CELERY_CRON_RECONCILE_TAG_COUNTS.split()[4]),
     }
     # 'jira_status_reconciliation': {
     #     'task': 'dojo.tasks.jira_status_reconciliation_task',

@@ -284,6 +284,118 @@ def update_findings_without_tags(*args, **kwargs):
     logger.info("Completed update of findings without tags. Total updated: %s", updated_count)
     return updated_count
 
+
+@app.task
+def reconcile_tagulous_tag_counts(*args, **kwargs):
+    """Reconcile tagulous tag counts against actual M2M table rows.
+
+    This task compensates for the disabled synchronous count updates in
+    tagulous (patched in apps.py to prevent LWLock:MultiXactOffsetSLRU /
+    Lock:tuple / Lock:transactionid contention under concurrent imports).
+
+    For each tagged model field it:
+      1. Recomputes counts from the actual M2M through table.
+      2. Zeros out counts for tags no longer referenced.
+      3. Deletes unprotected tags with a count of 0.
+    """
+    from django.db import connection
+    from dojo.models import (
+        App_Analysis, Endpoint, Engagement, Finding,
+        Finding_Template, Objects_Product, Product, Test,
+    )
+
+    tagged_fields = [
+        (Finding, "tags"),
+        (Finding, "inherited_tags"),
+        (Test, "tags"),
+        (Test, "inherited_tags"),
+        (Engagement, "tags"),
+        (Engagement, "inherited_tags"),
+        (Product, "tags"),
+        (Endpoint, "tags"),
+        (Endpoint, "inherited_tags"),
+        (Finding_Template, "tags"),
+        (App_Analysis, "tags"),
+        (Objects_Product, "tags"),
+    ]
+
+    for model, field_name in tagged_fields:
+        try:
+            tag_field = model._meta.get_field(field_name)
+            tag_model = tag_field.tag_model
+            through_model = tag_field.remote_field.through
+            tag_table = tag_model._meta.db_table
+            through_table = through_model._meta.db_table
+
+            # Locate the FK column in the through table that references the tag model
+            tag_fk_col = None
+            for f in through_model._meta.fields:
+                if (
+                    hasattr(f, "remote_field")
+                    and f.remote_field is not None
+                    and f.remote_field.model == tag_model
+                ):
+                    tag_fk_col = f.column
+                    break
+
+            if not tag_fk_col:
+                logger.warning(
+                    "reconcile_tagulous_tag_counts: cannot find tag FK column "
+                    "for %s.%s – skipping",
+                    model.__name__,
+                    field_name,
+                )
+                continue
+
+            with connection.cursor() as cursor:
+                # 1. Set correct counts for referenced tags
+                cursor.execute(
+                    f"""
+                    UPDATE "{tag_table}" AS t
+                    SET "count" = s.cnt
+                    FROM (
+                        SELECT "{tag_fk_col}" AS tag_id, COUNT(*) AS cnt
+                        FROM "{through_table}"
+                        GROUP BY "{tag_fk_col}"
+                    ) AS s
+                    WHERE t.id = s.tag_id
+                      AND t."count" != s.cnt
+                    """
+                )
+                # 2. Zero out counts for tags no longer in the through table
+                cursor.execute(
+                    f"""
+                    UPDATE "{tag_table}"
+                    SET "count" = 0
+                    WHERE "count" != 0
+                      AND id NOT IN (
+                          SELECT DISTINCT "{tag_fk_col}" FROM "{through_table}"
+                      )
+                    """
+                )
+                # 3. Remove unused non-protected tags
+                cursor.execute(
+                    f"""
+                    DELETE FROM "{tag_table}"
+                    WHERE "count" = 0 AND "protected" = FALSE
+                    """
+                )
+
+            logger.info(
+                "reconcile_tagulous_tag_counts: reconciled %s.%s",
+                model.__name__,
+                field_name,
+            )
+        except Exception:
+            logger.exception(
+                "reconcile_tagulous_tag_counts: error reconciling %s.%s",
+                model.__name__,
+                field_name,
+            )
+
+    logger.info("reconcile_tagulous_tag_counts: finished")
+
+
 @app.task
 def update_next_sprint_start_date(*args, **kwargs):
     logger.info("Starting update of next sprint start date for findings with Azure DevOps Sprint SLA")
