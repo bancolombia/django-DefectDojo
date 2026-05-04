@@ -135,12 +135,14 @@ class DisabledInstanceRequestTests(DojoTestCase):
         self.assertIn(settings.LOGIN_URL, response.url)
 
     @patch("dojo.engagement.views.Token")
+    @patch("dojo.engagement.views.User")
     @patch("dojo.engagement.views.requests")
-    def test_endpoint_returns_success_on_external_200(self, mock_requests, mock_token_cls):
+    def test_endpoint_returns_success_on_external_200(self, mock_requests, mock_user_cls, mock_token_cls):
         """When the external API returns 200, the view returns success JSON and posts the engagement name."""
+        # OPERATIVE_USER ("operative") is not in the fixture; mock both User and Token lookups.
+        mock_user_cls.objects.get.return_value = self._get_admin_user()
         mock_token_cls.objects.get.return_value.key = "fake-operative-token"
-        mock_response = mock_requests.post.return_value
-        mock_response.status_code = 200
+        mock_requests.post.return_value.status_code = 200
 
         url = reverse("disabled_instance_request", args=[self.engagement.id])
         response = self.client.get(url)
@@ -151,6 +153,8 @@ class DisabledInstanceRequestTests(DojoTestCase):
         self.assertIn("successfully", body["message"])
         # Verify the external API was called with engagement.name as dnsname.
         mock_requests.post.assert_called_once()
+        called_url = mock_requests.post.call_args.args[0]
+        self.assertIn("disabledInstanceRequest", called_url)
         call_kwargs = mock_requests.post.call_args.kwargs
         self.assertEqual(call_kwargs["params"], {"dnsname": self.engagement.name})
         self.assertIn("Authorization", call_kwargs["headers"])
