@@ -93,3 +93,28 @@ class DisabledInstanceRequestTests(DojoTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Disabled Instance Request")
+
+    def test_button_hidden_when_no_tenable_signal(self):
+        """Engagement with non-Tenable test and no tenable-tagged findings should hide the action."""
+        nessus_type, _ = Test_Type.objects.get_or_create(name="NESSUS Scan")
+        Test.objects.create(
+            engagement=self.engagement,
+            scan_type="NESSUS Scan",
+            test_type=nessus_type,
+            target_start="2026-01-01",
+            target_end="2026-01-02",
+        )
+
+        response = self.client.get(self.view_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Disabled Instance Request")
+
+    def test_button_hidden_when_only_tenable_test_is_transferred(self):
+        """A Tenable Scan test tagged 'transferred' (mixed-case) must be excluded from OR-A."""
+        self._add_tenable_test(tags=["ciclo_escaneo", "Transferred"])
+
+        response = self.client.get(self.view_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Disabled Instance Request")

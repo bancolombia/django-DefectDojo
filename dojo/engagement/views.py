@@ -613,6 +613,16 @@ class ViewEngagement(View):
             engagement=eng.id).select_related("cred_id").order_by("cred_id")
 
         has_ciclo_escaneo_test = eng.test_set.filter(tags__name="ciclo_escaneo").exclude(tags__name__iexact="transferred").exists()
+        has_tenable_test = (
+            eng.test_set
+               .filter(scan_type="Tenable Scan", tags__name="ciclo_escaneo")
+               .exclude(tags__name__iexact="transferred")
+               .exists()
+        )
+        has_tenable_finding = eng.test_set.filter(
+            finding__tags__name__icontains="tenable",
+        ).exists()
+        show_disabled_instance_request = has_tenable_test or has_tenable_finding
         add_breadcrumb(parent=eng, top_level=False, request=request)
 
         title = ""
@@ -640,6 +650,7 @@ class ViewEngagement(View):
                 "network": network,
                 "preset_test_type": preset_test_type,
                 "has_ciclo_escaneo_test": has_ciclo_escaneo_test,
+                "show_disabled_instance_request": show_disabled_instance_request,
                 'risk_pending': settings.RISK_PENDING
             })
 
