@@ -7,7 +7,7 @@ from dojo.group.queries import get_users_for_group, get_users_for_group_by_role
 from dojo.group.queries import users_with_permissions_to_approve_long_term_findings
 from tagulous.models import TagField
 from dojo.models import GeneralSettings, Engagement, Dojo_User, Product, Finding 
-from dojo.api_v2.serializers import EngagementSerializer, UserStubSerializer 
+from dojo.api_v2.serializers import EngagementSerializer, UserStubSerializer, NoteSerializer
 from dojo.api_v2 import validators
 from dojo.models import models
 logger = logging.getLogger(__name__)
@@ -107,5 +107,11 @@ class RiskAcceptanceExclusionRuleSerializer(serializers.ModelSerializer):
             "filters",
             "exclusions",
         ]
+
+class LongRiskAcceptanceToNotesSerializer(serializers.Serializer):
+    long_risk_acceptance_id = serializers.PrimaryKeyRelatedField(
+        queryset=RiskAcceptanceEngagement.objects.all(), many=False, allow_null=True,
+    )
+    notes = NoteSerializer(many=True)
 
 
