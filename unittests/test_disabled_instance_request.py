@@ -118,3 +118,13 @@ class DisabledInstanceRequestTests(DojoTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "Disabled Instance Request")
+
+    def test_endpoint_requires_login(self):
+        """Unauthenticated GET to the disabled_instance_request endpoint should redirect to login."""
+        self.client.logout()
+        url = reverse("disabled_instance_request", args=[self.engagement.id])
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login", response.url)

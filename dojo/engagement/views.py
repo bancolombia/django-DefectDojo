@@ -2375,3 +2375,41 @@ def _sync_scan_cycle_logic(engagement, request):
         return True
     return False
 
+
+# TODO: ENDPOINT_TBD — replace with the actual API path once the contract is defined.
+# Combined with settings.PROVIDER_CORE_ENGINE to form the final URL.
+DISABLED_INSTANCE_REQUEST_PATH = "engine-backend/<TBD>/disabledInstanceRequest"
+
+
+@login_required
+def disabled_instance_request(request, eid):
+    """AJAX view to request the disabling of a Tenable instance for the engagement."""
+    engagement = get_object_or_404(Engagement, id=eid)
+    try:
+        ok = _disabled_instance_request_logic(engagement, request)
+        if ok:
+            return JsonResponse({
+                "success": True,
+                "message": "Disabled instance request sent successfully",
+            })
+        msg = "Disabled instance request failed"
+        raise Exception(msg)
+    except Exception as e:
+        logger.exception(f"Error on disabled instance request for engagement {eid}")
+        return JsonResponse(
+            {"success": False, "error": f"Error on disabled instance request for engagement: {eid}, ex: {e}"},
+            status=500,
+        )
+
+
+def _disabled_instance_request_logic(engagement, request):
+    """Fire a POST to the external service to request disabling the Tenable instance."""
+    logger.info(f"Disabled instance request for engagement: {engagement.id} - {engagement.name}")
+    base_url = f"{settings.PROVIDER_CORE_ENGINE}{DISABLED_INSTANCE_REQUEST_PATH}"
+    user_token = Token.objects.get(user=User.objects.get(username=settings.OPERATIVE_USER))
+    headers = {"Authorization": user_token.key}
+    # TODO: ENDPOINT_TBD — confirm the query-param key with the API contract.
+    # Defaulting to `dnsname` to mirror the existing Tenable branch in _sync_scan_cycle_logic.
+    params = {"dnsname": engagement.name}
+    res = requests.post(base_url, params=params, headers=headers)
+    return res.status_code == 200
