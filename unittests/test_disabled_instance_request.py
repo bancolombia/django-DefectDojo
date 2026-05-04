@@ -1,0 +1,72 @@
+import json
+from unittest.mock import patch
+
+from django.urls import reverse
+from rest_framework.authtoken.models import Token
+
+from dojo.models import Engagement, Finding, Product, Test, Test_Type, User
+
+from .dojo_test_case import DojoTestCase
+
+
+class DisabledInstanceRequestTests(DojoTestCase):
+    """Tests for the engagement-level Disabled Instance Request feature."""
+
+    fixtures = ["dojo_testdata.json"]
+
+    def setUp(self):
+        super().setUp()
+        # Force-login as admin (DojoTestCase.client is a Django test client).
+        self.client.force_login(self._get_admin_user())
+        # The fixture ships NESSUS Scan but not Tenable Scan; create it on demand.
+        self.tenable_test_type, _ = Test_Type.objects.get_or_create(name="Tenable Scan")
+        # Build a fresh product + engagement isolated from fixture data.
+        self.product = Product.objects.create(
+            name="DIR-test-product",
+            description="dummy",
+            prod_type_id=1,
+        )
+        self.engagement = Engagement.objects.create(
+            name="dir-test-engagement",
+            product=self.product,
+            target_start="2026-01-01",
+            target_end="2026-12-31",
+        )
+        self.view_url = reverse("view_engagement", args=[self.engagement.id])
+
+    def _get_admin_user(self):
+        return User.objects.get(username="admin")
+
+    def _add_tenable_test(self, *, tags=None):
+        """Create a Tenable Scan Test attached to self.engagement, optionally tagged."""
+        test = Test.objects.create(
+            engagement=self.engagement,
+            scan_type="Tenable Scan",
+            test_type=self.tenable_test_type,
+            target_start="2026-01-01",
+            target_end="2026-01-02",
+        )
+        if tags:
+            test.tags = tags
+            test.save()
+        return test
+
+    def _add_finding(self, *, test, tags=None):
+        finding = Finding.objects.create(
+            test=test,
+            title="dir-test-finding",
+            severity="High",
+            description="dummy",
+            mitigation="dummy",
+            impact="dummy",
+            reporter=self._get_admin_user(),
+        )
+        if tags:
+            finding.tags = tags
+            finding.save()
+        return finding
+
+    def test_setup_smoke(self):
+        """Sanity check that setUp wired everything correctly."""
+        self.assertEqual(Test_Type.objects.filter(name="Tenable Scan").count(), 1)
+        self.assertIsNotNone(self.engagement.id)
