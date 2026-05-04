@@ -1,3 +1,6 @@
+import json
+from unittest.mock import patch
+
 from django.urls import reverse
 
 from dojo.models import Engagement, Finding, Product, Test, Test_Type, User
@@ -130,3 +133,24 @@ class DisabledInstanceRequestTests(DojoTestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertIn(settings.LOGIN_URL, response.url)
+
+    @patch("dojo.engagement.views.Token")
+    @patch("dojo.engagement.views.requests")
+    def test_endpoint_returns_success_on_external_200(self, mock_requests, mock_token_cls):
+        """When the external API returns 200, the view returns success JSON and posts the engagement name."""
+        mock_token_cls.objects.get.return_value.key = "fake-operative-token"
+        mock_response = mock_requests.post.return_value
+        mock_response.status_code = 200
+
+        url = reverse("disabled_instance_request", args=[self.engagement.id])
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        body = json.loads(response.content)
+        self.assertTrue(body["success"])
+        self.assertIn("successfully", body["message"])
+        # Verify the external API was called with engagement.name as dnsname.
+        mock_requests.post.assert_called_once()
+        call_kwargs = mock_requests.post.call_args.kwargs
+        self.assertEqual(call_kwargs["params"], {"dnsname": self.engagement.name})
+        self.assertIn("Authorization", call_kwargs["headers"])
