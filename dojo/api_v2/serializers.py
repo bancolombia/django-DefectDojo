@@ -6,7 +6,6 @@ import os
 import re
 import time
 from datetime import datetime
-
 import six
 import tagulous
 from django.conf import settings
@@ -131,7 +130,7 @@ from dojo.tools.factory import (
     requires_tool_type,
 )
 from dojo.user.utils import get_configuration_permissions_codenames
-from dojo.utils import is_scan_file_too_large
+from dojo.utils import is_scan_file_too_large, sla_expiration_risk_acceptance 
 from dojo.validators import ImporterFileExtensionValidator, tag_validator
 
 logger = logging.getLogger(__name__)
@@ -1085,14 +1084,34 @@ class ProductOfProductTypes(serializers.ModelSerializer):
         model = Product 
         fields = ["id", "name"]
 
-class ProductContactsSerializer(serializers.ModelSerializer):
-    product_manager = UserStubSerializer(read_only=True)
-    technical_contact = UserStubSerializer(read_only=True)
-    team_manager = UserStubSerializer(read_only=True)
+class ProductContactsSerializer(serializers.Serializer):
+    product_manager = UserStubSerializer(read_only=True, required=False)
+    technical_contact = UserStubSerializer(read_only=True, required=False)
+    team_manager = UserStubSerializer(read_only=True, required=False)
+    product_type_manager = UserStubSerializer(read_only=True, required=False)
+    product_type_technical_contact = UserStubSerializer(read_only=True, required=False)
+    environment_manager = UserStubSerializer(read_only=True, required=False)
+    environment_technical_contact = UserStubSerializer(read_only=True, required=False)
 
-    class Meta:
-        model = Product
-        fields = ["product_manager", "technical_contact" , "team_manager"]
+    def to_representation(self, value):
+        product = value
+        product_manager = product.product_manager
+        technical_contact = product.technical_contact
+        team_manager = product.team_manager
+        product_type_manager = product.prod_type.product_type_manager
+        product_type_technical_contact = product.prod_type.product_type_technical_contact
+        environment_manager = product.prod_type.environment_manager
+        environment_technical_contact = product.prod_type.environment_technical_contact
+
+        return {
+            "product_manager": UserStubSerializer(product_manager).data if product_manager else None,
+            "technical_contact": UserStubSerializer(technical_contact).data if technical_contact else None,
+            "team_manager": UserStubSerializer(team_manager).data if team_manager else None,
+            "product_type_manager": UserStubSerializer(product_type_manager).data if product_type_manager else None,
+            "product_type_technical_contact": UserStubSerializer(product_type_technical_contact).data if product_type_technical_contact else None,
+            "environment_manager": UserStubSerializer(environment_manager).data if environment_manager else None,
+            "environment_technical_contact": UserStubSerializer(environment_technical_contact).data if environment_technical_contact else None,
+        }
 
 
 class EngagementSerializer(serializers.ModelSerializer):
@@ -1575,11 +1594,34 @@ class TestImportSerializer(serializers.ModelSerializer):
 
 class RiskAcceptanceSerializer(serializers.ModelSerializer):
     path = serializers.SerializerMethodField()
+    owner = serializers.CharField(read_only=True)
+    name = serializers.CharField(required=True)
+    long_term_acceptance = serializers.BooleanField(default=False)
+    accepted_findings = serializers.PrimaryKeyRelatedField(many=True, queryset=Finding.objects.all())
+    severity = serializers.CharField(read_only=True)
+    recommendation = serializers.CharField(required=False)
+    recommendation_details = serializers.CharField(required=False)
+    decision = serializers.CharField(required=False)
+    decision_details = serializers.CharField(required=False)
+    accepted_by = serializers.CharField(read_only=True)
+    reviewed_by = serializers.CharField(read_only=True)
+    path = serializers.SerializerMethodField()
+    owner = serializers.PrimaryKeyRelatedField(queryset=Dojo_User.objects.all(), required=False)
+    reviewed_date = serializers.DateTimeField(read_only=True)
+    accepted_date = serializers.DateTimeField(read_only=True)
+    expiration_date = serializers.DateTimeField(required=False)
+    expiration_date_warned = serializers.DateTimeField(read_only=True)
+    expiration_date_handled = serializers.DateTimeField(read_only=True)
+    reactivate_expired = serializers.BooleanField(read_only=True)
+    restart_sla_expired = serializers.BooleanField(read_only=True)
+    notes = serializers.PrimaryKeyRelatedField(many=True, queryset=Notes.objects.all(), required=False)
+    created = serializers.DateTimeField(read_only=True)
+    updated = serializers.DateTimeField(read_only=True)
+
 
     def create(self, validated_data):
         instance = super().create(validated_data)
-        user = getattr(self.context.get("request", None), "user", None)
-        ra_helper.add_findings_to_risk_acceptance(user, instance, instance.accepted_findings.all())
+        ra_helper.add_findings_to_risk_acceptance(instance.owner, instance, instance.accepted_findings.all())
         findings = instance.accepted_findings.all()
         if findings.exists():
             engagement = findings.first().test.engagement
