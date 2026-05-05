@@ -87,6 +87,29 @@ class DojoAppConfig(AppConfig):
         import dojo.test.signals
         import dojo.tool_product.signals  # noqa: F401
 
+        # Disable synchronous per-row tagulous tag count updates to prevent
+        # hot-row lock contention under concurrent import load (controlled by setting).
+        # Symptoms: LWLock:MultiXactOffsetSLRU CPU spikes, Lock:tuple /
+        # Lock:transactionid session pile-ups caused by concurrent
+        #   UPDATE dojo_tagulous_*_tags SET count = count + 1 WHERE id = X
+        # Tag counts are instead reconciled periodically by the
+        # reconcile_tagulous_tag_counts Celery beat task.
+        from django.conf import settings as django_settings
+        from tagulous.models.models import BaseTagModel
+        
+        # Store the original method
+        original_change_count = BaseTagModel._change_count
+        
+        # Wrapper that respects the setting (allowing @override_settings in tests)
+        def _change_count_wrapper(self, amount):
+            if django_settings.TAGULOUS_DISABLE_SYNC_COUNT_UPDATES:
+                return  # Skip the update
+            else:
+                return original_change_count(self, amount)
+        
+        logger.info('Wrapping tagulous _change_count method (respects TAGULOUS_DISABLE_SYNC_COUNT_UPDATES setting)')
+        BaseTagModel._change_count = _change_count_wrapper
+
 
 def get_model_fields_with_extra(model, extra_fields=()):
     return get_model_fields(get_model_default_fields(model), extra_fields)

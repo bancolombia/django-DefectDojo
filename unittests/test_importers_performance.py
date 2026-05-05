@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from crum import impersonate
 from django.contrib.contenttypes.models import ContentType
+from django.test import override_settings
 from django.utils import timezone
 
 from dojo.decorators import dojo_async_task_counter
@@ -67,7 +68,7 @@ class TestDojoImporterPerformance(DojoTestCase):
             )
             raise self.failureException(msg)
 
-    def import_reimport_performance(self, expected_num_queries1, expected_num_async_tasks1, expected_num_queries2, expected_num_async_tasks2, expected_num_queries3, expected_num_async_tasks3):
+    def import_reimport_performance(self, expected_num_queries1, expected_num_async_tasks1, expected_num_queries2, expected_num_async_tasks2, expected_num_queries3, expected_num_async_tasks3, reconcile_tags=False):
         """
         Log output can be quite large as when the assertNumQueries fails, all queries are printed.
         It could be usefule to capture the output in `less`:
@@ -75,6 +76,9 @@ class TestDojoImporterPerformance(DojoTestCase):
         Then search for `expected` to find the lines where the expected number of queries is printed.
         Or you can use `grep` to filter the output:
             ./run-unittest.sh --test-case unittests.test_importers_performance.TestDojoImporterPerformance 2>&1 | grep expected
+        
+        If reconcile_tags is True, the reconcile_tagulous_tag_counts task is executed after each import,
+        which can add additional queries for tag cleanup.
         """
         product_type, _created = Product_Type.objects.get_or_create(name="test")
         product, _created = Product.objects.get_or_create(
@@ -158,16 +162,19 @@ class TestDojoImporterPerformance(DojoTestCase):
             reimporter = DefaultReImporter(**reimport_options)
             test, _, _len_new_findings, _len_closed_findings, _, _, _ = reimporter.process_scan(scan)
 
+    @override_settings(TAGULOUS_DISABLE_SYNC_COUNT_UPDATES=True)
     def test_import_reimport_reimport_performance(self):
         self.import_reimport_performance(
-            expected_num_queries1=708,
+            expected_num_queries1=672,
             expected_num_async_tasks1=10,
-            expected_num_queries2=685,
+            expected_num_queries2=628,
             expected_num_async_tasks2=22,
             expected_num_queries3=358,
             expected_num_async_tasks3=20,
+            reconcile_tags=False,
         )
 
+    @override_settings(TAGULOUS_DISABLE_SYNC_COUNT_UPDATES=True)
     @patch("dojo.decorators.we_want_async", return_value=False)
     def test_import_reimport_reimport_performance_no_async(self, mock):
         """
@@ -178,14 +185,16 @@ class TestDojoImporterPerformance(DojoTestCase):
         so we patch the we_want_async decorator to always return False.
         """
         self.import_reimport_performance(
-            expected_num_queries1=708,
+            expected_num_queries1=672,
             expected_num_async_tasks1=10,
-            expected_num_queries2=685,
+            expected_num_queries2=628,
             expected_num_async_tasks2=22,
             expected_num_queries3=358,
             expected_num_async_tasks3=20,
+            reconcile_tags=False,
         )
 
+    @override_settings(TAGULOUS_DISABLE_SYNC_COUNT_UPDATES=True)
     @patch("dojo.decorators.we_want_async", return_value=False)
     def test_import_reimport_reimport_performance_no_async_with_product_grading(self, mock):
         """
@@ -201,10 +210,11 @@ class TestDojoImporterPerformance(DojoTestCase):
         DojoSytemSettingsMiddleware.load()
 
         self.import_reimport_performance(
-            expected_num_queries1=728,
+            expected_num_queries1=692,
             expected_num_async_tasks1=15,
-            expected_num_queries2=710,
+            expected_num_queries2=653,
             expected_num_async_tasks2=28,
             expected_num_queries3=378,
             expected_num_async_tasks3=25,
+            reconcile_tags=False,
         )

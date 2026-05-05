@@ -223,6 +223,10 @@ def alerts_json(request, limit=None):
 
 
 def alertcount(request):
+    # Return 0 for unauthenticated users (e.g., when session expires)
+    if not request.user.is_authenticated:
+        return JsonResponse({"count": 0})
+    
     if not settings.DISABLE_ALERT_COUNTER:
         count = Alerts.objects.filter(user_id=request.user).count()
         return JsonResponse({"count": count})

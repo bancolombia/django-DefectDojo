@@ -1,6 +1,7 @@
 import logging
 from pathlib import Path
 
+from django.test import override_settings
 from django.test.client import Client
 from django.urls import reverse
 from rest_framework.authtoken.models import Token
@@ -75,6 +76,7 @@ class EndpointMetaImportMixin:
         # 1 tag x 3 endpoints = 3 tags
         self.assertEqual(endpoint_tag_count_before + 3, self.db_endpoint_tag_count())
 
+    @override_settings(TAGULOUS_DISABLE_SYNC_COUNT_UPDATES=True)
     def test_endpoint_meta_import_tag_changed_column(self):
         # Import full scan first
         with assertImportModelsCreated(self, tests=0, engagements=0, products=0, endpoints=3):
@@ -90,6 +92,9 @@ class EndpointMetaImportMixin:
         with assertImportModelsCreated(self, tests=0, engagements=0, products=0, endpoints=0):
             self.endpoint_meta_import_scan_with_params(
                 self.meta_import_updated_changed, create_endpoints=True, create_tags=True, create_dojo_meta=False)
+        # Reconcile tagulous tag counts to cleanup unused tags
+        from dojo.tasks import reconcile_tagulous_tag_counts
+        reconcile_tagulous_tag_counts()
         # See that nothing has been added or removed
         self.assertEqual(endpoint_count_before, self.db_endpoint_count())
         self.assertEqual(endpoint_tag_count_before, self.db_endpoint_tag_count())
