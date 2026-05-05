@@ -14,8 +14,9 @@ class HCParticipation(models.Model):
     ]
     
     RECOMMENDATION_CHOICES = [
-        ("postulated", "Postulated to HC"),
-        ("already_in_hc", "Already in Hacking Continuous"),
+        ("postulated", "Postulated to Continuous Pentesting"),
+        ("manual_postulated", "Manually Postulated to Continuous Pentesting"),
+        ("already_in_hc", "Already in Continuous Pentesting"),
         ("not_eligible", "Not eligible"),
     ]
     

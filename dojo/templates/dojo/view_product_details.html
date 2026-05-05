@@ -497,6 +497,20 @@
                   </td>
           </tr>
           {% endif %}
+          {% if can_manual_postulate_hc %}
+          <tr>
+            <td style="width: 180px;"><strong>{% trans "Continuous Pentesting" %}</strong></td>
+            <td>
+              <form method="post" action="{% url 'manual_hc_participation' prod.id %}" style="display: inline-block;">
+                {% csrf_token %}
+                <button class="pass_fail Pass" type="submit" style="background-color: #FF7F41; color: white; border: none;">
+                  <span class="fa-solid fa-bullseye"></span>
+                  {% trans "Submit for CP" %}
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endif %}
           <tr>
             <td><strong>{% trans "Product Type" %}</strong></td>
             <td><a title="{% trans "Product Type" %}" href="{% url 'view_product_type' prod.prod_type.id %}">{{ prod.prod_type }}</a></td>

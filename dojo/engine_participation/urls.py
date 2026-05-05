@@ -3,6 +3,11 @@ from dojo.engine_participation import views
 
 urlpatterns = [
     re_path(
+        r"^engine_participation/product/(?P<pid>\d+)/manual-postulate/$",
+        views.create_manual_hc_participation_request,
+        name="manual_hc_participation"
+    ),
+    re_path(
         r"^engine_participation/hc_participations$",
         views.hc_participations,
         name="hc_participations"

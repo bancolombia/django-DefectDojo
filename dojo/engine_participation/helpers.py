@@ -104,6 +104,11 @@ def evaluate_product_for_hc(product: Product) -> dict:
     }
     
     result["was_in_hacking_continuous"] = security_posture.get("is_in_hacking_continuos", False)
+
+    if security_posture.get("is_in_hacking_continuos", False):
+        result["recommendation"] = HCParticipation.RECOMMENDATION_CHOICES[1][0]  # already_in_hc
+        result["reason"] = "Product is already in Hacking Continuous. Documented, no postulation required."
+        return result
     
     criticality = product.business_criticality
     if not criticality or criticality.lower() not in ELIGIBLE_CRITICALITIES:
@@ -112,11 +117,6 @@ def evaluate_product_for_hc(product: Product) -> dict:
             f"Business criticality '{criticality or 'Not defined'}' "
             f"is not eligible. Only High/Very High are eligible."
         )
-        return result
-    
-    if security_posture.get("is_in_hacking_continuos", False):
-        result["recommendation"] = HCParticipation.RECOMMENDATION_CHOICES[1][0]  # already_in_hc
-        result["reason"] = "Product is already in Hacking Continuous. Documented, no postulation required."
         return result
     
     result["recommendation"] = HCParticipation.RECOMMENDATION_CHOICES[0][0]  # postulated
@@ -161,16 +161,93 @@ def _process_single_product(product: Product, batch_id: uuid.UUID, user) -> dict
         }
 
 
-def run_hc_participation_evaluation(user=None) -> dict:
+def create_manual_hc_participation(product: Product, user):
+    # Validation 1: existing postulation with Pending status for this product
+    existing_pending = HCParticipation.objects.filter(
+        product_id=product.id,
+        status="Pending",
+    ).first()
+
+    if existing_pending:
+        logger.info(
+            "Product %s (%s) already has a Pending CP submission (uuid=%s). Skipping.",
+            product.id, product.name, existing_pending.uuid,
+        )
+        return {
+            "status": "skipped",
+            "message": f"The product '{product.name}' is already submitted with Pending status.",
+            "hc_participation": None,
+        }
+
+    # Validation 2: product is already in Continuous Pentesting according to risk posture
+    security_posture = get_product_security_posture(product, None)
+    if security_posture.get("is_in_hacking_continuos", False):
+        logger.info(
+            "Product %s (%s) is already in Continuous Pentesting. Skipping manual submission.",
+            product.id, product.name,
+        )
+        return {
+            "status": "skipped",
+            "message": f"The product '{product.name}' is already in Continuous Pentesting.",
+            "hc_participation": None,
+        }
+
+    # Create the record directly without passing through run_hc_participation_evaluation
+    current_time = timezone.now()
+    security_posture_data = {
+        "is_in_hacking_continuos": False,
+        "counter_active_findings": security_posture.get("counter_active_findings", 0),
+        "counter_total_findings": security_posture.get("counter_total_findings", 0),
+        "adoption_devsecops": security_posture.get("adoption_devsecops", []),
+        "result": security_posture.get("result", 0),
+        "status": security_posture.get("status", "UNKNOWN"),
+    }
+
+    hc_participation = HCParticipation.objects.create(
+        product=product,
+        recommendation="manual_postulated",
+        business_criticality=product.business_criticality,
+        was_in_hacking_continuous=False,
+        security_posture_data=security_posture_data,
+        reason=f"Product manually submitted for Continuous Pentesting by user {user.username}.",
+        status="Pending",
+        created_by=user,
+        batch_id=uuid.uuid4(),
+        status_updated_at=current_time,
+        status_updated_by=user,
+    )
+
+    logger.info(
+        "Product %s (%s) manually submitted by user %s (uuid=%s).",
+        product.id, product.name, user.username, hc_participation.uuid,
+    )
+
+    _notify_reviewers_of_new_requests([hc_participation], hc_participation.batch_id)
+
+    return {
+        "status": "created",
+        "message": f"The product '{product.name}' was successfully submitted for Continuous Pentesting.",
+        "hc_participation": hc_participation,
+    }
+
+
+def run_hc_participation_evaluation(user=None, product: Product = None) -> dict:
+    is_manual = product is not None
     batch_id = uuid.uuid4()
-    
+
+    if not is_manual:
+        HCParticipation.objects.filter(recommendation="already_in_hc").delete()
+
     total_products = Product.objects.count()
 
-    products_qs = Product.objects.select_related("prod_type").filter(
-        description__icontains=HC_BMC_APPLICATION_CLASSID_MARKER,
-    )
+    if is_manual:
+        products_qs = Product.objects.select_related("prod_type").filter(pk=product.pk)
+    else:
+        products_qs = Product.objects.select_related("prod_type").filter(
+            description__icontains=HC_BMC_APPLICATION_CLASSID_MARKER,
+        )
     candidates_count = products_qs.count()
-    skipped_by_classid = max(total_products - candidates_count, 0)
+    skipped_by_classid = 0 if is_manual else max(total_products - candidates_count, 0)
 
     logger.info(
         "HC Participation Evaluation scope. Total products: %s, "
@@ -202,8 +279,9 @@ def run_hc_participation_evaluation(user=None) -> dict:
     
     results = []
     requests_to_create = []
+    already_in_hc_to_create = []
     
-    with ThreadPoolExecutor(max_workers=10) as executor:
+    with ThreadPoolExecutor(max_workers=1) as executor:
         future_to_product = {
             executor.submit(_process_single_product, product, batch_id, user): product
             for product in products_list
@@ -213,24 +291,47 @@ def run_hc_participation_evaluation(user=None) -> dict:
             process_result = future.result()
             results.append(process_result["evaluation_result"])
             
-            if process_result["hc_request"] and process_result["evaluation_result"]["recommendation"] == "postulated":
-                requests_to_create.append(process_result["hc_request"])
+            if process_result["hc_request"]:
+                rec = process_result["evaluation_result"]["recommendation"]
+                if is_manual:
+                    # Para postulación manual, siempre guardar como manual_postulated
+                    requests_to_create.append(process_result["hc_request"])
+                elif rec == "postulated":
+                    requests_to_create.append(process_result["hc_request"])
+                elif rec == "already_in_hc":
+                    already_in_hc_to_create.append(process_result["hc_request"])
     
     created_requests = []
     requests_to_create.sort(key=lambda request: request.product_id)
 
     with transaction.atomic():
+        # Persistir registros already_in_hc (documentación, sin flujo de aprobación)
+        for hc_request in already_in_hc_to_create:
+            hc_request.save()
+
+        current_time = timezone.now()
         for hc_request in requests_to_create:
-            locked_product = Product.objects.select_for_update().get(pk=hc_request.product_id)
-            existing = HCParticipation.objects.filter(
-                product=locked_product,
-                status__in=ACTIVE_HC_REQUEST_STATUSES,
-            ).exists()
-            
-            if not existing:
-                hc_request.product = locked_product
+            if is_manual:
+                hc_request.recommendation = "manual_postulated"
+                hc_request.reason = (
+                    f"Product was postulated manually to Hacking Continuous "
+                    f"by user {user.username}."
+                )
+                hc_request.status_updated_at = current_time
+                hc_request.status_updated_by = user
                 hc_request.save()
                 created_requests.append(hc_request)
+            else:
+                locked_product = Product.objects.select_for_update().get(pk=hc_request.product_id)
+                existing = HCParticipation.objects.filter(
+                    product=locked_product,
+                    status__in=ACTIVE_HC_REQUEST_STATUSES,
+                ).exists()
+
+                if not existing:
+                    hc_request.product = locked_product
+                    hc_request.save()
+                    created_requests.append(hc_request)
     
     if created_requests:
         _notify_reviewers_of_new_requests(created_requests, batch_id)
@@ -248,7 +349,7 @@ def run_hc_participation_evaluation(user=None) -> dict:
         f"CLASSID candidates: {candidates_count}, "
         f"Skipped by CLASSID: {skipped_by_classid}, "
         f"Postulated: {summary['postulated']}, "
-        f"Already in HC: {summary['already_in_hc']}, "
+        f"Already in CP: {summary['already_in_hc']}, "
         f"Not eligible: {summary['not_eligible']}, "
         f"Requests created: {len(created_requests)}"
     )
@@ -271,7 +372,7 @@ def _notify_reviewers_of_new_requests(requests, batch_id):
     reviewers = get_hc_reviewers_members()
     
     if not reviewers:
-        logger.warning("No reviewers found for HC participation notifications")
+        logger.warning("No reviewers found for CP submission notifications")
         return
     
     product_names = [req.product.name for req in requests[:5]]
@@ -279,10 +380,10 @@ def _notify_reviewers_of_new_requests(requests, batch_id):
     
     create_notification(
         event="hc_participation_request",
-        subject=f"🎯 {len(requests)} new Hacking Continuous requests",
-        title=f"New Hacking Continuous participation requests",
+        subject=f"🎯 {len(requests)} new Continuous Pentesting submissions",
+        title=f"New Continuous Pentesting submission requests",
         description=(
-            f"{len(requests)} new HC participation requests have been generated "
+            f"{len(requests)} new CP submission requests have been generated "
             f"for products: {', '.join(product_names)}{more_text}. "
             f"Batch ID: {batch_id}"
         ),
@@ -347,9 +448,9 @@ def approve_hc_participation(hc_participation, user):
     if hc_participation.created_by:
         create_notification(
             event="hc_participation_approved",
-            subject=f"✅ HC Request approved - {hc_participation.product.name}",
-            title=f"HC Request approved for {hc_participation.product.name}",
-            description=f"The Hacking Continuous participation request for product {hc_participation.product.name} has been approved.",
+            subject=f"✅ CP Request approved - {hc_participation.product.name}",
+            title=f"Continuous Pentesting Request approved for {hc_participation.product.name}",
+            description=f"The Continuous Pentesting submission request for product {hc_participation.product.name} has been approved.",
             url=reverse("hc_participation", args=[str(hc_participation.pk)]),
             recipients=[hc_participation.created_by.username],
             icon="check-circle",
@@ -390,9 +491,9 @@ def reject_hc_participation(hc_participation, user):
     if hc_participation.created_by:
         create_notification(
             event="hc_participation_rejected",
-            subject=f"❌ HC Request rejected - {hc_participation.product.name}",
-            title=f"HC Request rejected for {hc_participation.product.name}",
-            description=f"The Hacking Continuous participation request for product {hc_participation.product.name} has been rejected.",
+            subject=f"❌ CP Request rejected - {hc_participation.product.name}",
+            title=f"Continuous Pentesting Request rejected for {hc_participation.product.name}",
+            description=f"The Continuous Pentesting submission request for product {hc_participation.product.name} has been rejected.",
             url=reverse("hc_participation", args=[str(hc_participation.pk)]),
             recipients=[hc_participation.created_by.username],
             icon="times-circle",
@@ -446,5 +547,15 @@ def run_monthly_hc_evaluation():
     except Exception as e:
         logger.exception(f"Error in monthly HC evaluation: {e}")
         raise
+
+
+def get_latest_products_already_in_hc():
+    return (
+        HCParticipation.objects
+        .filter(recommendation="already_in_hc")
+        .select_related("product", "product__prod_type")
+        .order_by("product_id", "-create_date")
+        .distinct("product_id")
+    )
 
 

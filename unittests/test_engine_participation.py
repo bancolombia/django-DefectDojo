@@ -20,6 +20,7 @@ from dojo.engine_participation.models import (
     HCParticipationLog,
 )
 from dojo.engine_participation.helpers import (
+    create_manual_hc_participation,
     evaluate_product_for_hc,
     run_hc_participation_evaluation,
     get_latest_hc_evaluation_for_product,
@@ -189,6 +190,27 @@ class EvaluateProductForHCTest(TestCase):
         self.assertEqual(result["recommendation"], "already_in_hc")
         self.assertIn("already in Hacking Continuous", result["reason"])
         self.assertTrue(result["was_in_hacking_continuous"])
+
+    @patch('dojo.engine_participation.helpers.get_product_security_posture')
+    def test_r2_already_in_hc_low_criticality(self, mock_security_posture):
+        """Products already in HC should be documented even with low criticality."""
+        self.product.business_criticality = "low"
+        self.product.save()
+
+        mock_security_posture.return_value = {
+            "is_in_hacking_continuos": True,
+            "counter_active_findings": 1,
+            "counter_total_findings": 2,
+            "adoption_devsecops": [],
+            "result": 10.0,
+            "status": "APETITO",
+        }
+
+        result = evaluate_product_for_hc(self.product)
+
+        self.assertEqual(result["recommendation"], "already_in_hc")
+        self.assertIn("already in Hacking Continuous", result["reason"])
+        self.assertTrue(result["was_in_hacking_continuous"])
     
     @patch('dojo.engine_participation.helpers.get_product_security_posture')
     def test_r3_postulated(self, mock_security_posture):
@@ -327,7 +349,96 @@ class RunHCEvaluationTest(TestCase):
         self.assertEqual(result["scope"]["skipped_by_classid"], 0)
 
 
-class ApproveRejectHCTest(TestCase):
+class ManualHCParticipationTest(TestCase):
+    fixtures = ['dojo_testdata.json']
+
+    def setUp(self):
+        self.user = Dojo_User.objects.get(username="admin")
+        self.product = Product.objects.first()
+        self.product.business_criticality = "low"
+        self.product.save()
+
+    @patch('dojo.engine_participation.helpers.get_product_security_posture')
+    def test_create_manual_hc_participation(self, mock_security_posture):
+        mock_security_posture.return_value = {
+            "is_in_hacking_continuos": False,
+            "counter_active_findings": 1,
+            "counter_total_findings": 2,
+            "adoption_devsecops": [],
+            "result": 10.0,
+            "status": "APETITO",
+        }
+
+        result = create_manual_hc_participation(self.product, self.user)
+        
+        self.assertEqual(result["status"], "created")
+        self.assertIsNotNone(result["hc_participation"])
+        
+        hc_request = result["hc_participation"]
+        self.assertEqual(hc_request.recommendation, "manual_postulated")
+        self.assertEqual(hc_request.status, "Pending")
+        self.assertEqual(hc_request.created_by, self.user)
+        self.assertIn(self.user.username, hc_request.reason)
+
+    @patch('dojo.engine_participation.helpers.get_product_security_posture')
+    def test_manual_hc_participation_with_existing_active_postulation(self, mock_security_posture):
+        """Test that manual postulation is skipped if product already has active postulation (Pending)"""
+        mock_security_posture.return_value = {
+            "is_in_hacking_continuos": False,
+            "counter_active_findings": 1,
+            "counter_total_findings": 2,
+            "adoption_devsecops": [],
+            "result": 10.0,
+            "status": "APETITO",
+        }
+        
+        # Create an existing active postulation with Pending status
+        existing_postulation = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.user,
+        )
+        
+        # Try to manually postulate the same product
+        result = create_manual_hc_participation(self.product, self.user)
+        
+        # Should be skipped
+        self.assertEqual(result["status"], "skipped")
+        self.assertIsNone(result["hc_participation"])
+        self.assertIn("active HC postulation", result["message"])
+        
+        # Verify only the original postulation exists
+        postulations = HCParticipation.objects.filter(product=self.product)
+        self.assertEqual(postulations.count(), 1)
+        self.assertEqual(postulations.first(), existing_postulation)
+
+    @patch('dojo.engine_participation.helpers.get_product_security_posture')
+    def test_manual_hc_participation_already_in_hc(self, mock_security_posture):
+        """Test that manual postulation is skipped if product is already in Hacking Continuo"""
+        mock_security_posture.return_value = {
+            "is_in_hacking_continuos": True,  # Already in HC
+            "counter_active_findings": 1,
+            "counter_total_findings": 2,
+            "adoption_devsecops": [],
+            "result": 10.0,
+            "status": "IN_HC",
+        }
+        
+        # Try to manually postulate a product that's already in HC
+        result = create_manual_hc_participation(self.product, self.user)
+        
+        # Should be skipped
+        self.assertEqual(result["status"], "skipped")
+        self.assertIsNone(result["hc_participation"])
+        self.assertIn("already in Hacking Continuous", result["message"])
+        
+        # Verify no postulation was created
+        postulations = HCParticipation.objects.filter(product=self.product)
+        self.assertEqual(postulations.count(), 0)
+
+
+
     """Tests for approve and reject functions"""
     fixtures = ['dojo_testdata.json']
     

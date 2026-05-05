@@ -29,11 +29,13 @@ from github import Github
 from dojo.decorators import dojo_ratelimit_view
 import dojo.finding.helper as finding_helper
 import dojo.jira_link.helper as jira_helper
+from dojo.templatetags.authorization_tags import is_in_group
 from dojo.authorization.authorization import (
     user_has_permission,
     user_has_permission_or_403,)
 from dojo.authorization.authorization_decorators import user_is_authorized
 from dojo.authorization.roles_permissions import Permissions
+from dojo.engine_participation.helpers import HCConstants
 from dojo.filters import (
     EngagementFilter,
     EngagementFilterWithoutObjectLookups,
@@ -347,7 +349,12 @@ def view_product(request, pid):
         "product_type_groups": product_type_groups,
         "personal_notifications_form": personal_notifications_form,
         "enabled_notifications": get_enabled_notifications_list(),
-        "sla": sla})
+        "sla": sla,
+        "can_manual_postulate_hc": (
+            request.user.is_superuser
+            or is_in_group(request.user, HCConstants.REVIEWERS_GROUP.value)
+            or is_in_group(request.user, HCConstants.APPROVERS_GROUP.value)
+        )})
 
 
 @dojo_ratelimit_view()

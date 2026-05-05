@@ -97,8 +97,47 @@
                 {% include "dojo/paging_snippet.html" with page=hc_requests page_size=True %}
             </div>
             {% else %}
-                No HC participation requests found.
+                No Continuous Pentesting submission requests found.
             {% endif %}
         </div>
-    </div>   
+    </div>
+    
+    {% if products_in_hc %}
+    <div class="row" style="margin-top: 30px;">
+        <div class="col-md-12">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <span class="fa-solid fa-shield"></span> Products Already in Continuous Pentesting
+                    <span class="pull-right text-muted small">
+                        <i class="fa fa-check-circle"></i> Current products in Continuous Pentesting
+                    </span>
+                </div>
+            </div>
+            <div class="panel panel-default table-responsive">
+                <table id="products-in-hc" class="tablesorter-bootstrap table table-condensed table-striped">
+                    <thead>
+                        <tr>
+                            <th>Product</th>
+                            <th>Product Type</th>
+                            <th>Criticality</th>
+                            <th>Latest Evaluation</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for hc_product in products_in_hc %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'view_product' hc_product.product.id %}">{{ hc_product.product.name }}</a>
+                                </td>
+                                <td>{{ hc_product.product.prod_type.name }}</td>
+                                <td>{{ hc_product.product.business_criticality|default:"-" }}</td>
+                                <td>{{ hc_product.create_date|date:"d M Y H:i" }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}   
 {% endblock %}

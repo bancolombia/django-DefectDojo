@@ -4,6 +4,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.core.exceptions import PermissionDenied
 from django.views.decorators.http import require_POST
+from django.utils.safestring import mark_safe
 
 from dojo.utils import get_page_items, add_breadcrumb
 from dojo.templatetags.authorization_tags import is_in_group
@@ -17,13 +18,16 @@ from dojo.engine_participation.helpers import (
     HCConstants,
     InvalidHCParticipationTransition,
     approve_hc_participation,
+    create_manual_hc_participation,
     reject_hc_participation,
     has_valid_comments,
     get_hc_approvers_members,
     mark_hc_participation_reviewed,
     run_hc_participation_evaluation,
+    get_latest_products_already_in_hc,
 )
 from dojo.notifications.helper import create_notification
+from dojo.models import Product
 
 
 def hc_participations(request: HttpRequest) -> HttpResponse:
@@ -33,13 +37,17 @@ def hc_participations(request: HttpRequest) -> HttpResponse:
         "created_by",
         "reviewed_by",
         "approved_by"
-    ).all().order_by("-create_date")
+    ).filter(
+        recommendation__in=["postulated", "manual_postulated"],
+    ).order_by("-create_date")
     
     filtered = HCParticipationFilter(request.GET, queryset=hc_requests)
     paged_requests = get_page_items(request, filtered.qs, 25)
+
+    products_in_hc = get_latest_products_already_in_hc()
     
     add_breadcrumb(
-        title="HC Participation Requests",
+        title="Continuous Pentesting Submissions",
         top_level=True,
         request=request
     )
@@ -47,7 +55,8 @@ def hc_participations(request: HttpRequest) -> HttpResponse:
     return render(request, "dojo/hc_participation/list.html", {
         "hc_requests": paged_requests,
         "filtered": filtered,
-        "name": "Hacking Continuous - Participation Requests",
+        "name": "Continuous Pentesting - Submission Requests",
+        "products_in_hc": products_in_hc,
     })
 
 
@@ -274,7 +283,7 @@ def run_hc_evaluation(request: HttpRequest) -> HttpResponse:
             f"HC Evaluation completed. "
             f"Evaluated: {result['total_evaluated']}, "
             f"Postulated: {result['summary']['postulated']}, "
-            f"Already in HC: {result['summary']['already_in_hc']}, "
+            f"Already in CP: {result['summary']['already_in_hc']}, "
             f"Not eligible: {result['summary']['not_eligible']}, "
             f"Requests created: {result['requests_created']}.",
             extra_tags="alert-success"
@@ -288,3 +297,39 @@ def run_hc_evaluation(request: HttpRequest) -> HttpResponse:
         )
     
     return redirect("hc_participations")
+
+
+@require_POST
+def create_manual_hc_participation_request(request: HttpRequest, pid: int) -> HttpResponse:
+    if not request.user.is_superuser and \
+       not is_in_group(request.user, HCConstants.REVIEWERS_GROUP.value) and \
+       not is_in_group(request.user, HCConstants.APPROVERS_GROUP.value):
+        raise PermissionDenied
+
+    product = get_object_or_404(Product, id=pid)
+    result = create_manual_hc_participation(product, request.user)
+
+    if result["status"] == "created":
+        hc_participation = result["hc_participation"]
+        submission_url = reverse("hc_participation", args=[str(hc_participation.uuid)])
+        success_message = mark_safe(
+            f"{result['message']} "
+            f"<a href='{submission_url}' style='margin-left: 10px;' class='btn btn-xs btn-primary'>"
+            f"View Submission</a>"
+        )
+        messages.add_message(
+            request,
+            messages.SUCCESS,
+            success_message,
+            extra_tags="alert-success"
+        )
+        return redirect("view_product", pid=pid)
+
+    else:  # skipped
+        messages.add_message(
+            request,
+            messages.WARNING,
+            result["message"],
+            extra_tags="alert-warning"
+        )
+        return redirect("view_product", pid=pid)
