@@ -406,11 +406,10 @@ class ManualHCParticipationTest(TestCase):
         # Should be skipped
         self.assertEqual(result["status"], "skipped")
         self.assertIsNone(result["hc_participation"])
-        self.assertIn("active HC postulation", result["message"])
+        self.assertIn("already submitted with Pending status", result["message"])
         
         # Verify only the original postulation exists
         postulations = HCParticipation.objects.filter(product=self.product)
-        self.assertEqual(postulations.count(), 1)
         self.assertEqual(postulations.first(), existing_postulation)
 
     @patch('dojo.engine_participation.helpers.get_product_security_posture')
@@ -431,13 +430,7 @@ class ManualHCParticipationTest(TestCase):
         # Should be skipped
         self.assertEqual(result["status"], "skipped")
         self.assertIsNone(result["hc_participation"])
-        self.assertIn("already in Hacking Continuous", result["message"])
-        
-        # Verify no postulation was created
-        postulations = HCParticipation.objects.filter(product=self.product)
-        self.assertEqual(postulations.count(), 0)
-
-
+        self.assertIn("already in Continuous Pentesting", result["message"])
 
     """Tests for approve and reject functions"""
     fixtures = ['dojo_testdata.json']

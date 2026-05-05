@@ -106,13 +106,13 @@ def evaluate_product_for_hc(product: Product) -> dict:
     result["was_in_hacking_continuous"] = security_posture.get("is_in_hacking_continuos", False)
 
     if security_posture.get("is_in_hacking_continuos", False):
-        result["recommendation"] = HCParticipation.RECOMMENDATION_CHOICES[1][0]  # already_in_hc
+        result["recommendation"] = HCParticipation.RECOMMENDATION_CHOICES[2][0]  # already_in_hc
         result["reason"] = "Product is already in Hacking Continuous. Documented, no postulation required."
         return result
     
     criticality = product.business_criticality
     if not criticality or criticality.lower() not in ELIGIBLE_CRITICALITIES:
-        result["recommendation"] = HCParticipation.RECOMMENDATION_CHOICES[2][0]  # not_eligible
+        result["recommendation"] = HCParticipation.RECOMMENDATION_CHOICES[3][0]  # not_eligible
         result["reason"] = (
             f"Business criticality '{criticality or 'Not defined'}' "
             f"is not eligible. Only High/Very High are eligible."
