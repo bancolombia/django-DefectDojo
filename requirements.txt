@@ -157,7 +157,7 @@ setuptools==82.0.1
 referencing==0.37.0
 tzdata==2026.2
 jsonschema-specifications==2025.9.1
-googleapis-common-protos==1.74.0
+googleapis-common-protos==1.75.0
 grpcio==1.80.0
 zipp==3.23.1
 prompt_toolkit==3.0.52
