@@ -21,7 +21,7 @@ class UseCaseRiskAcceptance:
     def validate_data(self):
         return self.__validate_data
     
-    def __get_priority(self)
+    def __get_priority(self):
         self.__severity = self.__get_severity()
     
     def __get_severity(self) -> str:

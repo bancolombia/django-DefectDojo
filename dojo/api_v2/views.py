@@ -167,6 +167,7 @@ from dojo.models import (
     User,
     UserContactInfo,
     Component,
+    GeneralSettings,
 )
 from dojo.product.queries import (
     get_authorized_app_analysis,
@@ -277,17 +278,20 @@ class RoleViewSet(viewsets.ReadOnlyModelViewSet):
 class DojoGroupViewSet(
     PrefetchDojoModelViewSet,
 ):
-    serializer_class = serializers.DojoGroupSerializer
+    serializer_class = serializers.DojoGroupBasicSerializer
     queryset = Dojo_Group.objects.none()
     filter_backends = (DjangoFilterBackend,)
-    filterset_fields = ["id", "name", "social_provider"]
+    filterset_fields = ["id", "name"]
     permission_classes = (
         IsAuthenticated,
         permissions.UserHasDojoGroupPermission,
     )
 
     def get_queryset(self):
-        return get_authorized_groups(Permissions.Group_View).distinct()
+        if self.request.query_params.get("name") in GeneralSettings.get_value("GROUP_USER_PERMISSION_VIEW", ["Approvers_Risk"]):
+            return Dojo_Group.objects.filter(name=self.request.query_params.get("name"))
+        else:
+            return get_authorized_groups(Permissions.Group_View).distinct()
 
 
 # Authorization: object-based
