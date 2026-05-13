@@ -52,19 +52,15 @@ class RiskAcceptanceViewSet(
     )
 
     def create(self, request, *args, **kwargs):
-        try:
-            serializers  = self.serializer_class(data=request.data, context={"request": request})
-            serializers.is_valid(raise_exception=True)
-            use_case = UseCaseRiskAcceptance(
-                validate_data=serializers.validated_data,
-                request=request
-            )
-            risk_acceptance_obj = use_case.execute()
-            serializer_response = serializers.RiskAcceptanceSerializer(risk_acceptance_obj)
-            return http_response.ok(serializer_response.data)
-        except Exception as e:
-            logger.error(f"Failed to create risk acceptance: {e}")
-            raise ApiError.internal_server_error(detail=str(e))
+        serializers  = self.serializer_class(data=request.data, context={"request": request})
+        serializers.is_valid(raise_exception=True)
+        use_case = UseCaseRiskAcceptance(
+            validate_data=serializers.validated_data,
+            request=request
+        )
+        risk_acceptance_obj = use_case.execute()
+        serializer_response = self.serializer_class(risk_acceptance_obj)
+        return http_response.ok(serializer_response.data)
 
     def put(self, request, *args, **kwargs):
         response = super().update(request, *args, **kwargs)

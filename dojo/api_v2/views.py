@@ -288,7 +288,7 @@ class DojoGroupViewSet(
     )
 
     def get_queryset(self):
-        if self.request.query_params.get("name") in GeneralSettings.get_value("GROUP_USER_PERMISSION_VIEW", ["Approvers_Risk"]):
+        if self.request.query_params.get("name") in GeneralSettings.get_value("GROUP_USER_PERMISSION_VIEW", []):
             return Dojo_Group.objects.filter(name=self.request.query_params.get("name"))
         else:
             return get_authorized_groups(Permissions.Group_View).distinct()
