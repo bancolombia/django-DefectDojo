@@ -278,7 +278,7 @@ class RoleViewSet(viewsets.ReadOnlyModelViewSet):
 class DojoGroupViewSet(
     PrefetchDojoModelViewSet,
 ):
-    serializer_class = serializers.DojoGroupBasicSerializer
+    serializer_class = serializers.DojoGroupSerializer
     queryset = Dojo_Group.objects.none()
     filter_backends = (DjangoFilterBackend,)
     filterset_fields = ["id", "name"]
@@ -292,8 +292,13 @@ class DojoGroupViewSet(
             return Dojo_Group.objects.filter(name=self.request.query_params.get("name"))
         else:
             return get_authorized_groups(Permissions.Group_View).distinct()
-
-
+        
+    def get_serializer(self, *args, **kwargs):
+        if self.request.user.is_superuser:
+            return super().get_serializer(*args, **kwargs)
+        else:
+           return serializers.DojoGroupBasicSerializer(*args, **kwargs)
+    
 # Authorization: object-based
 @extend_schema_view(**schema_with_prefetch())
 class DojoGroupMemberViewSet(
@@ -3489,6 +3494,7 @@ class TransferFindingViewSet(prefetch.PrefetchListMixin,
     filterset_fields = ["id",
                         "destination_engagement",
                         "origin_product_type",
+                        "destination_product",
                         "origin_product",
                         "origin_engagement",
                         "owner"]

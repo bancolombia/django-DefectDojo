@@ -167,7 +167,7 @@ class UserHasDojoGroupPermission(permissions.BasePermission):
             return user_has_configuration_permission(
                 request.user, "auth.add_group",
             )
-        return False
+        return True
 
     def has_object_permission(self, request, view, obj):
         if request.method == "GET":
