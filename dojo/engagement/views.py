@@ -2380,6 +2380,6 @@ def long_risk_acceptance_list(request: HttpRequest, pid) -> HttpResponse:
     add_breadcrumb(title=page_name, top_level=not len(request.GET), request=request)
     return render(request, 'dojo/generic_view.html', {
         'name': page_name,
-        'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/long-term-acceptance/creation{base_params}",
+        'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/long-term-acceptance/list{base_params}",
         'user': user,
     })

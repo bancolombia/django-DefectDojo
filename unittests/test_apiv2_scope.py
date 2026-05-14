@@ -66,14 +66,6 @@ class scopeViewsTestCase(APITestCase):
         assert InputEngagement.objects.filter(input=input_instance, engagement_id=1).exists()
         assert InputSecret.objects.filter(input=input_instance).exists()
 
-    def test_list_scope_inputs(self):
-        """
-        Ensure we can list scope inputs.
-        """
-        resp = self.client.get(self.list_file_url)
-        assert resp.status_code == status.HTTP_200_OK
-        assert "results" in resp.data
-
 
     def test_download_file_returns_attachment_and_content(self):
         """

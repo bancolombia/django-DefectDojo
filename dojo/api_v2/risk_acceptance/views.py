@@ -60,7 +60,7 @@ class RiskAcceptanceViewSet(
         )
         risk_acceptance_obj = use_case.execute()
         serializer_response = self.serializer_class(risk_acceptance_obj)
-        return http_response.ok(serializer_response.data)
+        return http_response.created(serializer_response.data)
 
     def put(self, request, *args, **kwargs):
         response = super().update(request, *args, **kwargs)

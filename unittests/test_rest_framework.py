@@ -555,6 +555,10 @@ class BaseClass:
         @skipIfNotSubclass(CreateModelMixin)
         def test_create(self):
             length = self.endpoint_model.objects.count()
+            self.create_sla_configuration(name="RiskAcceptanceExpiration")
+            finding = Finding.objects.get(id=226)
+            finding.severity = "Critical"
+            finding.save()
             response = self.client.post(self.url, self.payload)
             logger.debug("test_create_response:")
             logger.debug(response)
