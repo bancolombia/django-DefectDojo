@@ -2349,7 +2349,7 @@ def _sync_scan_cycle_logic(engagement, request):
 
     res = requests.post(base_url, params=params, headers=headers)
 
-    if (res.status_code == 200):
+    if (res.status_code == 200 or res.status_code == 202):
         return True
     return False
 
