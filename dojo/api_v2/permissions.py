@@ -11,6 +11,7 @@ from dojo.authorization.authorization import (
     user_has_configuration_permission,
     user_has_global_permission,
     user_has_permission,
+    user_has_role_permission,
 )
 from dojo.api_v2.api_error import ApiError
 from dojo.group.queries import get_users_for_group, get_users_for_group_by_role
@@ -156,9 +157,12 @@ class UserHasCredentialPermission(permissions.BasePermission):
 class UserHasDojoGroupPermission(permissions.BasePermission):
     def has_permission(self, request, view):
         if request.method == "GET":
-            return user_has_configuration_permission(
-                request.user, "auth.view_group",
-            )
+            if request.query_params.get("name") in GeneralSettings.get_value("GROUP_USER_PERMISSION_VIEW", ["Approvers_Risk"]):
+                return True
+            else:
+                return user_has_configuration_permission(
+                    request.user, "auth.view_group",
+                )
         if request.method == "POST":
             return user_has_configuration_permission(
                 request.user, "auth.add_group",

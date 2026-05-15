@@ -20,6 +20,7 @@ from django.db import DEFAULT_DB_ALIAS
 from django.db.models import OuterRef, Q, Value
 from django.db.models.functions import Coalesce
 from django.db.models.query import Prefetch, QuerySet
+from django.middleware.csrf import get_token
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect, QueryDict, StreamingHttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import Resolver404, reverse
@@ -2353,3 +2354,32 @@ def _sync_scan_cycle_logic(engagement, request):
         return True
     return False
 
+@dojo_ratelimit_view()
+def long_risk_acceptance(request: HttpRequest, pid) -> HttpResponse:
+    page_name = ('long_term_acceptance')
+    user = request.user.id
+    cookie_csrftoken = get_token(request)
+    cookie_sessionid = request.COOKIES.get('sessionid', '')
+    base_params = f"?csrftoken={cookie_csrftoken}&sessionid={cookie_sessionid}"
+    base_params += f"&product={pid}" if pid else ""
+    add_breadcrumb(title=page_name, top_level=not len(request.GET), request=request)
+    return render(request, 'dojo/generic_view.html', {
+        'name': page_name,
+        'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/long-term-acceptance/creation{base_params}",
+        'user': user,
+    })
+
+@dojo_ratelimit_view()
+def long_risk_acceptance_list(request: HttpRequest, pid) -> HttpResponse:
+    page_name = ('long_risk_acceptance_list')
+    user = request.user.id
+    cookie_csrftoken = get_token(request)
+    cookie_sessionid = request.COOKIES.get('sessionid', '')
+    base_params = f"?csrftoken={cookie_csrftoken}&sessionid={cookie_sessionid}"
+    base_params += f"&product={pid}" if pid else ""
+    add_breadcrumb(title=page_name, top_level=not len(request.GET), request=request)
+    return render(request, 'dojo/generic_view.html', {
+        'name': page_name,
+        'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/long-term-acceptance/list{base_params}",
+        'user': user,
+    })

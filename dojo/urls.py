@@ -57,7 +57,6 @@ from dojo.api_v2.views import (
     QuestionnaireQuestionViewSet,
     RegulationsViewSet,
     ReImportScanView,
-    RiskAcceptanceViewSet,
     RoleViewSet,
     SLAConfigurationViewset,
     SonarqubeIssueTransitionViewSet,
@@ -78,6 +77,7 @@ from dojo.api_v2.views import (
     ComponentViewSet,
     FindingExclusionViewSet,
 )
+from dojo.api_v2.risk_acceptance.views import RiskAcceptanceViewSet
 from dojo.api_v2.long_risk_acceptance.views import RiskAcceptanceEngagementViewSet, RiskAcceptanceExclusionRuleViewSet
 from dojo.api_v2.ia_recommendation.views import IArecommendationApiView
 from dojo.api_v2.scope.views import ScopeViewSet, InputSecretViewSet, InputFileViewSet
