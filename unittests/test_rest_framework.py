@@ -30,6 +30,7 @@ from rest_framework.test import APIClient
 from dojo.api_v2.mixins import DeletePreviewModelMixin
 from dojo.api_v2.prefetch import PrefetchListMixin, PrefetchRetrieveMixin
 from dojo.api_v2.prefetch.utils import _get_prefetchable_fields
+from dojo.api_v2.risk_acceptance.views import RiskAcceptanceViewSet
 from dojo.api_v2.views import (
     AnnouncementViewSet,
     AppAnalysisViewSet,
@@ -69,7 +70,6 @@ from dojo.api_v2.views import (
     QuestionnaireEngagementSurveyViewSet,
     QuestionnaireGeneralSurveyViewSet,
     QuestionnaireQuestionViewSet,
-    RiskAcceptanceViewSet,
     RoleViewSet,
     SonarqubeIssueViewSet,
     StubFindingsViewSet,
@@ -555,6 +555,10 @@ class BaseClass:
         @skipIfNotSubclass(CreateModelMixin)
         def test_create(self):
             length = self.endpoint_model.objects.count()
+            self.create_sla_configuration(name="RiskAcceptanceExpiration")
+            finding = Finding.objects.get(id=226)
+            finding.severity = "Critical"
+            finding.save()
             response = self.client.post(self.url, self.payload)
             logger.debug("test_create_response:")
             logger.debug(response)

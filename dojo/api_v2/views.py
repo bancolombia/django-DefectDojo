@@ -167,6 +167,7 @@ from dojo.models import (
     User,
     UserContactInfo,
     Component,
+    GeneralSettings,
 )
 from dojo.product.queries import (
     get_authorized_app_analysis,
@@ -188,12 +189,7 @@ from dojo.reports.views import (
     report_url_resolver,
 )
 from dojo.risk_acceptance import api as ra_api
-from dojo.risk_acceptance.helper import remove_finding_from_risk_acceptance
 from dojo.risk_acceptance.notification import Notification as NotificationRiskAcceptance
-from dojo.risk_acceptance.risk_pending import (
-    accept_or_reject_risk_bulk,
-    get_user_with_permission_key)
-from dojo.risk_acceptance.queries import get_authorized_risk_acceptances
 from dojo.test.queries import get_authorized_test_imports, get_authorized_tests
 from dojo.tool_product.queries import get_authorized_tool_product_settings
 from dojo.user.utils import get_configuration_permissions_codenames
@@ -285,16 +281,24 @@ class DojoGroupViewSet(
     serializer_class = serializers.DojoGroupSerializer
     queryset = Dojo_Group.objects.none()
     filter_backends = (DjangoFilterBackend,)
-    filterset_fields = ["id", "name", "social_provider"]
+    filterset_fields = ["id", "name"]
     permission_classes = (
         IsAuthenticated,
         permissions.UserHasDojoGroupPermission,
     )
 
     def get_queryset(self):
-        return get_authorized_groups(Permissions.Group_View).distinct()
-
-
+        if self.request.query_params.get("name") in GeneralSettings.get_value("GROUP_USER_PERMISSION_VIEW", []):
+            return Dojo_Group.objects.filter(name=self.request.query_params.get("name"))
+        else:
+            return get_authorized_groups(Permissions.Group_View).distinct()
+        
+    def get_serializer(self, *args, **kwargs):
+        if self.request.user.is_superuser:
+            return super().get_serializer(*args, **kwargs)
+        else:
+           return serializers.DojoGroupBasicSerializer(*args, **kwargs)
+    
 # Authorization: object-based
 @extend_schema_view(**schema_with_prefetch())
 class DojoGroupMemberViewSet(
@@ -751,117 +755,6 @@ class EngagementViewSet(
         paginated_data = paginator.paginate_queryset(data, request)
         serializer = serializers.EngagementByProductResponseSerializer(paginated_data, many=True)
         return paginator.get_paginated_response(serializer.data)
-
-# @extend_schema_view(**schema_with_prefetch())
-# Nested models with prefetch make the response schema too long for Swagger UI
-class RiskAcceptanceViewSet(
-    PrefetchDojoModelViewSet,
-):
-    serializer_class = serializers.RiskAcceptanceSerializer
-    queryset = Risk_Acceptance.objects.none()
-    filter_backends = (DjangoFilterBackend,)
-    filterset_class = ApiRiskAcceptanceFilter
-
-    permission_classes = (
-        IsAuthenticated,
-        permissions.UserHasRiskAcceptancePermission,
-    )
-
-
-    def put(self, request, *args, **kwargs):
-        response = super().update(request, *args, **kwargs)
-        return response
-
-
-    def destroy(self, request, pk=None):
-        instance = self.get_object()
-        # Remove any findings on the risk acceptance
-        for finding in instance.accepted_findings.all():
-            remove_finding_from_risk_acceptance(request.user, instance, finding)
-        # return the response of the object being deleted
-        return super().destroy(request, pk=pk)
-
-    def get_queryset(self):
-        return (
-            get_authorized_risk_acceptances(Permissions.Risk_Acceptance)
-            .prefetch_related(
-                "notes", "engagement_set", "owner", "accepted_findings",
-            )
-            .distinct()
-        )
-
-    @extend_schema(
-        methods=["GET"],
-        responses={
-            status.HTTP_200_OK: serializers.RiskAcceptanceProofSerializer,
-        },
-    )
-    @action(detail=True, methods=["get"])
-    def download_proof(self, request, pk=None):
-        risk_acceptance = self.get_object()
-        # Get the file object
-        file_object = risk_acceptance.path
-        if file_object is None or risk_acceptance.filename() is None:
-            return Response(
-                {"error": "Proof has not provided to this risk acceptance..."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-        # Get the path of the file in media root
-        file_path = Path(settings.MEDIA_ROOT) / file_object.name
-        file_handle = file_path.open("rb")
-        # send file
-        response = FileResponse(
-            file_handle,
-            content_type=f"{mimetypes.guess_type(str(file_path))}",
-            status=status.HTTP_200_OK,
-        )
-        response["Content-Length"] = file_object.size
-        response[
-            "Content-Disposition"
-        ] = f'attachment; filename="{risk_acceptance.filename()}"'
-
-        return response
-    
-    @extend_schema(
-        methods=["POST"],
-        responses=None,
-        request=RiskAcceptanceEmailSerializer,
-    )
-    @action(detail=True, methods=["post"])
-    def accept_bulk(self, request, pk=None):
-        risk_acceptance = get_object_or_404(Risk_Acceptance.objects, id=pk)
-        eng = Risk_Acceptance.objects.get(id=pk).accepted_findings.all().first().test.engagement
-        product = eng.product
-        product_type = product.prod_type
-        permission_key = request.data.get("permission_key", None)
-        action = request.data.get("actions", None)
-        try:
-            accept_or_reject_risk_bulk(
-                eng=eng,
-                risk_acceptance=risk_acceptance,
-                product=product,
-                product_type=product_type,
-                action=action,
-                permission_key=permission_key)
-
-            logger.info("send message of confirmation for leader(s)")
-            NotificationRiskAcceptance.proccess_confirmation(
-                risk_pending=risk_acceptance,
-                error=action,
-                user_leader=get_user_with_permission_key(permission_key)
-            )
-            return http_response.ok(message="Acceptance process successfully completed")
-        except Exception as e:
-            logger.error(f"Failed accept bulk: {e}")
-            NotificationRiskAcceptance.proccess_confirmation(
-                    risk_pending=risk_acceptance,
-                    user_leader=get_user_with_permission_key(permission_key, raise_exception=False),
-                    error=str(e),
-                    product=product.name,
-                    product_type=product_type.name
-                )
-            raise ApiError.internal_server_error(detail=str(e))
-
 
 
 @extend_schema_view(**schema_with_prefetch())
@@ -3601,6 +3494,7 @@ class TransferFindingViewSet(prefetch.PrefetchListMixin,
     filterset_fields = ["id",
                         "destination_engagement",
                         "origin_product_type",
+                        "destination_product",
                         "origin_product",
                         "origin_engagement",
                         "owner"]

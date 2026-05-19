@@ -766,6 +766,10 @@
                                                         <i class="fa-solid fa-calendar-days"></i>
                                                         {% trans "View Engagements" %}
                                                     </a>
+                                                    <a rel="noopener noreferrer" href="{% url 'long_risk_acceptance_list' product_tab.product.id %}">
+                                                        <i class="fa-solid fa-list"></i>
+                                                        {% trans "View Long Risk Acceptances" %}
+                                                    </a>
                                                 </li>
                                                 {% if product_tab.product|has_object_permission:"Engagement_Add" %}
                                                     <li role="separator" class="divider"></li>
@@ -838,9 +842,15 @@
                                                 </li>
                                                 {% if system_settings.enable_transfer_finding %}
                                                 <li>
-                                                        <a rel="noopener noreferrer" href="{% url 'view_list_transfer_finding' product_tab.product.id %}">
+                                                        <a rel="noopener noreferrer" href="{% url 'view_sent_transfer' product_tab.product.id %}">
                                                             <i class="fa-solid fa-shuffle"></i>
-                                                            {% trans "View Transfer Findings" %}
+                                                            {% trans "View Transfer Findings Sent" %}
+                                                        </a>
+                                                </li>
+                                                <li>
+                                                        <a rel="noopener noreferrer" href="{% url 'view_received_transfer' product_tab.product.id %}">
+                                                            <i class="fa-solid fa-shuffle"></i>
+                                                            {% trans "View Transfer Findings received" %}
                                                         </a>
                                                 </li>
                                                 {% endif %}
