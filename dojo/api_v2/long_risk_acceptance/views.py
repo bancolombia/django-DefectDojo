@@ -167,7 +167,7 @@ class RiskAcceptanceEngagementViewSet(prefetch.PrefetchListMixin,
     @extend_schema(
         methods=["GET"],
         responses={
-            status.HTTP_200_OK: serializers.TransferFindingToNotesSerializer,
+            status.HTTP_200_OK: serializers.AddNewNoteOptionSerializer,
         },
     )
     @extend_schema(
@@ -177,7 +177,7 @@ class RiskAcceptanceEngagementViewSet(prefetch.PrefetchListMixin,
     )
     @action(detail=True, methods=["get", "post"])
     def notes(self, request, pk=None):
-        transfer_finding = self.get_object()
+        long_risk_acceptance = self.get_object()
         if request.method == "POST":
             new_note = serializers.AddNewNoteOptionSerializer(
                 data=request.data,
@@ -191,7 +191,7 @@ class RiskAcceptanceEngagementViewSet(prefetch.PrefetchListMixin,
                     new_note.errors, status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            notes = transfer_finding.note.filter(note_type=note_type).first()
+            notes = long_risk_acceptance.note.filter(note_type=note_type).first()
             if notes and note_type and note_type.is_single:
                 return Response("Only one instance of this note_type allowed on an engagement.", status=status.HTTP_400_BAD_REQUEST)
 
@@ -203,7 +203,7 @@ class RiskAcceptanceEngagementViewSet(prefetch.PrefetchListMixin,
                 note_type=note_type,
             )
             note.save()
-            transfer_finding.note.add(note)
+            long_risk_acceptance.note.add(note)
 
             serialized_note = serializers.NoteSerializer(
                 {"author": author, "entry": entry, "private": private},
@@ -211,10 +211,10 @@ class RiskAcceptanceEngagementViewSet(prefetch.PrefetchListMixin,
             return Response(
                 serialized_note.data, status=status.HTTP_201_CREATED,
             )
-        notes = transfer_finding.note.all()
+        notes = long_risk_acceptance.note.all()
 
         serialized_notes = serializers.TransferFindingToNotesSerializer(
-            {"engagement_id": transfer_finding, "notes": notes},
+            {"engagement_id": long_risk_acceptance, "notes": notes},
         )
         return Response(serialized_notes.data, status=status.HTTP_200_OK)
 

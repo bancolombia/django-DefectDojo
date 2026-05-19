@@ -222,6 +222,10 @@ class Permissions(IntEnum):
             Permissions.Component_View,
             Permissions.Component_Edit,
             Permissions.Component_Delete,
+            Permissions.Long_Risk_Acceptance_Eng_Add,
+            Permissions.Long_Risk_Acceptance_Eng_Edit,
+            Permissions.Long_Risk_Acceptance_Eng_Delete,
+            Permissions.Long_Risk_Acceptance_Eng_View
 
         }.union(cls.get_test_permissions())
 
@@ -594,7 +598,11 @@ def get_roles_with_permissions():
             Permissions.Input_View,
             Permissions.Input_Edit,
             Permissions.Input_Add,
-            Permissions.Input_Delete
+            Permissions.Input_Delete,
+            Permissions.Long_Risk_Acceptance_Eng_View,
+            Permissions.Long_Risk_Acceptance_Eng_Add,
+            Permissions.Long_Risk_Acceptance_Eng_Edit,
+            Permissions.Long_Risk_Acceptance_Eng_Delete,
         },
         Roles.Owner: {
             Permissions.Product_Type_Add_Product,
@@ -718,7 +726,9 @@ def get_roles_with_permissions():
             Permissions.Input_View,
             Permissions.Input_Edit,
             Permissions.Input_Add,
-            Permissions.Input_Delete
+            Permissions.Input_Delete,
+            Permissions.Long_Risk_Acceptance_Eng_View,
+            Permissions.Long_Risk_Acceptance_Eng_Add
 
         },
         Roles.Leader: {
@@ -828,7 +838,10 @@ def get_roles_with_permissions():
             Permissions.Input_View,
             Permissions.Input_Edit,
             Permissions.Input_Add,
-            Permissions.Input_Delete
+            Permissions.Input_Delete,
+            Permissions.Long_Risk_Acceptance_Eng_View,
+            Permissions.Long_Risk_Acceptance_Eng_Add,
+            Permissions.Long_Risk_Acceptance_Eng_Edit,
         },
     }
 

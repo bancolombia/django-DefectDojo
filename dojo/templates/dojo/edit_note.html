@@ -3,8 +3,25 @@
 {% block content %}
     {{ block.super }}
     <h3>{% trans "Edit Note" %}</h3><br />
-    <form class="form-horizontal" action="{% url 'edit_note' note.id page objid %}" method="post">{% csrf_token %}
+    <form class="form-horizontal" action="{% url 'edit_note' note.id page objid %}" method="post" enctype="multipart/form-data">{% csrf_token %}
         {% include "dojo/form_fields.html" with form=form %}
+        {% if existing_attached_files %}
+            <div class="form-group">
+                <label class="col-sm-2 control-label">{% trans "Current Evidence/Proof" %}</label>
+                <div class="col-sm-10">
+                    {% for attached_file in existing_attached_files %}
+                        <div class="checkbox">
+                            <label>
+                                <input type="checkbox" name="remove_evidence_files" value="{{ attached_file.id }}" {% if attached_file.id|stringformat:"s" in selected_removed_file_ids %}checked{% endif %}>
+                                {% trans "Remove" %}
+                            </label>
+                            <a href="{% url 'access_file' attached_file.id objid file_access_obj_type %}" target="_blank">{{ attached_file.title }}</a>
+                        </div>
+                    {% endfor %}
+                    <p class="help-block">{% trans "Select attached files to remove when saving this note." %}</p>
+                </div>
+            </div>
+        {% endif %}
         <div class="form-group">
             <div class="col-sm-offset-2 col-sm-10">
                 <input aria-label="Edit Note" class="btn btn-primary" name="edit_note" type="submit" value="{% trans "Save" %}"/>

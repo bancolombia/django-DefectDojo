@@ -13,7 +13,7 @@
     <h3> Mark Finding for Review</h3>
     <h4>{{ finding.title }}</h4>
     <p>Please provide a reason why this finding needs to be reviewed.</p>
-    <form class="form-horizontal" action="{% url 'request_finding_review' finding.id %}" method="post">
+    <form class="form-horizontal" action="{% url 'request_finding_review' finding.id %}" method="post" enctype="multipart/form-data">
         {% csrf_token %}
         {% include "dojo/form_fields.html" with form=form %}
         <div class="form-group">

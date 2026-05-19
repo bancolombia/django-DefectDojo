@@ -52,6 +52,8 @@ logger = logging.getLogger(__name__)
 
 register = template.Library()
 
+ATTACHED_FILE_RE = re.compile(r"\[Attached File: (?P<title>[^\]]+)\]")
+
 
 class StatusColor(Enum):
     RED = "#b50500"
@@ -128,6 +130,26 @@ def markdown_render(value):
                                                       "markdown.extensions.tables"])
         return mark_safe(bleach.clean(markdown_text, tags=markdown_tags, attributes=markdown_attrs, css_sanitizer=markdown_styles))
     return None
+
+
+@register.filter
+def attached_files_for_note(note, obj):
+    if not getattr(note, "entry", None) or not hasattr(obj, "files"):
+        return []
+
+    attached_file_titles = ATTACHED_FILE_RE.findall(note.entry)
+    if not attached_file_titles:
+        return []
+
+    attached_files_by_title = {
+        attached_file.title: attached_file
+        for attached_file in obj.files.filter(title__in=attached_file_titles)
+    }
+    return [
+        attached_files_by_title[attached_file_title]
+        for attached_file_title in attached_file_titles
+        if attached_file_title in attached_files_by_title
+    ]
 
 
 def text_shortener(value, length):
