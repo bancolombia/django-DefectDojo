@@ -2,9 +2,13 @@ import logging
 from rest_framework import serializers
 from datetime import timedelta
 from django.utils import timezone
+from dojo.authorization.roles_permissions import Permissions
 from dojo.api_v2.long_risk_acceptance.models import RiskAcceptanceEngagement, RiskAcceptanceExclusionRule
 from dojo.group.queries import get_users_for_group, get_users_for_group_by_role
+from dojo.utils import get_product, user_is_contacts
 from dojo.group.queries import users_with_permissions_to_approve_long_term_findings
+from dojo.authorization.authorization import user_has_permission, user_has_global_permission
+from dojo.authorization.authorization import user_has_permission, user_has_global_permission
 from tagulous.models import TagField
 from dojo.models import GeneralSettings, Engagement, Dojo_User, Product, Finding 
 from dojo.api_v2.serializers import EngagementSerializer, UserStubSerializer, NoteSerializer
@@ -51,14 +55,45 @@ class RiskAcceptanceEngagementSerializer(serializers.ModelSerializer):
     reviewed_by_id = serializers.PrimaryKeyRelatedField(source="reviewed_by", queryset=Dojo_User.objects.all(), many=False, required=True, write_only=True)
     reviewed_by = serializers.CharField(read_only=True)
     rules = RiskAcceptanceExclusionRuleSerializers(read_only=True, source="riskacceptanceexclusionrule_set", many=True)
-    owner_id = serializers.PrimaryKeyRelatedField(source="owner", queryset=Dojo_User.objects.all(), many=False, required=True, write_only=True)
+    owner_id = serializers.PrimaryKeyRelatedField(source="owner", queryset=Dojo_User.objects.all(), many=False, required=False, write_only=True)
     owner = UserStubSerializer(read_only=True)
     product = serializers.PrimaryKeyRelatedField(queryset=Product.objects.all(), many=False, required=True)
     class Meta:
         model = RiskAcceptanceEngagement
         fields = '__all__'
+    
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        representation['permission'] = []
+        risk_acceptance_eng = RiskAcceptanceEngagement.objects.get(id=representation.get("id"))
+        all_permissions = [
+            Permissions.Long_Risk_Acceptance_Eng_Add,
+            Permissions.Long_Risk_Acceptance_Eng_Edit,
+            Permissions.Long_Risk_Acceptance_Eng_Delete,
+            Permissions.Long_Risk_Acceptance_Eng_View
+            ]
+        user = self.context["request"].user
+        for permission in all_permissions:
+            if user.is_superuser:
+                representation['permission'].append(permission.name)
+
+            elif user_has_global_permission(user, permission):
+                representation['permission'].append(permission.name)
+
+            elif user_is_contacts(user, risk_acceptance_eng.product):
+                representation['permission'].append(permission.name)
+
+            elif user_has_permission(
+                    user,
+                    risk_acceptance_eng,
+                    permission):
+                    if permission == Permissions.Long_Risk_Acceptance_Eng_View:
+                        representation['permission'].append(permission.name)
+
+        return representation
 
     def create(self, validated_data):
+        validated_data["owner"] = self.context["request"].user
         engagements = validated_data.pop("engagement_set")
         if value := GeneralSettings.get_value("GROUP_REVIEWER_LONGTERM_ACCEPTANCE", "Reviewer_Risk"):
             users = get_users_for_group_by_role(value, "Risk")
