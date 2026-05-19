@@ -158,6 +158,8 @@ class DisabledInstanceRequestTests(DojoTestCase):
         call_kwargs = mock_requests.post.call_args.kwargs
         self.assertEqual(call_kwargs["params"], {"dnsname": self.engagement.name})
         self.assertIn("Authorization", call_kwargs["headers"])
+        # Bound external call — guard against accidental removal of the timeout.
+        self.assertEqual(call_kwargs["timeout"], (5, 10))
 
     @patch("dojo.engagement.views.Token")
     @patch("dojo.engagement.views.User")

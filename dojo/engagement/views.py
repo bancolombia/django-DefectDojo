@@ -2394,10 +2394,11 @@ def disabled_instance_request(request, eid):
             })
         msg = "Disabled instance request failed"
         raise Exception(msg)
-    except Exception as e:
+    except Exception:
+        # Keep exception detail in the server log; do not leak it to the browser-rendered alert.
         logger.exception(f"Error on disabled instance request for engagement {eid}")
         return JsonResponse(
-            {"success": False, "error": f"Error on disabled instance request for engagement: {eid}, ex: {e}"},
+            {"success": False, "error": f"Error on disabled instance request for engagement: {eid}"},
             status=500,
         )
 
