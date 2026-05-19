@@ -2406,10 +2406,7 @@ def long_risk_acceptance_list(request: HttpRequest, pid) -> HttpResponse:
         'user': user,
     })
 
-
-# TODO: ENDPOINT_TBD — replace with the actual API path once the contract is defined.
-# Combined with settings.PROVIDER_CORE_ENGINE to form the final URL.
-DISABLED_INSTANCE_REQUEST_PATH = "engine-backend/<TBD>/disabledInstanceRequest"
+DISABLED_INSTANCE_REQUEST_PATH = "engine-backend/extractor/api/v1/host/deactivation/close"
 
 
 @login_required
@@ -2438,11 +2435,13 @@ def _disabled_instance_request_logic(engagement, request):
     """Fire a POST to the external service to request disabling the Tenable instance."""
     logger.info(f"Disabled instance request for engagement: {engagement.id} - {engagement.name}")
     base_url = f"{settings.PROVIDER_CORE_ENGINE}{DISABLED_INSTANCE_REQUEST_PATH}"
+    body = {
+        "hostName": engagement.name,
+        "id": engagement.id
+    }
     user_token = Token.objects.get(user=User.objects.get(username=settings.OPERATIVE_USER))
     headers = {"Authorization": user_token.key}
-    # TODO: ENDPOINT_TBD — confirm the query-param key with the API contract.
-    # Defaulting to `dnsname` to mirror the existing Tenable branch in _sync_scan_cycle_logic.
     params = {"dnsname": engagement.name}
     # Bound the call so a hung external service cannot pin a uWSGI worker indefinitely.
-    res = requests.post(base_url, params=params, headers=headers, timeout=(5, 10))
+    res = requests.post(base_url, params=params, headers=headers, json=body, timeout=(5, 10))
     return res.status_code == 200
