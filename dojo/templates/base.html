@@ -842,9 +842,15 @@
                                                 </li>
                                                 {% if system_settings.enable_transfer_finding %}
                                                 <li>
-                                                        <a rel="noopener noreferrer" href="{% url 'view_list_transfer_finding' product_tab.product.id %}">
+                                                        <a rel="noopener noreferrer" href="{% url 'view_sent_transfer' product_tab.product.id %}">
                                                             <i class="fa-solid fa-shuffle"></i>
-                                                            {% trans "View Transfer Findings" %}
+                                                            {% trans "View Transfer Findings Sent" %}
+                                                        </a>
+                                                </li>
+                                                <li>
+                                                        <a rel="noopener noreferrer" href="{% url 'view_received_transfer' product_tab.product.id %}">
+                                                            <i class="fa-solid fa-shuffle"></i>
+                                                            {% trans "View Transfer Findings received" %}
                                                         </a>
                                                 </li>
                                                 {% endif %}
