@@ -114,6 +114,22 @@ class DisabledInstanceRequestTests(DojoTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "Disabled Instance Request")
 
+    def test_button_visible_when_only_finding_has_tenable_tag(self):
+        """Engagement with non-Tenable test but a finding with tag 'tenable' should show the button."""
+        nessus_type, _ = Test_Type.objects.get_or_create(name="NESSUS Scan")
+        test = Test.objects.create(
+            engagement=self.engagement,
+            scan_type="NESSUS Scan",
+            test_type=nessus_type,
+            target_start="2026-01-01",
+            target_end="2026-01-02",
+        )
+        self._add_finding(test=test, tags=["tenable_custom_tag"])
+
+        response = self.client.get(self.view_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Disabled Instance Request")
+
     def test_button_hidden_when_only_tenable_test_is_transferred(self):
         """A Tenable Scan test tagged 'transferred' (mixed-case) must be excluded from OR-A."""
         self._add_tenable_test(tags=["ciclo_escaneo", "Transferred"])
@@ -122,6 +138,15 @@ class DisabledInstanceRequestTests(DojoTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "Disabled Instance Request")
+
+    def test_button_visible_when_only_tenable_test_is_transferred_but_finding_has_tenable_tag(self):
+        """Si el único test Tenable está transferido pero hay un finding con tag 'tenable', el botón se muestra."""
+        test = self._add_tenable_test(tags=["ciclo_escaneo", "Transferred"])
+        self._add_finding(test=test, tags=["tenable_tag"])
+
+        response = self.client.get(self.view_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Disabled Instance Request")
 
     def test_endpoint_requires_login(self):
         """Unauthenticated GET to the disabled_instance_request endpoint should redirect to login."""
