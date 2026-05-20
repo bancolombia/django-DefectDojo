@@ -26,11 +26,12 @@ class DisabledInstanceRequestTests(DojoTestCase):
             description="dummy",
             prod_type_id=1,
         )
+        from datetime import date
         self.engagement = Engagement.objects.create(
             name="dir-test-engagement",
             product=self.product,
-            target_start="2026-01-01",
-            target_end="2026-12-31",
+            target_start=date(2026, 1, 1),
+            target_end=date(2026, 12, 31),
         )
         self.view_url = reverse("view_engagement", args=[self.engagement.id])
 
