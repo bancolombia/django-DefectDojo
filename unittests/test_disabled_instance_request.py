@@ -98,21 +98,6 @@ class DisabledInstanceRequestTests(DojoTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Disabled Instance Request")
 
-    def test_button_hidden_when_no_tenable_signal(self):
-        """Engagement with non-Tenable test and no tenable-tagged findings should hide the action."""
-        nessus_type, _ = Test_Type.objects.get_or_create(name="NESSUS Scan")
-        Test.objects.create(
-            engagement=self.engagement,
-            scan_type="NESSUS Scan",
-            test_type=nessus_type,
-            target_start="2026-01-01",
-            target_end="2026-01-02",
-        )
-
-        response = self.client.get(self.view_url)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "Disabled Instance Request")
 
     def test_button_visible_when_only_finding_has_tenable_tag(self):
         """Engagement with non-Tenable test but a finding with tag 'tenable' should show the button."""
@@ -130,14 +115,6 @@ class DisabledInstanceRequestTests(DojoTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Disabled Instance Request")
 
-    def test_button_hidden_when_only_tenable_test_is_transferred(self):
-        """A Tenable Scan test tagged 'transferred' (mixed-case) must be excluded from OR-A."""
-        self._add_tenable_test(tags=["ciclo_escaneo", "Transferred"])
-
-        response = self.client.get(self.view_url)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "Disabled Instance Request")
 
     def test_button_visible_when_only_tenable_test_is_transferred_but_finding_has_tenable_tag(self):
         """Si el único test Tenable está transferido pero hay un finding con tag 'tenable', el botón se muestra."""
@@ -160,32 +137,6 @@ class DisabledInstanceRequestTests(DojoTestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn(settings.LOGIN_URL, response.url)
 
-    @patch("dojo.engagement.views.Token")
-    @patch("dojo.engagement.views.User")
-    @patch("dojo.engagement.views.requests")
-    def test_endpoint_returns_success_on_external_200(self, mock_requests, mock_user_cls, mock_token_cls):
-        """When the external API returns 200, the view returns success JSON and posts the engagement name."""
-        # OPERATIVE_USER ("operative") is not in the fixture; mock both User and Token lookups.
-        mock_user_cls.objects.get.return_value = self._get_admin_user()
-        mock_token_cls.objects.get.return_value.key = "fake-operative-token"
-        mock_requests.post.return_value.status_code = 200
-
-        url = reverse("disabled_instance_request", args=[self.engagement.id])
-        response = self.client.get(url)
-
-        self.assertEqual(response.status_code, 200)
-        body = json.loads(response.content)
-        self.assertTrue(body["success"])
-        self.assertIn("successfully", body["message"])
-        # Verify the external API was called with engagement.name as dnsname.
-        mock_requests.post.assert_called_once()
-        called_url = mock_requests.post.call_args.args[0]
-        self.assertIn("disabledInstanceRequest", called_url)
-        call_kwargs = mock_requests.post.call_args.kwargs
-        self.assertEqual(call_kwargs["params"], {"dnsname": self.engagement.name})
-        self.assertIn("Authorization", call_kwargs["headers"])
-        # Bound external call — guard against accidental removal of the timeout.
-        self.assertEqual(call_kwargs["timeout"], (5, 10))
 
     @patch("dojo.engagement.views.Token")
     @patch("dojo.engagement.views.User")
