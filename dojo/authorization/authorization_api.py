@@ -52,7 +52,11 @@ def user_has_permission(user, obj):
     else:
         roles = get_roles_with_permissions()
         permissions = roles.get(Roles[role])
-        return validation_status_permission(obj, permissions)
+        if isinstance(obj, Input):
+            if user == obj.owner:
+                return Permissions.get_input_permissions()
+        else:
+            return validation_status_permission(obj, permissions)
     return []
 
 

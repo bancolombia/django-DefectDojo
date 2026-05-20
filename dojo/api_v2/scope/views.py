@@ -46,8 +46,9 @@ class ScopeViewSet(prefetch.PrefetchListMixin,
     filterset_class = InputFilter
     pagination_class = LimitOffsetPagination
 
-    def get_queryset(self):
-        inputs = get_authorized_scope(Permissions.Input_View)
+    def get_queryset(self, pid):
+        product = get_object_or_404(Product, id=pid)
+        inputs = get_authorized_scope(Permissions.Input_View, product)
         return inputs
 
     def update(self, request, *args, **kwargs):
@@ -64,7 +65,8 @@ class ScopeViewSet(prefetch.PrefetchListMixin,
                 message="Validation error occurred.", data=serializer.errors)
 
     def list(self, request, *args, **kwargs):
-        inputs_qr = self.filter_queryset(self.get_queryset())
+        inputs_qr = self.filter_queryset(
+            self.get_queryset(request.query_params.get("product")))
         page = self.paginate_queryset(inputs_qr)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
