@@ -429,6 +429,7 @@ def get_roles_with_permissions():
             Permissions.Risk_Acceptance_Add,
             Permissions.Finding_Add_Recommendation,
             Permissions.Risk_Acceptance_Bulk,
+            Permissions.Risk_Acceptance_Send_Email
         },
         Roles.Writer: {
             Permissions.Product_Type_View,
