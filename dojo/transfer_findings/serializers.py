@@ -149,7 +149,7 @@ class TransferFindingFindingSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
-        representation['permission'] = []
+        representation['permissions'] = []
         transfer_finding_finding_obj = TransferFindingFinding.objects.get(id=representation['id'])
         for permission in [Permissions.Transfer_Finding_Finding_View,
                         Permissions.Transfer_Finding_Finding_Edit,
@@ -158,13 +158,13 @@ class TransferFindingFindingSerializer(serializers.ModelSerializer):
             user = self.context["request"].user
 
             if user.is_superuser:
-                representation['permission'].append(permission.name)
+                representation['permissions'].append(permission.name)
 
             elif user_has_global_permission(user, permission):
-                representation['permission'].append(permission.name)
+                representation['permissions'].append(permission.name)
             
             elif user_is_contacts(user, transfer_finding_finding_obj.transfer_findings.destination_product):
-                representation['permission'].append(permission.name)
+                representation['permissions'].append(permission.name)
 
             elif user_has_permission(
                     self.context["request"].user,
@@ -172,9 +172,9 @@ class TransferFindingFindingSerializer(serializers.ModelSerializer):
                     permission):
                 if(transfer_finding_finding_obj.findings.risk_status == "Transfer Accepted"
                    and permission == Permissions.Transfer_Finding_Finding_View):
-                    representation['permission'].append(permission.name)
+                    representation['permissions'].append(permission.name)
                 elif transfer_finding_finding_obj.findings.risk_status in ["Transfer Rejected", "Transfer Pending"]:
-                    representation['permission'].append(permission.name)
+                    representation['permissions'].append(permission.name)
 
         return representation
             
@@ -250,7 +250,7 @@ class TransferFindingSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
-        representation['permission'] = []
+        representation['permissions'] = []
         transfer_finding_obj = TransferFinding.objects.get(id=representation.get("id"))
         all_permissions = [Permissions.Transfer_Finding_View,
                            Permissions.Transfer_Finding_Edit,
@@ -259,13 +259,13 @@ class TransferFindingSerializer(serializers.ModelSerializer):
         user = self.context["request"].user
         for permission in all_permissions:
             if user.is_superuser:
-                representation['permission'].append(permission.name)
+                representation['permissions'].append(permission.name)
 
             elif user_has_global_permission(user, permission):
-                representation['permission'].append(permission.name)
+                representation['permissions'].append(permission.name)
 
             elif user_is_contacts(user, transfer_finding_obj.destination_product):
-                representation['permission'].append(permission.name)
+                representation['permissions'].append(permission.name)
 
             elif user_has_permission(
                     user,
@@ -274,7 +274,7 @@ class TransferFindingSerializer(serializers.ModelSerializer):
                 transfer_finding_finding = transfer_finding_obj.transfer_findings.filter(findings__risk_status="Transfer Accepted")
                 if transfer_finding_finding:
                     if permission == Permissions.Transfer_Finding_View:
-                        representation['permission'].append(permission.name)
+                        representation['permissions'].append(permission.name)
 
         return representation
 
