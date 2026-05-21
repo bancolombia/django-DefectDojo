@@ -18,7 +18,7 @@ class SerializerEmailNotificationRiskAcceptance(serializers.Serializer):
     url = serializers.URLField(required=False)
     icon = serializers.CharField(required=False, default="download", max_length=50)
     color_icon = serializers.CharField(required=False, default="#096C11", max_length=10)
-    expiration_time = serializers.DurationField(required=False, allow_null=True)
+    expiration_time = serializers.IntegerField(required=False, allow_null=True, min_value=1)
     product_id = serializers.IntegerField(required=False, allow_null=True)
     engagement_id = serializers.IntegerField(required=False, allow_null=True)
     finding_id = serializers.IntegerField(required=False, allow_null=True)

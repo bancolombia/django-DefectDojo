@@ -1,11 +1,13 @@
 import logging
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
+from django.core.cache import cache
 from rest_framework.generics import GenericAPIView
 from dojo.api_v2.utils import http_response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from dojo.user.queries import get_user
+from dojo.home.helper import encode_string
 from dojo.api_v2.notifications.serializers import SerializerEmailNotificationRiskAcceptance
 from dojo.models import Risk_Acceptance, Product, Engagement, Finding
 from dojo.api_v2.long_risk_acceptance.models import RiskAcceptanceEngagement
@@ -54,7 +56,7 @@ class NotificationEmailApiView(GenericAPIView):
         url = data.get("url")
         icon = data.get("icon", "download")
         color_icon = data.get("color_icon", "#096C11")
-        expiration_time = data.get("expiration_time")
+        expiration_time_hours = data.get("expiration_time")
         product_id = data.get("product_id")
         engagement_id = data.get("engagement_id")
         finding_id = data.get("finding_id")
@@ -76,8 +78,16 @@ class NotificationEmailApiView(GenericAPIView):
                 "color_icon": color_icon,
             }
 
-            if expiration_time:
-                notification_kwargs["expiration_time"] = expiration_time
+            if expiration_time_hours:
+                notification_kwargs["expiration_time"] = f"{expiration_time_hours} hours"
+
+            encoded_url = encode_string(url)
+            key = f"report_finding:{recipients[0]}:{encoded_url}"
+            logger.debug(f"REPORT FINDING: calculate key url path {key}")
+            expiration_time_seconds = expiration_time_hours * 3600 if expiration_time_hours else None
+            cache.set(key, url, expiration_time_seconds)
+
+            notification_kwargs["url"] = f"{settings.SITE_URL}/url_presigned/{encoded_url}"
 
             try:
                 if product_id:
