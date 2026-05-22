@@ -64,31 +64,34 @@ class RiskAcceptanceEngagementSerializer(serializers.ModelSerializer):
     
     def to_representation(self, instance):
         representation = super().to_representation(instance)
-        representation['permission'] = []
+        representation['permissions'] = []
         risk_acceptance_eng = RiskAcceptanceEngagement.objects.get(id=representation.get("id"))
         all_permissions = [
             Permissions.Long_Risk_Acceptance_Eng_Add,
             Permissions.Long_Risk_Acceptance_Eng_Edit,
             Permissions.Long_Risk_Acceptance_Eng_Delete,
-            Permissions.Long_Risk_Acceptance_Eng_View
+            Permissions.Long_Risk_Acceptance_Eng_View,
+            Permissions.Risk_Acceptance_Eng_Render,
+            Permissions.Risk_Acceptance_Eng_Review,
+            Permissions.Risk_Acceptance_Send_Email
             ]
         user = self.context["request"].user
         for permission in all_permissions:
             if user.is_superuser:
-                representation['permission'].append(permission.name)
+                representation['permissions'].append(permission.name)
 
             elif user_has_global_permission(user, permission):
-                representation['permission'].append(permission.name)
+                representation['permissions'].append(permission.name)
 
             elif user_is_contacts(user, risk_acceptance_eng.product):
-                representation['permission'].append(permission.name)
+                representation['permissions'].append(permission.name)
 
             elif user_has_permission(
                     user,
                     risk_acceptance_eng,
                     permission):
                     if permission == Permissions.Long_Risk_Acceptance_Eng_View:
-                        representation['permission'].append(permission.name)
+                        representation['permissions'].append(permission.name)
 
         return representation
 
