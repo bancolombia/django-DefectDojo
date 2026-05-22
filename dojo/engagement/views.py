@@ -514,6 +514,16 @@ class ViewEngagement(View):
             engagement=eng.id).select_related("cred_id").order_by("cred_id")
 
         has_ciclo_escaneo_test = eng.test_set.filter(tags__name="ciclo_escaneo").exclude(tags__name__iexact="transferred").exists()
+        has_tenable_test = (
+            eng.test_set
+               .filter(scan_type="Tenable Scan", tags__name="ciclo_escaneo")
+               .exclude(tags__name__iexact="transferred")
+               .exists()
+        )
+        has_tenable_finding = eng.test_set.filter(
+            finding__tags__name__icontains="tenable",
+        ).exists()
+        show_disabled_instance_request = has_tenable_test or has_tenable_finding
         add_breadcrumb(parent=eng, top_level=False, request=request)
 
         title = ""
@@ -541,6 +551,7 @@ class ViewEngagement(View):
                 "network": network,
                 "preset_test_type": preset_test_type,
                 "has_ciclo_escaneo_test": has_ciclo_escaneo_test,
+                "show_disabled_instance_request": show_disabled_instance_request,
             })
 
     def post(self, request, eid, *args, **kwargs):
@@ -603,6 +614,16 @@ class ViewEngagement(View):
             engagement=eng.id).select_related("cred_id").order_by("cred_id")
 
         has_ciclo_escaneo_test = eng.test_set.filter(tags__name="ciclo_escaneo").exclude(tags__name__iexact="transferred").exists()
+        has_tenable_test = (
+            eng.test_set
+               .filter(scan_type="Tenable Scan", tags__name="ciclo_escaneo")
+               .exclude(tags__name__iexact="transferred")
+               .exists()
+        )
+        has_tenable_finding = eng.test_set.filter(
+            finding__tags__name__icontains="tenable",
+        ).exists()
+        show_disabled_instance_request = has_tenable_test or has_tenable_finding
         add_breadcrumb(parent=eng, top_level=False, request=request)
 
         title = ""
@@ -630,6 +651,7 @@ class ViewEngagement(View):
                 "network": network,
                 "preset_test_type": preset_test_type,
                 "has_ciclo_escaneo_test": has_ciclo_escaneo_test,
+                "show_disabled_instance_request": show_disabled_instance_request,
                 'risk_pending': settings.RISK_PENDING
             })
 
@@ -2383,3 +2405,43 @@ def long_risk_acceptance_list(request: HttpRequest, pid) -> HttpResponse:
         'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/long-term-acceptance/list{base_params}",
         'user': user,
     })
+
+DISABLED_INSTANCE_REQUEST_PATH = "engine-backend/extractor/api/v1/host/deactivation/close"
+
+
+@login_required
+def disabled_instance_request(request, eid):
+    """AJAX view to request the disabling of a Tenable instance for the engagement."""
+    engagement = get_object_or_404(Engagement, id=eid)
+    try:
+        ok = _disabled_instance_request_logic(engagement, request)
+        if ok:
+            return JsonResponse({
+                "success": True,
+                "message": "Disabled instance request sent successfully",
+            })
+        msg = "Disabled instance request failed"
+        raise Exception(msg)
+    except Exception:
+        # Keep exception detail in the server log; do not leak it to the browser-rendered alert.
+        logger.exception(f"Error on disabled instance request for engagement {eid}")
+        return JsonResponse(
+            {"success": False, "error": f"Error on disabled instance request for engagement: {eid}"},
+            status=500,
+        )
+
+
+def _disabled_instance_request_logic(engagement, request):
+    """Fire a POST to the external service to request disabling the Tenable instance."""
+    logger.info(f"Disabled instance request for engagement: {engagement.id} - {engagement.name}")
+    base_url = f"{settings.PROVIDER_CORE_ENGINE}{DISABLED_INSTANCE_REQUEST_PATH}"
+    body = {
+        "hostName": engagement.name,
+        "id": engagement.id
+    }
+    user_token = Token.objects.get(user=User.objects.get(username=settings.OPERATIVE_USER))
+    headers = {"Authorization": user_token.key}
+    params = {"dnsname": engagement.name}
+    # Bound the call so a hung external service cannot pin a uWSGI worker indefinitely.
+    res = requests.post(base_url, params=params, headers=headers, json=body, timeout=(5, 10))
+    return res.status_code == 200

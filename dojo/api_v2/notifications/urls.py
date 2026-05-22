@@ -1,5 +1,5 @@
 from django.urls import path
-from dojo.api_v2.notifications.views import NotificationEmailApiView     
+from dojo.api_v2.notifications.views import NotificationEmailApiView
 
 
 urlpatterns = [
