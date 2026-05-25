@@ -686,7 +686,7 @@ class HCParticipationViewsTest(TestCase):
 
         response = self.client.post(reverse("api_hc_run_evaluation"), format="json")
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
         self.assertEqual(response.data["status"], "success")
         self.assertEqual(response.data["data"]["batch_id"], "batch-1")
 
