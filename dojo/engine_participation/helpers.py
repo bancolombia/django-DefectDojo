@@ -3,6 +3,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from enum import Enum
 
+from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.conf import settings
 from django.urls import reverse
@@ -547,6 +548,19 @@ def run_monthly_hc_evaluation():
     except Exception as e:
         logger.exception(f"Error in monthly HC evaluation: {e}")
         raise
+
+
+@app.task(ignore_result=False, track_started=True)
+def run_hc_participation_evaluation_async(user_id=None):
+    user = None
+    if user_id:
+        user_model = get_user_model()
+        user = user_model.objects.filter(pk=user_id).first()
+        if not user:
+            logger.warning("User %s not found for async HC evaluation", user_id)
+
+    logger.info("Starting async HC participation evaluation. user_id=%s", user_id)
+    return run_hc_participation_evaluation(user=user)
 
 
 def get_latest_products_already_in_hc():
