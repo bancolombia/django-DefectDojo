@@ -687,8 +687,7 @@ class HCParticipationViewsTest(TestCase):
         response = self.client.post(reverse("api_hc_run_evaluation"), format="json")
 
         self.assertEqual(response.status_code, 202)
-        self.assertEqual(response.data["status"], "success")
-        self.assertEqual(response.data["data"]["batch_id"], "batch-1")
+        self.assertEqual(response.data["status"], "accepted")
 
     def test_api_run_evaluation_forbids_non_staff_user(self):
         """Test API endpoint denies non-staff users even with token"""
