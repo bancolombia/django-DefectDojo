@@ -52,7 +52,7 @@ def send_risk_acceptance_email_task(
             risk_pending.accepted_by = recipients
             product_type = risk_pending.save()
             product = risk_pending.product
-            title = f"{product.name} + {risk_pending.id}"
+            title = f"{product.name} {risk_pending.id}"
 
     except Exception as e:
         logger.error(str(e))

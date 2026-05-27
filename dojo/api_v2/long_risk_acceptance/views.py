@@ -73,11 +73,13 @@ class RiskAcceptanceEngagementViewSet(prefetch.PrefetchListMixin,
     def render_rule(self, request, pk):
         ra_engagement = get_object_or_404(RiskAcceptanceEngagement, id=pk)
         query = helper_ra_engagement.render_rule(ra_engagement)
-        page = self.paginate_queryset(query)
-        serializer = FindingRenderRuleSerializer(page if page is not None else query, many=True)
-        if page is not None:
-            return self.get_paginated_response(serializer.data)
-        return http_response.ok(serializer.data)
+        if query:
+            page = self.paginate_queryset(query)
+            serializer = FindingRenderRuleSerializer(page if page is not None else query, many=True)
+            if page is not None:
+                return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(query, many=True)
+        return http_response.ok(data=serializer.data)
     
 
     @extend_schema(
@@ -88,9 +90,13 @@ class RiskAcceptanceEngagementViewSet(prefetch.PrefetchListMixin,
     @action(detail=True, methods=["post"])
     def apply_rule(self, request, pk):
         ra_engagement = get_object_or_404(RiskAcceptanceEngagement, id=pk)
-        helper_ra_engagement.apply_rule(ra_engagement)
-        return http_response.ok()
-   
+        try:
+            helper_ra_engagement.apply_rule(ra_engagement, request.user)
+            return http_response.ok(message="Render Rule Applied")
+        except Exception as e:
+            return http_response.error(
+                message="Validation error occurred. ", data=str(e)
+            )
 
     @extend_schema(
         methods=['POST'],
