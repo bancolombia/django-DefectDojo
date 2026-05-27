@@ -144,7 +144,7 @@ class InputEngagementSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = InputEngagement
-        fields = ["id", "engagement", "product", "input", ]
+        fields = ["id", "engagement", "product", "input"]
     
     def get_input(self, obj):
         input_obj = getattr(obj, "input", None)
