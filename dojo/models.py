@@ -1708,7 +1708,7 @@ class Engagement(models.Model):
     @property
     def get_all_finding_active(self):
         """ Returns the number of active findings for this engagement """
-        a = Finding.objects.filter(test__engagement=self, active=True, duplicate=False, risk_accepted= False)
+        a = Finding.objects.filter(test__engagement=self, duplicate=False, is_mitigated=False)
         return a
     
     @property

@@ -41,20 +41,29 @@ def apply_review(request, ra_engagement: RiskAcceptanceEngagement):
 
 
 
-def apply_rule(ra_engagement: RiskAcceptanceEngagement):
+def apply_rule(ra_engagement: RiskAcceptanceEngagement, user):
     finding_qs = render_rule(ra_engagement)
+    if finding_qs:
+        if ra_engagement.risk_status in ["Risks Reviewed"]:
+            ra_engagement.risk_status = "Risks Accepted"
+            ra_engagement.save()
+            for finding in finding_qs.iterator(chunk_size=200):
+                if ra_engagement.risk_status in ["Risks Reviewed"]:
+                    finding.risk_status = "Risk Accepted"
+                    finding.active = False
+                    finding.risk_accepted = True
 
-    for finding in finding_qs.iterator(chunk_size=200):
-        if finding.risk_status == "Risk Active":
-          
-            finding.risk_status = "Risk Accepted"
-            finding.active = False
-            finding.risk_accepted = True
+                    finding.save(update_fields=[
+                        "risk_status",
+                        "active",
+                        "risk_accepted"
+                    ])
 
-            finding.save(update_fields=[
-                "risk_status",
-                "active",
-                "risk_accepted"
-            ])
-
-            finding.tags.add("long_term_risk_acceptance")
+                finding.tags.add("long_term_risk_acceptance")
+        elif ra_engagement.risk_status in ["Risks Pending"]:
+                ra_engagement.risk_status = "Risks Reviewed"
+                ra_engagement.reviewed_by = user.username
+                ra_engagement.reviewed_date = timezone.now()
+                ra_engagement.save()
+    else:
+        raise ApiError("No findings found for this engagement with the current rules.")

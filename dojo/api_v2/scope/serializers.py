@@ -97,6 +97,7 @@ class ScopeSecretSerializers(serializers.Serializer):
     CHOICES = (
         ("secret", "Secret"),
         ("file", "File"),
+        ("desc", "Desc"),
     )
     engagement = serializers.PrimaryKeyRelatedField(queryset=Engagement.objects.all(), required=False, allow_null=True)
     product = serializers.PrimaryKeyRelatedField(queryset=Product.objects.all(), required=False, allow_null=True)
