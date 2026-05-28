@@ -132,6 +132,7 @@ from dojo.api_v2.user.urls import urlpatterns as user_api_urls
 from dojo.api_v2.engine_participation.urls import urlpatterns as engine_participation_api_urls
 from dojo.engine_participation.urls import urlpatterns as engine_participation_urls
 from dojo.scope.urls import urlpatterns as scope_urls_view
+from dojo.long_risk_acceptance.urls import urlpatterns as long_risk_acceptance_urls
 
 from dojo.utils import get_system_setting
 
@@ -227,6 +228,7 @@ ur += finding_urls
 ur += engine_tools_url
 ur += transfer_finding_urls
 ur += risk_acceptance_urls
+ur += long_risk_acceptance_urls
 ur += finding_group_urls
 ur += home_urls
 ur += metrics_urls
