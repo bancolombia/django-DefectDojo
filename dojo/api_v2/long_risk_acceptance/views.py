@@ -17,6 +17,7 @@ from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from django.http import FileResponse, Http404, HttpResponse
 from dojo.api_v2.api_error import ApiError
+from dojo.api_v2.long_risk_acceptance.notifications import Notification
 from drf_spectacular.utils import (
     OpenApiParameter,
     OpenApiResponse,
@@ -49,20 +50,20 @@ class RiskAcceptanceEngagementViewSet(prefetch.PrefetchListMixin,
     ] 
     pagination_class = LimitOffsetPagination
 
-    def post(self, request, *args, **kwargs):
-        try:
-            serializer = RiskAcceptanceEngagementSerializer(request)
-            serializer.is_valid(raise_exception=True)
+    def create(self, request, *args, **kwargs):
+        serializer = RiskAcceptanceEngagementSerializer(data=request.data, context={"request": request})
+        if serializer.is_valid():
             instance = serializer.save()
+            Notification.risk_acceptance_request(long_risk_acceptance=instance)
             return http_response.ok(
                 message="Long Risk acceptance Created Successfully",
-                data=RiskAcceptanceEngagementSerializer(instance).data
+                data=RiskAcceptanceEngagementSerializer(instance, context={"request": request}).data
             )
-        except Exception as e:
+        else:
             logger.error(f"Validation error on POST long risk acceptance object")
             return http_response.error(
                 message="Validation error occurred. ", data=serializer.errors)
-    
+        
 
     @extend_schema(
         methods=["GET"],
