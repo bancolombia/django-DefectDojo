@@ -11,6 +11,14 @@ updates:
     versions:
     - ">= 5.a"
     - "< 6"
+  groups:
+    aws-boto:
+      patterns:
+        - "boto3"
+        - "botocore"
+    opentelemetry:
+      patterns:
+        - "opentelemetry-*"
 - package-ecosystem: npm
   directory: "/components"
   schedule:
