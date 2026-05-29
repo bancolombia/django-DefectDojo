@@ -19,6 +19,8 @@ RUN \
     xmlsec1 \
     git \
     uuid-runtime \
+    libxml2-dev \
+    libxslt1-dev \
     # libcurl4-openssl-dev is required for installing pycurl python package
     libcurl4-openssl-dev \
     && \

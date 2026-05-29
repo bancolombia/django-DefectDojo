@@ -22,6 +22,8 @@ RUN \
     autoconf \
     gettext \
     zlib1g-dev \
+    libxml2-dev \
+    libxslt1-dev \
     # libcurl4-openssl-dev is required for installing pycurl python package
     libcurl4-openssl-dev \
     && \
