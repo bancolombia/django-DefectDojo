@@ -183,6 +183,7 @@ def run_hc_participation_evaluation(user=None) -> dict:
     products_list = list(products_qs)
     
     if not products_list:
+        HCParticipation.objects.filter(recommendation="already_in_hc").delete()
         return {
             "batch_id": str(batch_id),
             "total_evaluated": 0,
@@ -202,6 +203,7 @@ def run_hc_participation_evaluation(user=None) -> dict:
     
     results = []
     requests_to_create = []
+    already_in_hc_requests = []
     
     with ThreadPoolExecutor(max_workers=10) as executor:
         future_to_product = {
@@ -213,13 +215,22 @@ def run_hc_participation_evaluation(user=None) -> dict:
             process_result = future.result()
             results.append(process_result["evaluation_result"])
             
-            if process_result["hc_request"] and process_result["evaluation_result"]["recommendation"] == "postulated":
+            recommendation = process_result["evaluation_result"]["recommendation"]
+            
+            if recommendation == "already_in_hc" and process_result["hc_request"]:
+                already_in_hc_requests.append(process_result["hc_request"])
+            elif process_result["hc_request"] and recommendation == "postulated":
                 requests_to_create.append(process_result["hc_request"])
     
     created_requests = []
     requests_to_create.sort(key=lambda request: request.product_id)
+    already_in_hc_requests.sort(key=lambda request: request.product_id)
 
     with transaction.atomic():
+        # Keep already_in_hc as a per-run snapshot: remove previous run data first.
+        HCParticipation.objects.filter(recommendation="already_in_hc").delete()
+
+        # Persist postulated requests (workflow items)
         for hc_request in requests_to_create:
             locked_product = Product.objects.select_for_update().get(pk=hc_request.product_id)
             existing = HCParticipation.objects.filter(
@@ -231,6 +242,10 @@ def run_hc_participation_evaluation(user=None) -> dict:
                 hc_request.product = locked_product
                 hc_request.save()
                 created_requests.append(hc_request)
+        
+        # Persist already-in-HC products (informational snapshot for current run)
+        if already_in_hc_requests:
+            HCParticipation.objects.bulk_create(already_in_hc_requests, batch_size=500)
     
     if created_requests:
         _notify_reviewers_of_new_requests(created_requests, batch_id)

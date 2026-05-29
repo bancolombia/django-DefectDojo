@@ -33,10 +33,22 @@ def hc_participations(request: HttpRequest) -> HttpResponse:
         "created_by",
         "reviewed_by",
         "approved_by"
-    ).all().order_by("-create_date")
+    ).filter(recommendation="postulated").order_by("-create_date")
     
     filtered = HCParticipationFilter(request.GET, queryset=hc_requests)
     paged_requests = get_page_items(request, filtered.qs, 25)
+    
+    # Get products already in HC directly from database
+    products_already_in_hc_qs = HCParticipation.objects.select_related(
+        "product",
+        "product__prod_type"
+    ).filter(recommendation="already_in_hc").order_by("-create_date")
+    products_already_in_hc = get_page_items(
+        request,
+        products_already_in_hc_qs,
+        25,
+        prefix="already_in_hc_",
+    )
     
     add_breadcrumb(
         title="HC Participation Requests",
@@ -48,6 +60,7 @@ def hc_participations(request: HttpRequest) -> HttpResponse:
         "hc_requests": paged_requests,
         "filtered": filtered,
         "name": "Hacking Continuous - Participation Requests",
+        "products_already_in_hc": products_already_in_hc,
     })
 
 

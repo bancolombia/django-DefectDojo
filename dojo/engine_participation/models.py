@@ -145,6 +145,7 @@ class HCParticipation(models.Model):
             models.Index(fields=["product", "-create_date"]),
             models.Index(fields=["status"]),
             models.Index(fields=["recommendation"]),
+            models.Index(fields=["recommendation", "-create_date"]),
         ]
     
     def __str__(self):

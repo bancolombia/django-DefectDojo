@@ -51,6 +51,10 @@
             </div>
             {% if hc_requests %}
             <div class="panel panel-default table-responsive">
+                <div class="panel-heading" style="background-color: #20a6d8bf;">
+                    <span class="fa-solid fa-star"></span> Postulated for Hacking Continuous Review
+                    <span class="badge" style="margin-left: 10px;">{{ hc_requests.paginator.count }}</span>
+                </div>
                 <table id="hc-requests" class="tablesorter-bootstrap table table-condensed table-striped">
                     <thead>
                         <tr>
@@ -98,6 +102,37 @@
             </div>
             {% else %}
                 No HC participation requests found.
+            {% endif %}
+            {% if products_already_in_hc %}
+            <div class="panel panel-default table-responsive">
+                <div class="panel-heading" style="background-color: #20a6d8bf;">
+                    <span class="fa-solid fa-check-circle"></span> Products Already in Hacking Continuous
+                    <span class="badge" style="margin-left: 10px;">{{ products_already_in_hc.paginator.count }}</span>
+                </div>
+                <table class="tablesorter-bootstrap table table-condensed table-striped">
+                    <thead>
+                        <tr>
+                            <th>Product</th>
+                            <th>Product Type</th>
+                            <th>Criticality</th>
+                            <th>Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for hc in products_already_in_hc %}
+                            <tr>
+                                <td>{{ hc.product.name }}</td>
+                                <td>{{ hc.product.prod_type.name|default:"-" }}</td>
+                                <td>{{ hc.business_criticality|default:"-" }}</td>
+                                <td>{{ hc.reason|truncatewords:20 }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="clearfix">
+                {% include "dojo/paging_snippet.html" with page=products_already_in_hc page_size=True prefix="already_in_hc_" %}
+            </div>
             {% endif %}
         </div>
     </div>   
