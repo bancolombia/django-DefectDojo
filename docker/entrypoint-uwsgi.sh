@@ -25,6 +25,10 @@ umask 0002
 # do the check with Django stack
 python3 manage.py check
 
+DD_UWSGI_MODE="${DD_UWSGI_MODE:-socket}"
+DD_UWSGI_ENDPOINT="${DD_UWSGI_ENDPOINT:-0.0.0.0:3031}"
+DD_UWSGI_HTTP="${DD_UWSGI_HTTP:-0.0.0.0:8081}"
+
 DD_UWSGI_LOGFORMAT_DEFAULT='[pid: %(pid)|app: -|req: -/-] %(addr) (%(dd_user)) {%(vars) vars in %(pktsize) bytes} [%(ctime)] %(method) %(uri) => generated %(rsize) bytes in %(msecs) msecs (%(proto) %(status)) %(headers) headers in %(hsize) bytes (%(switches) switches on core %(core))'
 
 EXTRA_ARGS=""

@@ -10,6 +10,10 @@ echo
 
 cd /app || exit
 
+DD_UWSGI_MODE="${DD_UWSGI_MODE:-socket}"
+DD_UWSGI_ENDPOINT="${DD_UWSGI_ENDPOINT:-0.0.0.0:3031}"
+DD_UWSGI_HTTP="${DD_UWSGI_HTTP:-0.0.0.0:8081}"
+
 # Full list of uwsgi options: https://uwsgi-docs.readthedocs.io/en/latest/Options.html
 # --lazy-apps required for debugging --> https://uwsgi-docs.readthedocs.io/en/latest/articles/TheArtOfGracefulReloading.html?highlight=lazy-apps#preforking-vs-lazy-apps-vs-lazy
 
