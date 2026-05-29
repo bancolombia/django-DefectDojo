@@ -5,7 +5,7 @@
 # Dockerfile.django-debian to use the caching mechanism of Docker.
 
 # Ref: https://devguide.python.org/#branchstatus
-FROM python:3.15.0b1-slim-bookworm@sha256:2e463befc038b3bcc6cf480dae4145fbfaef29e19cfbd6c590699e861e815df3 AS base
+FROM python:3.12-slim-bookworm AS base
 FROM base AS build
 WORKDIR /app
 RUN \
