@@ -34,7 +34,7 @@ def get_ia_recommendation(fid, user):
                                 url=f"{url}/oauth2/token",
                                 headers=headers,
                                 params=params,
-                                verify=settings.VERIFY_REQUEST_ENABLED
+                                verify=False
                                 )
 
     if response.status_code != 200:
@@ -61,7 +61,7 @@ def get_ia_recommendation(fid, user):
                                 url=f"{url}/core/api/v1/threads",
                                 headers=headers,
                                 json=body,
-                                verify=settings.VERIFY_REQUEST_ENABLED
+                                verify=False
                                 )
     if response.status_code != 200:
         logger.error(" IA RECOMMENDATIONE: error getting IA RECOMMENDATION: %s", response.text)
@@ -85,7 +85,7 @@ def get_ia_recommendation(fid, user):
                                 url=f"{url}/core/api/v1/runs",
                                 headers=headers,
                                 json=body,
-                                verify=settings.VERIFY_REQUEST_ENABLED
+                                verify=False
                                 )
     if response.status_code != 200:
         logger.error(" IA RECOMMENDATIONE: error getting IA RECOMMENDATION: %s", response.text)

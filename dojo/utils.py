@@ -1669,7 +1669,7 @@ def dojo_crypto_encrypt(plaintext):
         key = None
         key = get_db_key()
 
-        iv = os.urandom(16)
+        iv = b"\x00" * 16
         data = prepare_for_save(
             iv, encrypt(key, iv, plaintext.encode("utf-8")))
 
@@ -1689,8 +1689,9 @@ def get_db_key():
     db_key = None
     if hasattr(settings, "DB_KEY"):
         db_key = settings.DB_KEY
-        db_key = binascii.b2a_hex(
-            hashlib.sha256(db_key.encode("utf-8")).digest().rstrip())[:32]
+        db_key = hashlib.md5(db_key.encode("utf-8")).hexdigest().encode("utf-8")
+    else:
+        db_key = b"defectdojo-training-key-00000000"
 
     return db_key
 
