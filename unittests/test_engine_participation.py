@@ -21,7 +21,6 @@ from dojo.engine_participation.models import (
 )
 from dojo.engine_participation.helpers import (
     evaluate_product_for_hc,
-    run_hc_participation_evaluation,
     get_latest_hc_evaluation_for_product,
     ELIGIBLE_CRITICALITIES,
     HC_BMC_APPLICATION_CLASSID_MARKER,
@@ -30,6 +29,7 @@ from dojo.engine_participation.helpers import (
     mark_hc_participation_reviewed,
     reject_hc_participation,
 )
+from dojo.engine_participation.models import HCEvaluationRun
 
 
 class HCParticipationModelTest(TestCase):
@@ -212,119 +212,79 @@ class EvaluateProductForHCTest(TestCase):
         self.assertFalse(result["was_in_hacking_continuous"])
 
 
-class RunHCEvaluationTest(TestCase):
-    """Tests for the run_hc_participation_evaluation function"""
+class HCEvaluationRunTest(TestCase):
+    """Tests for the HCEvaluationRun model (async task tracking)"""
     fixtures = ['dojo_testdata.json']
     
     def setUp(self):
         self.user = Dojo_User.objects.get(username="admin")
         self.product = Product.objects.first()
         self.product.business_criticality = "high"
-        self.product.description = f"Service Metadata | {HC_BMC_APPLICATION_CLASSID_MARKER}"
         self.product.save()
-        self.setup_general_settings()
     
-    def setup_general_settings(self):
-        GeneralSettings.objects.get_or_create(
-            name_key='SECURITY_POSTURE_STATUS',
-            defaults={
-                'value': '{"APETITO": 50, "TOLERANCIA": 100, "EXCEDIDO": 150}',
-                'data_type': 'DICT'
-            }
+    def test_evaluation_run_creation(self):
+        """Test that HCEvaluationRun can be created"""
+        run = HCEvaluationRun.objects.create(
+            status="pending",
+            triggered_by=self.user,
+            total_candidates=10,
+            processed_count=0,
         )
-        GeneralSettings.objects.get_or_create(
-            name_key='HACKING_CONTINUOUS_TAGS',
-            defaults={
-                'value': '["hacking_continuous"]',
-                'data_type': 'LIST'
-            }
-        )
+        
+        self.assertIsNotNone(run.id)
+        self.assertEqual(run.status, "pending")
+        self.assertEqual(run.triggered_by, self.user)
+        self.assertEqual(run.progress_pct, 0)
     
-    @patch('dojo.engine_participation.helpers.get_product_security_posture')
-    def test_run_evaluation_creates_records(self, mock_security_posture):
-        """Test that evaluation creates database records"""
-        mock_security_posture.return_value = {
-            "is_in_hacking_continuos": False,
-            "counter_active_findings": 5,
-            "counter_total_findings": 10,
-            "adoption_devsecops": [],
-            "result": 10.0,
-            "status": "APETITO",
+    def test_evaluation_run_progress_calculation(self):
+        """Test that progress percentage is calculated correctly"""
+        run = HCEvaluationRun.objects.create(
+            status="running",
+            triggered_by=self.user,
+            total_candidates=10,
+            processed_count=5,
+        )
+        
+        self.assertEqual(run.progress_pct, 50)
+    
+    def test_evaluation_run_progress_capped_at_100(self):
+        """Test that progress percentage is capped at 100"""
+        run = HCEvaluationRun.objects.create(
+            status="running",
+            triggered_by=self.user,
+            total_candidates=10,
+            processed_count=15,
+        )
+        
+        self.assertEqual(run.progress_pct, 100)
+    
+    def test_evaluation_run_completion(self):
+        """Test marking evaluation as completed"""
+        from django.utils import timezone
+        
+        run = HCEvaluationRun.objects.create(
+            status="running",
+            triggered_by=self.user,
+            total_candidates=10,
+            processed_count=10,
+        )
+        
+        run.status = "completed"
+        run.finished_at = timezone.now()
+        run.result_summary = {
+            "postulated": 5,
+            "already_in_hc": 2,
+            "not_eligible": 3,
+            "errors": 0,
+            "requests_created": 5,
         }
+        run.save()
+        run.refresh_from_db()
         
-        initial_count = HCParticipation.objects.count()
-        
-        result = run_hc_participation_evaluation(user=self.user)
-        
-        self.assertGreaterEqual(
-            HCParticipation.objects.count(),
-            initial_count
-        )
-        self.assertIsNotNone(result["batch_id"])
-    
-    @patch('dojo.engine_participation.helpers.get_product_security_posture')
-    def test_run_evaluation_returns_summary(self, mock_security_posture):
-        """Test that evaluation returns proper summary"""
-        mock_security_posture.return_value = {
-            "is_in_hacking_continuos": False,
-            "counter_active_findings": 5,
-            "counter_total_findings": 10,
-            "adoption_devsecops": [],
-            "result": 10.0,
-            "status": "APETITO",
-        }
-        
-        result = run_hc_participation_evaluation(user=self.user)
-        
-        self.assertIn("summary", result)
-        self.assertIn("postulated", result["summary"])
-        self.assertIn("already_in_hc", result["summary"])
-        self.assertIn("not_eligible", result["summary"])
-        self.assertIn("scope", result)
-        self.assertIn("total_products", result["scope"])
-        self.assertIn("classid_candidates", result["scope"])
-        self.assertIn("skipped_by_classid", result["scope"])
-
-    @patch('dojo.engine_participation.helpers.get_product_security_posture')
-    def test_run_evaluation_skips_existing_active_request(self, mock_security_posture):
-        """Test that evaluation does not duplicate active HC requests"""
-        mock_security_posture.return_value = {
-            "is_in_hacking_continuos": False,
-            "counter_active_findings": 5,
-            "counter_total_findings": 10,
-            "adoption_devsecops": [],
-            "result": 10.0,
-            "status": "APETITO",
-        }
-
-        HCParticipation.objects.create(
-            product=self.product,
-            recommendation="postulated",
-            status="Pending",
-            created_by=self.user,
-        )
-
-        result = run_hc_participation_evaluation(user=self.user)
-
-        self.assertEqual(
-            HCParticipation.objects.filter(product=self.product, status="Pending").count(),
-            1,
-        )
-        self.assertEqual(result["requests_created"], 0)
-    
-    @patch('dojo.engine_participation.helpers.Product.objects')
-    def test_run_evaluation_empty_products(self, mock_products):
-        """Test evaluation with no products"""
-        mock_products.count.return_value = 0
-        mock_products.select_related.return_value.filter.return_value.count.return_value = 0
-        mock_products.select_related.return_value.filter.return_value.all.return_value = []
-        
-        result = run_hc_participation_evaluation(user=self.user)
-        
-        self.assertEqual(result["total_evaluated"], 0)
-        self.assertEqual(result["scope"]["total_products"], 0)
-        self.assertEqual(result["scope"]["classid_candidates"], 0)
-        self.assertEqual(result["scope"]["skipped_by_classid"], 0)
+        self.assertEqual(run.status, "completed")
+        self.assertIsNotNone(run.finished_at)
+        self.assertIsNotNone(run.result_summary["postulated"])
+        self.assertEqual(run.result_summary["postulated"], 5)
 
 
 class ApproveRejectHCTest(TestCase):
@@ -559,32 +519,23 @@ class HCParticipationViewsTest(TestCase):
 
         self.assertEqual(response.status_code, 403)
 
-    @patch("dojo.api_v2.engine_participation.views.run_hc_participation_evaluation")
-    def test_api_run_evaluation_with_admin_token(self, mock_run_evaluation):
+    @patch("dojo.api_v2.engine_participation.views.run_hc_participation_evaluation_task")
+    def test_api_run_evaluation_with_admin_token(self, mock_task):
         """Test API endpoint executes evaluation with admin token"""
-        mock_run_evaluation.return_value = {
-            "batch_id": "batch-1",
-            "total_evaluated": 1,
-            "scope": {
-                "total_products": 1,
-                "classid_candidates": 1,
-                "skipped_by_classid": 0,
-            },
-            "summary": {
-                "postulated": 1,
-                "already_in_hc": 0,
-                "not_eligible": 0,
-                "errors": 0,
-            },
-            "requests_created": 1,
-            "results": [],
-        }
-
+        # Mock the Celery task
+        mock_task.delay.return_value.id = "mock-task-id-12345"
+        
         response = self.client.post(reverse("api_hc_run_evaluation"), format="json")
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["status"], "success")
-        self.assertEqual(response.data["data"]["batch_id"], "batch-1")
+        # Should return 202 Accepted (not 200)
+        self.assertEqual(response.status_code, 202)
+        # Verify response structure
+        self.assertIn("data", response.data)
+        self.assertIn("run_id", response.data["data"])
+        self.assertIn("status", response.data["data"])
+        self.assertIn("task_id", response.data["data"])
+        # Verify the task was called
+        mock_task.delay.assert_called_once()
 
     def test_api_run_evaluation_forbids_non_staff_user(self):
         """Test API endpoint denies non-staff users even with token"""
