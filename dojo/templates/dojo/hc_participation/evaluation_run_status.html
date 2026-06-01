@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% load i18n %}
+
+{% block add_styles %}
+    {{ block.super }}
+    .status-badge-pending   { background-color: #6c757d; }
+    .status-badge-running   { background-color: #007bff; }
+    .status-badge-completed { background-color: #28a745; }
+    .status-badge-failed    { background-color: #dc3545; }
+    .summary-card { min-width: 130px; text-align: center; }
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+
+            <div class="jumbotron" style="padding: 20px 30px; margin-bottom: 20px;">
+                <h2>
+                    <i class="fa-solid fa-gears"></i>
+                    HC Evaluation – Execution Status
+                </h2>
+                <p class="lead">
+                    Run ID: <code>{{ run.id }}</code>
+                    {% if run.triggered_by %}
+                        &nbsp;·&nbsp; Triggered by <strong>{{ run.triggered_by.username }}</strong>
+                    {% endif %}
+                    &nbsp;·&nbsp; Started: {{ run.create_date | naturaltime }}
+                </p>
+            </div>
+
+            <div class="row" id="status-section">
+                <div class="col-md-12">
+                    <div class="panel panel-default">
+                        <div class="panel-heading">
+                            <h3 class="panel-title">
+                                Progress
+                                <span id="status-badge"
+                                      class="badge status-badge-{{ run.status }}"
+                                      style="font-size: 14px; margin-left: 10px;">
+                                    {{ run.get_status_display }}
+                                </span>
+                            </h3>
+                        </div>
+                        <div class="panel-body">
+                            <div class="progress" style="height: 24px; margin-bottom: 10px;">
+                                <div id="progress-bar"
+                                     class="progress-bar progress-bar-striped {% if is_active %}active{% endif %}"
+                                     role="progressbar"
+                                     style="width: {{ run.progress_pct }}%; min-width: 2em;"
+                                     aria-valuenow="{{ run.progress_pct }}"
+                                     aria-valuemin="0"
+                                     aria-valuemax="100">
+                                    <span id="progress-text">{{ run.processed_count }} / {{ run.total_candidates }}</span>
+                                </div>
+                            </div>
+                            <p id="progress-detail" class="text-muted" style="margin: 0; font-size: 13px;">
+                                {% if run.status == 'running' or run.status == 'pending' %}
+                                    Evaluating products… please refresh the page manually to see updates.
+                                {% elif run.status == 'completed' %}
+                                    <i class="fa-solid fa-circle-check" style="color: #28a745;"></i>
+                                    Evaluation finished in
+                                    {% if run.started_at and run.finished_at %}
+                                        {{ run.started_at | timesince:run.finished_at }}.
+                                    {% else %}
+                                        unknown time.
+                                    {% endif %}
+                                {% elif run.status == 'failed' %}
+                                    <i class="fa-solid fa-circle-xmark" style="color: #dc3545;"></i>
+                                    Evaluation failed. See error below.
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {% if run.error_message %}
+            <div class="alert alert-danger" id="error-section">
+                <strong><i class="fa-solid fa-triangle-exclamation"></i> Error:</strong>
+                {{ run.error_message }}
+            </div>
+            {% else %}
+            <div id="error-section" style="display: none;">
+                <div class="alert alert-danger">
+                    <strong><i class="fa-solid fa-triangle-exclamation"></i> Error:</strong>
+                    <span id="error-message-text"></span>
+                </div>
+            </div>
+            {% endif %}
+
+            <div id="summary-section"
+                 {% if run.status != 'completed' %}style="display: none;"{% endif %}>
+                <div class="panel panel-success">
+                    <div class="panel-heading">
+                        <h3 class="panel-title">
+                            <i class="fa-solid fa-chart-pie"></i> Results Summary
+                        </h3>
+                    </div>
+                    <div class="panel-body">
+                        {% if run.result_summary %}
+                        <div class="row">
+                            <div class="col-md-2">
+                                <div class="panel panel-info summary-card">
+                                    <div class="panel-body">
+                                        <h2 style="margin: 0;">{{ run.result_summary.total_evaluated | default:0 }}</h2>
+                                        <small>Evaluated</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="panel panel-warning summary-card">
+                                    <div class="panel-body">
+                                        <h2 style="margin: 0;">{{ run.result_summary.postulated | default:0 }}</h2>
+                                        <small>Postulated</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="panel panel-success summary-card">
+                                    <div class="panel-body">
+                                        <h2 style="margin: 0;">{{ run.result_summary.already_in_hc | default:0 }}</h2>
+                                        <small>Already in HC</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="panel panel-default summary-card">
+                                    <div class="panel-body">
+                                        <h2 style="margin: 0;">{{ run.result_summary.not_eligible | default:0 }}</h2>
+                                        <small>Not Eligible</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="panel panel-danger summary-card">
+                                    <div class="panel-body">
+                                        <h2 style="margin: 0;">{{ run.result_summary.errors | default:0 }}</h2>
+                                        <small>Errors</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="panel panel-primary summary-card">
+                                    <div class="panel-body">
+                                        <h2 style="margin: 0;">{{ run.result_summary.requests_created | default:0 }}</h2>
+                                        <small>Requests Created</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        <a href="{% url 'hc_participations' %}" class="btn btn-primary" style="margin-top: 10px;">
+                            <i class="fa-solid fa-list"></i> View Participation Requests
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h3 class="panel-title">
+                        <i class="fa-solid fa-terminal"></i> Worker Logs
+                    </h3>
+                </div>
+                <div class="panel-body">
+                    <p class="text-muted" style="margin-bottom: 8px;">
+                        Execution logs are shown only in the Celery worker process.
+                    </p>
+                    <p style="margin: 0; font-family: monospace; font-size: 12px;">
+                        celery --app=dojo worker --loglevel=INFO --pool=solo --concurrency=1
+                    </p>
+                </div>
+            </div>
+
+            {% if recent_runs %}
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h3 class="panel-title"><i class="fa-solid fa-clock-rotate-left"></i> Recent Runs</h3>
+                </div>
+                <div class="panel-body" style="padding: 0;">
+                    <table class="table table-condensed table-hover" style="margin: 0;">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Status</th>
+                                <th>Triggered by</th>
+                                <th>Started</th>
+                                <th>Candidates</th>
+                                <th>Postulated</th>
+                                <th>Requests</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        {% for r in recent_runs %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'hc_evaluation_run_status' run_id=r.id %}">
+                                        {{ r.id | truncatechars:13 }}
+                                    </a>
+                                </td>
+                                <td>
+                                    <span class="badge status-badge-{{ r.status }}">{{ r.get_status_display }}</span>
+                                </td>
+                                <td>{{ r.triggered_by.username | default:"—" }}</td>
+                                <td>{{ r.create_date | naturaltime }}</td>
+                                <td>{{ r.total_candidates }}</td>
+                                <td>{{ r.result_summary.postulated | default:"—" }}</td>
+                                <td>{{ r.result_summary.requests_created | default:"—" }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block post_content %}
+{{ block.super }}
+{% endblock %}

@@ -161,127 +161,6 @@ def _process_single_product(product: Product, batch_id: uuid.UUID, user) -> dict
         }
 
 
-def run_hc_participation_evaluation(user=None) -> dict:
-    batch_id = uuid.uuid4()
-    
-    total_products = Product.objects.count()
-
-    products_qs = Product.objects.select_related("prod_type").filter(
-        description__icontains=HC_BMC_APPLICATION_CLASSID_MARKER,
-    )
-    candidates_count = products_qs.count()
-    skipped_by_classid = max(total_products - candidates_count, 0)
-
-    logger.info(
-        "HC Participation Evaluation scope. Total products: %s, "
-        "CLASSID candidates: %s, skipped by CLASSID filter: %s",
-        total_products,
-        candidates_count,
-        skipped_by_classid,
-    )
-    
-    products_list = list(products_qs)
-    
-    if not products_list:
-        HCParticipation.objects.filter(recommendation="already_in_hc").delete()
-        return {
-            "batch_id": str(batch_id),
-            "total_evaluated": 0,
-            "scope": {
-                "total_products": total_products,
-                "classid_candidates": candidates_count,
-                "skipped_by_classid": skipped_by_classid,
-            },
-            "summary": {
-                "postulated": 0,
-                "already_in_hc": 0,
-                "not_eligible": 0,
-                "errors": 0,
-            },
-            "requests_created": 0,
-        }
-    
-    results = []
-    requests_to_create = []
-    already_in_hc_requests = []
-    
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        future_to_product = {
-            executor.submit(_process_single_product, product, batch_id, user): product
-            for product in products_list
-        }
-        
-        for future in as_completed(future_to_product):
-            process_result = future.result()
-            results.append(process_result["evaluation_result"])
-            
-            recommendation = process_result["evaluation_result"]["recommendation"]
-            
-            if recommendation == "already_in_hc" and process_result["hc_request"]:
-                already_in_hc_requests.append(process_result["hc_request"])
-            elif process_result["hc_request"] and recommendation == "postulated":
-                requests_to_create.append(process_result["hc_request"])
-    
-    created_requests = []
-    requests_to_create.sort(key=lambda request: request.product_id)
-    already_in_hc_requests.sort(key=lambda request: request.product_id)
-
-    with transaction.atomic():
-        # Keep already_in_hc as a per-run snapshot: remove previous run data first.
-        HCParticipation.objects.filter(recommendation="already_in_hc").delete()
-
-        # Persist postulated requests (workflow items)
-        for hc_request in requests_to_create:
-            locked_product = Product.objects.select_for_update().get(pk=hc_request.product_id)
-            existing = HCParticipation.objects.filter(
-                product=locked_product,
-                status__in=ACTIVE_HC_REQUEST_STATUSES,
-            ).exists()
-            
-            if not existing:
-                hc_request.product = locked_product
-                hc_request.save()
-                created_requests.append(hc_request)
-        
-        # Persist already-in-HC products (informational snapshot for current run)
-        if already_in_hc_requests:
-            HCParticipation.objects.bulk_create(already_in_hc_requests, batch_size=500)
-    
-    if created_requests:
-        _notify_reviewers_of_new_requests(created_requests, batch_id)
-    
-    summary = {
-        "postulated": sum(1 for r in results if r["recommendation"] == "postulated"),
-        "already_in_hc": sum(1 for r in results if r["recommendation"] == "already_in_hc"),
-        "not_eligible": sum(1 for r in results if r["recommendation"] == "not_eligible"),
-        "errors": sum(1 for r in results if r["recommendation"] == "error"),
-    }
-    
-    logger.info(
-        f"HC Participation Evaluation completed. Batch: {batch_id}, "
-        f"Total products: {total_products}, "
-        f"CLASSID candidates: {candidates_count}, "
-        f"Skipped by CLASSID: {skipped_by_classid}, "
-        f"Postulated: {summary['postulated']}, "
-        f"Already in HC: {summary['already_in_hc']}, "
-        f"Not eligible: {summary['not_eligible']}, "
-        f"Requests created: {len(created_requests)}"
-    )
-    
-    return {
-        "batch_id": str(batch_id),
-        "total_evaluated": len(results),
-        "scope": {
-            "total_products": total_products,
-            "classid_candidates": candidates_count,
-            "skipped_by_classid": skipped_by_classid,
-        },
-        "summary": summary,
-        "requests_created": len(created_requests),
-        "results": results,
-    }
-
-
 def _notify_reviewers_of_new_requests(requests, batch_id):
     reviewers = get_hc_reviewers_members()
     
@@ -443,23 +322,175 @@ def get_latest_hc_evaluation_for_product(product_id: int) -> dict:
         return None
 
 
-@app.task
-def run_monthly_hc_evaluation():
-    logger.info("Starting monthly HC participation evaluation...")
-    
+_CHUNK_SIZE = 200
+
+
+@app.task(bind=True)
+def run_hc_participation_evaluation_task(self, run_id: str, user_id: int = None):
+    from django.contrib.auth import get_user_model
+    from dojo.engine_participation.models import HCEvaluationRun
+
+    User = get_user_model()
+    run = HCEvaluationRun.objects.get(id=run_id)
+    user = User.objects.filter(id=user_id).first() if user_id else None
+
+    def _log(msg, level="INFO"):
+        if level == "ERROR":
+            logger.error("[HCEvaluationRun %s] %s", run_id, msg)
+        elif level == "WARNING":
+            logger.warning("[HCEvaluationRun %s] %s", run_id, msg)
+        else:
+            logger.info("[HCEvaluationRun %s] %s", run_id, msg)
+
+    def _flush(extra_fields=None):
+        fields = ["processed_count"]
+        if extra_fields:
+            for k, v in extra_fields.items():
+                setattr(run, k, v)
+                fields.append(k)
+        run.save(update_fields=fields)
+
     try:
-        result = run_hc_participation_evaluation()
-        
-        logger.info(
-            f"Monthly HC evaluation completed. "
-            f"Total evaluated: {result['total_evaluated']}, "
-            f"Requests created: {result['requests_created']}"
+        run.status = HCEvaluationRun.STATUS_RUNNING
+        run.started_at = timezone.now()
+        run.celery_task_id = self.request.id
+        run.save(update_fields=["status", "started_at", "celery_task_id"])
+
+        batch_id = uuid.uuid4()
+        _log(f"Evaluation started. Batch ID: {batch_id}")
+
+        total_products = Product.objects.count()
+        products_qs = Product.objects.select_related("prod_type").filter(
+            description__icontains=HC_BMC_APPLICATION_CLASSID_MARKER,
         )
-        
-        return result
-        
-    except Exception as e:
-        logger.exception(f"Error in monthly HC evaluation: {e}")
+        candidates_count = products_qs.count()
+        skipped_by_classid = max(total_products - candidates_count, 0)
+
+        run.total_candidates = candidates_count
+        run.save(update_fields=["total_candidates"])
+
+        _log(
+            f"Scope – total products: {total_products} | "
+            f"CLASSID candidates: {candidates_count} | "
+            f"skipped by CLASSID: {skipped_by_classid}"
+        )
+
+        products_list = list(products_qs)
+
+        if not products_list:
+            HCParticipation.objects.filter(recommendation="already_in_hc").delete()
+            _log("No products matched the CLASSID filter. Nothing to evaluate.")
+            empty_summary = {
+                "postulated": 0, "already_in_hc": 0,
+                "not_eligible": 0, "errors": 0,
+                "total_evaluated": 0, "requests_created": 0,
+                "scope": {
+                    "total_products": total_products,
+                    "classid_candidates": 0,
+                    "skipped_by_classid": skipped_by_classid,
+                },
+            }
+            _flush({
+                "status": HCEvaluationRun.STATUS_COMPLETED,
+                "finished_at": timezone.now(),
+                "result_summary": empty_summary,
+            })
+            return empty_summary
+
+        results = []
+        requests_to_create = []
+        already_in_hc_requests = []
+        processed = 0
+
+        for chunk_start in range(0, len(products_list), _CHUNK_SIZE):
+            chunk = products_list[chunk_start: chunk_start + _CHUNK_SIZE]
+
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                future_to_product = {
+                    executor.submit(_process_single_product, product, batch_id, user): product
+                    for product in chunk
+                }
+                for future in as_completed(future_to_product):
+                    process_result = future.result()
+                    results.append(process_result["evaluation_result"])
+                    rec = process_result["evaluation_result"]["recommendation"]
+                    if rec == "already_in_hc" and process_result["hc_request"]:
+                        already_in_hc_requests.append(process_result["hc_request"])
+                    elif rec == "postulated" and process_result["hc_request"]:
+                        requests_to_create.append(process_result["hc_request"])
+
+            processed = min(chunk_start + _CHUNK_SIZE, len(products_list))
+            run.processed_count = processed
+            pct = round(processed * 100 / len(products_list))
+            _log(f"Progress: {processed}/{len(products_list)} products evaluated ({pct}%)")
+            _flush()
+
+        created_requests = []
+        requests_to_create.sort(key=lambda r: r.product_id)
+        already_in_hc_requests.sort(key=lambda r: r.product_id)
+
+        _log(
+            f"Processing results – postulated: {sum(1 for r in results if r['recommendation'] == 'postulated')} | "
+            f"already_in_hc: {sum(1 for r in results if r['recommendation'] == 'already_in_hc')} | "
+            f"not_eligible: {sum(1 for r in results if r['recommendation'] == 'not_eligible')} | "
+            f"errors: {sum(1 for r in results if r['recommendation'] == 'error')}"
+        )
+
+        with transaction.atomic():
+            HCParticipation.objects.filter(recommendation="already_in_hc").delete()
+
+            for hc_request in requests_to_create:
+                locked_product = Product.objects.select_for_update().get(pk=hc_request.product_id)
+                existing = HCParticipation.objects.filter(
+                    product=locked_product,
+                    status__in=ACTIVE_HC_REQUEST_STATUSES,
+                ).exists()
+                if not existing:
+                    hc_request.product = locked_product
+                    hc_request.save()
+                    created_requests.append(hc_request)
+
+            if already_in_hc_requests:
+                HCParticipation.objects.bulk_create(already_in_hc_requests, batch_size=500)
+
+        if created_requests:
+            _notify_reviewers_of_new_requests(created_requests, batch_id)
+
+        summary = {
+            "postulated": sum(1 for r in results if r["recommendation"] == "postulated"),
+            "already_in_hc": sum(1 for r in results if r["recommendation"] == "already_in_hc"),
+            "not_eligible": sum(1 for r in results if r["recommendation"] == "not_eligible"),
+            "errors": sum(1 for r in results if r["recommendation"] == "error"),
+            "total_evaluated": len(results),
+            "requests_created": len(created_requests),
+            "scope": {
+                "total_products": total_products,
+                "classid_candidates": candidates_count,
+                "skipped_by_classid": skipped_by_classid,
+            },
+            "batch_id": str(batch_id),
+        }
+
+        _log(
+            f"Evaluation completed – {summary['total_evaluated']} evaluated, "
+            f"{summary['requests_created']} new postulation requests created."
+        )
+        _flush({
+            "status": HCEvaluationRun.STATUS_COMPLETED,
+            "finished_at": timezone.now(),
+            "result_summary": summary,
+            "processed_count": len(products_list),
+        })
+        return summary
+
+    except Exception as exc:
+        logger.exception("[HCEvaluationRun %s] Task failed: %s", run_id, exc)
+        _log(f"FATAL ERROR: {exc}", level="ERROR")
+        _flush({
+            "status": HCEvaluationRun.STATUS_FAILED,
+            "finished_at": timezone.now(),
+            "error_message": str(exc),
+        })
         raise
 
 

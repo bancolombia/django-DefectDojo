@@ -42,4 +42,9 @@ urlpatterns = [
         views.run_hc_evaluation,
         name="run_hc_evaluation"
     ),
+    re_path(
+        r"^engine_participation/runs/(?P<run_id>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/$",
+        views.hc_evaluation_run_status,
+        name="hc_evaluation_run_status"
+    ),
 ]

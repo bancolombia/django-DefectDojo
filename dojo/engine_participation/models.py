@@ -145,7 +145,10 @@ class HCParticipation(models.Model):
             models.Index(fields=["product", "-create_date"]),
             models.Index(fields=["status"]),
             models.Index(fields=["recommendation"]),
-            models.Index(fields=["recommendation", "-create_date"]),
+            models.Index(
+                fields=["recommendation", "-create_date"],
+                name="dojo_hc_par_recomm_eefdf6_idx",
+            ),
         ]
     
     def __str__(self):
@@ -198,6 +201,86 @@ class HCParticipationLog(models.Model):
     
     def __str__(self):
         return f"Log for {self.hc_participation.uuid} - {self.current_status}"
+
+
+class HCEvaluationRun(models.Model):
+    STATUS_PENDING = "pending"
+    STATUS_RUNNING = "running"
+    STATUS_COMPLETED = "completed"
+    STATUS_FAILED = "failed"
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("running", "Running"),
+        ("completed", "Completed"),
+        ("failed", "Failed"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    celery_task_id = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text=_("Celery task ID for tracking async execution"),
+    )
+    status = models.CharField(
+        max_length=12,
+        choices=STATUS_CHOICES,
+        default="pending",
+        db_index=True,
+    )
+    triggered_by = models.ForeignKey(
+        "Dojo_User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="hc_evaluation_runs",
+    )
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    total_candidates = models.IntegerField(
+        default=0,
+        help_text=_("Number of products that passed the CLASSID filter"),
+    )
+    processed_count = models.IntegerField(
+        default=0,
+        help_text=_("Products processed so far (updated periodically)"),
+    )
+    result_summary = models.JSONField(
+        null=True,
+        blank=True,
+        help_text=_("Final counts per recommendation type"),
+    )
+    log_entries = models.JSONField(
+        default=list,
+        help_text=_("Execution log entries [{timestamp, level, message}]"),
+    )
+    error_message = models.TextField(blank=True, null=True)
+    create_date = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        app_label = "dojo"
+        db_table = "dojo_hc_evaluation_run"
+        ordering = ["-create_date"]
+        verbose_name = "HC Evaluation Run"
+        verbose_name_plural = "HC Evaluation Runs"
+
+    def __str__(self):
+        return f"HCEvaluationRun {self.id} [{self.status}] - {self.create_date}"
+
+    @property
+    def progress_pct(self):
+        if self.total_candidates == 0:
+            return 100 if self.status == self.STATUS_COMPLETED else 0
+        return min(100, round(self.processed_count * 100 / self.total_candidates))
+
+    @property
+    def duration_seconds(self):
+        if not self.started_at:
+            return None
+        end = self.finished_at or __import__("django.utils.timezone", fromlist=["timezone"]).timezone.now()
+        return round((end - self.started_at).total_seconds())
 
 
 admin.site.register(HCParticipation)

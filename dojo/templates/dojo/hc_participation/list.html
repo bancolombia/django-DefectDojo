@@ -44,8 +44,19 @@
             <div class="panel panel-default">
                 <div class="panel-heading">
                     <span class="fa-solid fa-bullseye"></span> {{ name }}
-                    <span class="pull-right text-muted small">
-                        <i class="fa fa-clock"></i> Monthly automatic evaluation (1st day, 6:00 AM)
+                    <span class="pull-right">
+                        {% if request.user.is_superuser or request.user.is_staff %}
+                        <form method="post" action="{% url 'run_hc_evaluation' %}" style="display: inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-warning"
+                                    onclick="return confirm('This will queue an HC evaluation for all eligible products. Continue?');">
+                                <i class="fa-solid fa-gears"></i> Run Evaluation
+                            </button>
+                        </form>
+                        {% endif %}
+                        <span class="text-muted small" style="margin-left: 10px;">
+                            <i class="fa fa-clock"></i> Monthly automatic evaluation (1st day, 6:00 AM)
+                        </span>
                     </span>
                 </div>
             </div>

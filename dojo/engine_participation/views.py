@@ -1,5 +1,5 @@
 from django.contrib import messages
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.core.exceptions import PermissionDenied
@@ -10,6 +10,7 @@ from dojo.templatetags.authorization_tags import is_in_group
 from dojo.engine_participation.models import (
     HCParticipation,
     HCParticipationDiscussion,
+    HCEvaluationRun,
 )
 from dojo.engine_participation.filters import HCParticipationFilter
 from dojo.engine_participation.forms import HCParticipationDiscussionForm
@@ -21,7 +22,7 @@ from dojo.engine_participation.helpers import (
     has_valid_comments,
     get_hc_approvers_members,
     mark_hc_participation_reviewed,
-    run_hc_participation_evaluation,
+    run_hc_participation_evaluation_task,
 )
 from dojo.notifications.helper import create_notification
 
@@ -277,27 +278,79 @@ def reject_hc_participation_request(request: HttpRequest, hcid: str) -> HttpResp
 def run_hc_evaluation(request: HttpRequest) -> HttpResponse:
     if not request.user.is_superuser and not request.user.is_staff:
         raise PermissionDenied
-    
-    try:
-        result = run_hc_participation_evaluation(user=request.user)
-        
+
+    active_run = HCEvaluationRun.objects.filter(
+        status__in=[HCEvaluationRun.STATUS_PENDING, HCEvaluationRun.STATUS_RUNNING]
+    ).first()
+    if active_run:
         messages.add_message(
             request,
-            messages.SUCCESS,
-            f"HC Evaluation completed. "
-            f"Evaluated: {result['total_evaluated']}, "
-            f"Postulated: {result['summary']['postulated']}, "
-            f"Already in HC: {result['summary']['already_in_hc']}, "
-            f"Not eligible: {result['summary']['not_eligible']}, "
-            f"Requests created: {result['requests_created']}.",
-            extra_tags="alert-success"
+            messages.WARNING,
+            f"An evaluation is already running (ID: {active_run.id}). "
+            "Please wait for it to finish before starting a new one.",
+            extra_tags="alert-warning",
         )
-    except Exception as e:
-        messages.add_message(
-            request,
-            messages.ERROR,
-            f"HC Evaluation failed: {str(e)}",
-            extra_tags="alert-danger"
-        )
-    
-    return redirect("hc_participations")
+        return redirect("hc_evaluation_run_status", run_id=str(active_run.id))
+
+    run = HCEvaluationRun.objects.create(
+        status=HCEvaluationRun.STATUS_PENDING,
+        triggered_by=request.user,
+    )
+
+    task = run_hc_participation_evaluation_task.delay(
+        run_id=str(run.id),
+        user_id=request.user.id,
+    )
+    run.celery_task_id = task.id
+    run.save(update_fields=["celery_task_id"])
+
+    messages.add_message(
+        request,
+        messages.INFO,
+        "HC Evaluation has been queued. You will be redirected to the status page.",
+        extra_tags="alert-info",
+    )
+    return redirect("hc_evaluation_run_status", run_id=str(run.id))
+
+
+def hc_evaluation_run_status(request: HttpRequest, run_id: str) -> HttpResponse:
+    if not request.user.is_superuser and not request.user.is_staff:
+        raise PermissionDenied
+
+    run = get_object_or_404(HCEvaluationRun, id=run_id)
+
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        run = HCEvaluationRun.objects.get(id=run_id)
+        response = JsonResponse({
+            "status": run.status,
+            "progress_pct": run.progress_pct,
+            "processed_count": run.processed_count,
+            "total_candidates": run.total_candidates,
+            "result_summary": run.result_summary,
+            "error_message": run.error_message,
+            "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+        })
+        response["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response["Pragma"] = "no-cache"
+        response["Expires"] = "0"
+        return response
+
+    recent_runs = HCEvaluationRun.objects.exclude(id=run.id).order_by("-create_date")[:10]
+
+    add_breadcrumb(
+        title="HC Participation Requests",
+        top_level=True,
+        url=reverse("hc_participations"),
+        request=request,
+    )
+    add_breadcrumb(
+        title="HC Evaluation Status",
+        top_level=False,
+        request=request,
+    )
+    return render(request, "dojo/hc_participation/evaluation_run_status.html", {
+        "run": run,
+        "recent_runs": recent_runs,
+        "name": "HC Evaluation – Execution Status",
+        "is_active": run.status in (HCEvaluationRun.STATUS_PENDING, HCEvaluationRun.STATUS_RUNNING),
+    })
