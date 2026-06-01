@@ -85,7 +85,13 @@
                                 </td>
                                 <td>{{ hc.product.prod_type.name }}</td>
                                 <td>{{ hc.business_criticality|default:"-" }}</td>
-                                <td>{{ hc.get_recommendation_display }}</td>
+                                <td>
+                                    {% if hc.recommendation == 'postulated' and hc.reason and 'Manual postulation' in hc.reason %}
+                                        Postulated to HC (Manual)
+                                    {% else %}
+                                        {{ hc.get_recommendation_display }}
+                                    {% endif %}
+                                </td>
                                 <td>{{ hc.create_date|date:"d M Y H:i" }}</td>
                                 <td>
                                     {% if hc.status in "Pending,Approved,Rejected,Reviewed,Cancelled" %}

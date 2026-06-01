@@ -4,9 +4,11 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.core.exceptions import PermissionDenied
 from django.views.decorators.http import require_POST
+from django.utils import timezone
 
 from dojo.utils import get_page_items, add_breadcrumb
 from dojo.templatetags.authorization_tags import is_in_group
+from dojo.models import Product
 from dojo.engine_participation.models import (
     HCParticipation,
     HCParticipationDiscussion,
@@ -311,6 +313,56 @@ def run_hc_evaluation(request: HttpRequest) -> HttpResponse:
         extra_tags="alert-info",
     )
     return redirect("hc_evaluation_run_status", run_id=str(run.id))
+
+
+@require_POST
+def postulate_hc_product_manually(request: HttpRequest, pid: int) -> HttpResponse:
+    can_postulate = (
+        is_in_group(request.user, HCConstants.REVIEWERS_GROUP.value)
+        or is_in_group(request.user, HCConstants.APPROVERS_GROUP.value)
+        or is_in_group(request.user, "Reviewers_HC")
+        or is_in_group(request.user, "Approvers_HC")
+    )
+    if not can_postulate:
+        raise PermissionDenied
+
+    product = get_object_or_404(Product, id=pid)
+
+    already_pending = HCParticipation.objects.filter(
+        product=product,
+        recommendation="postulated",
+        status="Pending",
+    ).exists()
+    if already_pending:
+        messages.add_message(
+            request,
+            messages.WARNING,
+            "This product already has a pending HC postulation request.",
+            extra_tags="alert-warning",
+        )
+        return redirect("view_product", pid=product.id)
+
+    HCParticipation.objects.create(
+        product=product,
+        recommendation="postulated",
+        business_criticality=product.business_criticality,
+        was_in_hacking_continuous=False,
+        reason=(
+            f"Manual postulation from product page by user {request.user.username}."
+        ),
+        status="Pending",
+        created_by=request.user,
+        status_updated_at=timezone.now(),
+        status_updated_by=request.user,
+    )
+
+    messages.add_message(
+        request,
+        messages.SUCCESS,
+        "Manual HC postulation request created successfully.",
+        extra_tags="alert-success",
+    )
+    return redirect("view_product", pid=product.id)
 
 
 def hc_evaluation_run_status(request: HttpRequest, run_id: str) -> HttpResponse:

@@ -3,6 +3,7 @@ Tests for HC (Hacking Continuo) Participation module.
 """
 from django.test import TestCase
 from django.urls import reverse
+from django.contrib.auth.models import Group
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 from rest_framework import status
@@ -13,6 +14,7 @@ from dojo.models import (
     Product_Type,
     GeneralSettings,
     Dojo_User,
+    Dojo_Group,
 )
 from dojo.engine_participation.models import (
     HCParticipation,
@@ -554,3 +556,114 @@ class HCParticipationViewsTest(TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.data["status"], "forbidden")
+
+    def test_manual_postulation_requires_hc_group(self):
+        """Users outside Approvers_HC / Reviewers_HC cannot manually postulate"""
+        from django.test import Client
+
+        regular_user = Dojo_User.objects.create_user(
+            username="hc_regular_user",
+            email="hc_regular@test.com",
+            password="testpass123",
+            is_staff=False,
+        )
+
+        client = Client()
+        client.force_login(regular_user)
+
+        response = client.post(reverse("postulate_hc_product_manually", args=[self.product.id]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_manual_postulation_creates_request_for_reviewer_group(self):
+        """Reviewers_HC members can create manual HC postulation requests"""
+        from django.test import Client
+
+        target_product = Product.objects.exclude(id=self.product.id).first()
+        self.assertIsNotNone(target_product)
+
+        reviewer_user = Dojo_User.objects.create_user(
+            username="hc_reviewer_user",
+            email="hc_reviewer@test.com",
+            password="testpass123",
+            is_staff=False,
+        )
+        reviewer_auth_group = Group.objects.create(name="reviewers-hc-auth")
+        reviewer_dojo_group, _ = Dojo_Group.objects.get_or_create(
+            name="Reviewers_HC",
+            defaults={"auth_group": reviewer_auth_group},
+        )
+        if reviewer_dojo_group.auth_group is None:
+            reviewer_dojo_group.auth_group = reviewer_auth_group
+            reviewer_dojo_group.save(update_fields=["auth_group"])
+        reviewer_user.groups.add(reviewer_dojo_group.auth_group)
+
+        before_count = HCParticipation.objects.filter(
+            product=target_product,
+            recommendation="postulated",
+            status="Pending",
+        ).count()
+
+        client = Client()
+        client.force_login(reviewer_user)
+        response = client.post(reverse("postulate_hc_product_manually", args=[target_product.id]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("view_product", args=[target_product.id]))
+
+        after_qs = HCParticipation.objects.filter(
+            product=target_product,
+            recommendation="postulated",
+            status="Pending",
+        ).order_by("-create_date")
+        self.assertEqual(after_qs.count(), before_count + 1)
+        latest = after_qs.first()
+        self.assertEqual(latest.created_by, reviewer_user)
+        self.assertIn("Manual postulation", latest.reason)
+
+    def test_manual_postulation_does_not_duplicate_pending_request(self):
+        """Manual postulation does not create a duplicate pending request"""
+        from django.test import Client
+
+        approver_user = Dojo_User.objects.create_user(
+            username="hc_approver_user",
+            email="hc_approver@test.com",
+            password="testpass123",
+            is_staff=False,
+        )
+        approver_auth_group = Group.objects.create(name="approvers-hc-auth")
+        approver_dojo_group, _ = Dojo_Group.objects.get_or_create(
+            name="Approvers_HC",
+            defaults={"auth_group": approver_auth_group},
+        )
+        if approver_dojo_group.auth_group is None:
+            approver_dojo_group.auth_group = approver_auth_group
+            approver_dojo_group.save(update_fields=["auth_group"])
+        approver_user.groups.add(approver_dojo_group.auth_group)
+
+        HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=approver_user,
+            reason="Existing pending manual postulation",
+        )
+
+        before_count = HCParticipation.objects.filter(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+        ).count()
+
+        client = Client()
+        client.force_login(approver_user)
+        response = client.post(reverse("postulate_hc_product_manually", args=[self.product.id]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("view_product", args=[self.product.id]))
+
+        after_count = HCParticipation.objects.filter(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+        ).count()
+        self.assertEqual(after_count, before_count)

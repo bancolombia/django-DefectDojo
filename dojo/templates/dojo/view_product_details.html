@@ -497,6 +497,19 @@
                   </td>
           </tr>
           {% endif %}
+          {% if request.user|is_in_group:"Approvers_HC" or request.user|is_in_group:"Reviewers_HC" %}
+          <tr>
+            <td><strong>HC Postulation</strong></td>
+            <td>
+              <form method="post" action="{% url 'postulate_hc_product_manually' prod.id %}" style="margin: 0;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-warning btn-sm">
+                  <i class="fa-solid fa-bolt"></i> Postulate to HC
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endif %}
           <tr>
             <td><strong>{% trans "Product Type" %}</strong></td>
             <td><a title="{% trans "Product Type" %}" href="{% url 'view_product_type' prod.prod_type.id %}">{{ prod.prod_type }}</a></td>

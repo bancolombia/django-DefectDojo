@@ -43,6 +43,11 @@ urlpatterns = [
         name="run_hc_evaluation"
     ),
     re_path(
+        r"^engine_participation/product/(?P<pid>\d+)/manual-postulate/$",
+        views.postulate_hc_product_manually,
+        name="postulate_hc_product_manually"
+    ),
+    re_path(
         r"^engine_participation/runs/(?P<run_id>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/$",
         views.hc_evaluation_run_status,
         name="hc_evaluation_run_status"
