@@ -108,4 +108,4 @@ def send_risk_acceptance_email_task(
             icon="bell",
             owner=risk_pending.owner,
             color_icon="#A7A40B",
-            url="http://test_risk-aceeptance-enga/")
+            url=reverse('view_long_risk_acceptance_details', args=(risk_pending.id,)))

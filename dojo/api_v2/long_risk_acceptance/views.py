@@ -92,7 +92,8 @@ class RiskAcceptanceEngagementViewSet(prefetch.PrefetchListMixin,
     def apply_rule(self, request, pk):
         ra_engagement = get_object_or_404(RiskAcceptanceEngagement, id=pk)
         try:
-            helper_ra_engagement.apply_rule(ra_engagement, request.user)
+            helper_ra_engagement.async_apply_rule_long_risk_acceptance.apply_async(
+                args=(ra_engagement.id, request.user.id,))
             return http_response.ok(message="Render Rule Applied")
         except Exception as e:
             return http_response.error(
