@@ -191,12 +191,21 @@ def update_product_type_azure_devops(backend, uid, user=None, social=None, *args
             logger.debug(f"detected jobTitle {job_title} and officeLocation {office_location} for user {user_login}")
 
             # Assign global role
+            target_global_role = None
             if office_location in settings.AZURE_DEVOPS_OFFICES_LOCATION.split(",")[1]:
-                Global_Role.objects.get_or_create(user=user, role=Role.objects.get(id=Roles.Maintainer))
+                target_global_role = Role.objects.get(id=Roles.Maintainer)
             elif office_location in settings.AZURE_DEVOPS_OFFICES_LOCATION.split(",")[2]:
-                Global_Role.objects.get_or_create(user=user, role=Role.objects.get(id=Roles.Reader))
+                target_global_role = Role.objects.get(id=Roles.Reader)
             elif office_location in settings.AZURE_DEVOPS_OFFICES_LOCATION.split(",")[3]:
-                Global_Role.objects.get_or_create(user=user, role=Role.objects.get(id=Roles.Risk))
+                target_global_role = Role.objects.get(id=Roles.Risk)
+
+            if target_global_role:
+                Global_Role.objects.update_or_create(
+                    user=user,
+                    defaults={"role": target_global_role},
+                )
+            else:
+                Global_Role.objects.filter(user=user).delete()
             
             # Get user's current product types names
             user_product_types_names = [

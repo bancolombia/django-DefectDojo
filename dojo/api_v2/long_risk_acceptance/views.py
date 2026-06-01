@@ -17,6 +17,7 @@ from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from django.http import FileResponse, Http404, HttpResponse
 from dojo.api_v2.api_error import ApiError
+from dojo.api_v2.long_risk_acceptance.notifications import Notification
 from drf_spectacular.utils import (
     OpenApiParameter,
     OpenApiResponse,
@@ -49,20 +50,20 @@ class RiskAcceptanceEngagementViewSet(prefetch.PrefetchListMixin,
     ] 
     pagination_class = LimitOffsetPagination
 
-    def post(self, request, *args, **kwargs):
-        try:
-            serializer = RiskAcceptanceEngagementSerializer(request)
-            serializer.is_valid(raise_exception=True)
+    def create(self, request, *args, **kwargs):
+        serializer = RiskAcceptanceEngagementSerializer(data=request.data, context={"request": request})
+        if serializer.is_valid():
             instance = serializer.save()
+            Notification.risk_acceptance_request(long_risk_acceptance=instance)
             return http_response.ok(
                 message="Long Risk acceptance Created Successfully",
-                data=RiskAcceptanceEngagementSerializer(instance).data
+                data=RiskAcceptanceEngagementSerializer(instance, context={"request": request}).data
             )
-        except Exception as e:
+        else:
             logger.error(f"Validation error on POST long risk acceptance object")
             return http_response.error(
                 message="Validation error occurred. ", data=serializer.errors)
-    
+        
 
     @extend_schema(
         methods=["GET"],
@@ -73,11 +74,13 @@ class RiskAcceptanceEngagementViewSet(prefetch.PrefetchListMixin,
     def render_rule(self, request, pk):
         ra_engagement = get_object_or_404(RiskAcceptanceEngagement, id=pk)
         query = helper_ra_engagement.render_rule(ra_engagement)
-        page = self.paginate_queryset(query)
-        serializer = FindingRenderRuleSerializer(page if page is not None else query, many=True)
-        if page is not None:
-            return self.get_paginated_response(serializer.data)
-        return http_response.ok(serializer.data)
+        if query:
+            page = self.paginate_queryset(query)
+            serializer = FindingRenderRuleSerializer(page if page is not None else query, many=True)
+            if page is not None:
+                return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(query, many=True)
+        return http_response.ok(data=serializer.data)
     
 
     @extend_schema(
@@ -88,9 +91,14 @@ class RiskAcceptanceEngagementViewSet(prefetch.PrefetchListMixin,
     @action(detail=True, methods=["post"])
     def apply_rule(self, request, pk):
         ra_engagement = get_object_or_404(RiskAcceptanceEngagement, id=pk)
-        helper_ra_engagement.apply_rule(ra_engagement)
-        return http_response.ok()
-   
+        try:
+            helper_ra_engagement.async_apply_rule_long_risk_acceptance.apply_async(
+                args=(ra_engagement.id, request.user.id,))
+            return http_response.ok(message="Render Rule Applied")
+        except Exception as e:
+            return http_response.error(
+                message="Validation error occurred. ", data=str(e)
+            )
 
     @extend_schema(
         methods=['POST'],

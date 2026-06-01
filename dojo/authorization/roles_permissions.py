@@ -782,7 +782,9 @@ def get_roles_with_permissions():
             Permissions.Input_View,
             Permissions.Input_Edit,
             Permissions.Input_Add,
-            Permissions.Input_Delete
+            Permissions.Input_Delete,
+            Permissions.Long_Risk_Acceptance_Eng_View,
+            Permissions.Long_Risk_Acceptance_Eng_Add
         },
         Roles.Cibersecurity: {
             Permissions.Product_Type_View,
