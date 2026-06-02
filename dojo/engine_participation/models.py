@@ -286,4 +286,3 @@ class HCEvaluationRun(models.Model):
 admin.site.register(HCParticipation)
 admin.site.register(HCParticipationDiscussion)
 admin.site.register(HCParticipationLog)
-admin.site.register(HCEvaluationRun)

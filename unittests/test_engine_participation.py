@@ -1,8 +1,11 @@
 """
 Tests for HC (Hacking Continuo) Participation module.
 """
+from datetime import timedelta
+
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from django.contrib.auth.models import Group
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
@@ -23,6 +26,8 @@ from dojo.engine_participation.models import (
 )
 from dojo.engine_participation.helpers import (
     evaluate_product_for_hc,
+    finalize_orphan_hc_evaluation_run,
+    get_active_hc_evaluation_run,
     get_latest_hc_evaluation_for_product,
     ELIGIBLE_CRITICALITIES,
     HC_BMC_APPLICATION_CLASSID_MARKER,
@@ -289,6 +294,70 @@ class HCEvaluationRunTest(TestCase):
         self.assertEqual(run.result_summary["postulated"], 5)
 
 
+class HCEvaluationRunReconciliationTest(TestCase):
+    """Tests for orphan run reconciliation logic"""
+    fixtures = ['dojo_testdata.json']
+
+    def setUp(self):
+        self.user = Dojo_User.objects.get(username="admin")
+
+    @patch("dojo.engine_participation.helpers._is_hc_evaluation_task_live", return_value=False)
+    def test_finalize_orphan_run_marks_failed(self, _mock_task_live):
+        run = HCEvaluationRun.objects.create(
+            status=HCEvaluationRun.STATUS_RUNNING,
+            triggered_by=self.user,
+            celery_task_id="stale-task-id",
+        )
+        # Forzar create_date antigua para superar el período de gracia
+        HCEvaluationRun.objects.filter(pk=run.pk).update(
+            create_date=timezone.now() - timedelta(minutes=10)
+        )
+        run.refresh_from_db()
+
+        finalized = finalize_orphan_hc_evaluation_run(run)
+        run.refresh_from_db()
+
+        self.assertTrue(finalized)
+        self.assertEqual(run.status, HCEvaluationRun.STATUS_FAILED)
+        self.assertIsNotNone(run.finished_at)
+        self.assertIn("auto-finalized", run.error_message)
+
+    @patch("dojo.engine_participation.helpers._is_hc_evaluation_task_live", return_value=True)
+    def test_finalize_run_keeps_live_task_running(self, _mock_task_live):
+        run = HCEvaluationRun.objects.create(
+            status=HCEvaluationRun.STATUS_RUNNING,
+            triggered_by=self.user,
+            celery_task_id="live-task-id",
+        )
+
+        finalized = finalize_orphan_hc_evaluation_run(run)
+        run.refresh_from_db()
+
+        self.assertFalse(finalized)
+        self.assertEqual(run.status, HCEvaluationRun.STATUS_RUNNING)
+        self.assertIsNone(run.finished_at)
+
+    @patch("dojo.engine_participation.helpers._is_hc_evaluation_task_live", return_value=False)
+    def test_get_active_run_reconciles_stale_runs(self, _mock_task_live):
+        run = HCEvaluationRun.objects.create(
+            status=HCEvaluationRun.STATUS_PENDING,
+            triggered_by=self.user,
+            celery_task_id="stale-pending-id",
+        )
+        # Forzar create_date antigua para superar el período de gracia
+        HCEvaluationRun.objects.filter(pk=run.pk).update(
+            create_date=timezone.now() - timedelta(minutes=10)
+        )
+
+        active_run = get_active_hc_evaluation_run()
+
+        self.assertIsNone(active_run)
+        self.assertEqual(
+            HCEvaluationRun.objects.filter(status=HCEvaluationRun.STATUS_FAILED).count(),
+            1,
+        )
+
+
 class ApproveRejectHCTest(TestCase):
     """Tests for approve and reject functions"""
     fixtures = ['dojo_testdata.json']
@@ -538,6 +607,24 @@ class HCParticipationViewsTest(TestCase):
         self.assertIn("task_id", response.data["data"])
         # Verify the task was called
         mock_task.delay.assert_called_once()
+
+    @patch("dojo.api_v2.engine_participation.views.get_active_hc_evaluation_run")
+    @patch("dojo.api_v2.engine_participation.views.run_hc_participation_evaluation_task")
+    def test_api_run_evaluation_returns_running_when_active_exists(self, mock_task, mock_get_active):
+        active_run = HCEvaluationRun.objects.create(
+            status=HCEvaluationRun.STATUS_RUNNING,
+            triggered_by=self.user,
+            celery_task_id="active-task-id",
+        )
+        mock_get_active.return_value = active_run
+
+        response = self.client.post(reverse("api_hc_run_evaluation"), format="json")
+
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.data["message"], "An HC evaluation is already running.")
+        self.assertEqual(response.data["data"]["run_id"], str(active_run.id))
+        self.assertEqual(response.data["data"]["status"], HCEvaluationRun.STATUS_RUNNING)
+        mock_task.delay.assert_not_called()
 
     def test_api_run_evaluation_forbids_non_staff_user(self):
         """Test API endpoint denies non-staff users even with token"""

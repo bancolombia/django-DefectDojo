@@ -6,6 +6,8 @@ from django.core.exceptions import PermissionDenied
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 
+from celery import current_app
+
 from dojo.utils import get_page_items, add_breadcrumb
 from dojo.templatetags.authorization_tags import is_in_group
 from dojo.models import Product
@@ -27,6 +29,30 @@ from dojo.engine_participation.helpers import (
     run_hc_participation_evaluation_task,
 )
 from dojo.notifications.helper import create_notification
+
+
+def _is_hc_evaluation_task_live(task_id: str) -> bool:
+    if not task_id:
+        return False
+
+    try:
+        inspector = current_app.control.inspect(timeout=1.0)
+        task_buckets = [
+            inspector.active() or {},
+            inspector.reserved() or {},
+            inspector.scheduled() or {},
+        ]
+    except Exception:
+        # If broker/inspect is unavailable, avoid false positives that block execution.
+        return False
+
+    for bucket in task_buckets:
+        for _, tasks in bucket.items():
+            for task in tasks:
+                current_task_id = task.get("id")
+                if current_task_id == task_id:
+                    return True
+    return False
 
 
 def hc_participations(request: HttpRequest) -> HttpResponse:
@@ -285,14 +311,25 @@ def run_hc_evaluation(request: HttpRequest) -> HttpResponse:
         status__in=[HCEvaluationRun.STATUS_PENDING, HCEvaluationRun.STATUS_RUNNING]
     ).first()
     if active_run:
+        if _is_hc_evaluation_task_live(active_run.celery_task_id):
+            messages.add_message(
+                request,
+                messages.WARNING,
+                f"An evaluation is already running (ID: {active_run.id}). "
+                "Please wait for it to finish before starting a new one.",
+                extra_tags="alert-warning",
+            )
+            return redirect("hc_evaluation_run_status", run_id=str(active_run.id))
+
         messages.add_message(
             request,
             messages.WARNING,
-            f"An evaluation is already running (ID: {active_run.id}). "
-            "Please wait for it to finish before starting a new one.",
+            (
+                f"Previous run {active_run.id} appears stale (no active Celery task found). "
+                "Starting a new evaluation without changing historical run state."
+            ),
             extra_tags="alert-warning",
         )
-        return redirect("hc_evaluation_run_status", run_id=str(active_run.id))
 
     run = HCEvaluationRun.objects.create(
         status=HCEvaluationRun.STATUS_PENDING,

@@ -1,12 +1,14 @@
 import uuid
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from enum import Enum
 
 from django.db import transaction
+from django.db.models import F
 from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
+from celery import chord
+from celery import current_app
 
 from celery.utils.log import get_task_logger
 
@@ -161,23 +163,29 @@ def _process_single_product(product: Product, batch_id: uuid.UUID, user) -> dict
         }
 
 
-def _notify_reviewers_of_new_requests(requests, batch_id):
+def _notify_reviewers_of_new_requests(requests=None, batch_id=None, product_names=None, total_requests=None):
     reviewers = get_hc_reviewers_members()
     
     if not reviewers:
         logger.warning("No reviewers found for HC participation notifications")
         return
     
-    product_names = [req.product.name for req in requests[:5]]
-    more_text = f" and {len(requests) - 5} more" if len(requests) > 5 else ""
+    if requests is not None:
+        names = [req.product.name for req in requests[:5]]
+        total = len(requests)
+    else:
+        names = (product_names or [])[:5]
+        total = total_requests or 0
+
+    more_text = f" and {total - 5} more" if total > 5 else ""
     
     create_notification(
         event="hc_participation_request",
-        subject=f"🎯 {len(requests)} new Hacking Continuous requests",
+        subject=f"🎯 {total} new Hacking Continuous requests",
         title=f"New Hacking Continuous participation requests",
         description=(
-            f"{len(requests)} new HC participation requests have been generated "
-            f"for products: {', '.join(product_names)}{more_text}. "
+            f"{total} new HC participation requests have been generated "
+            f"for products: {', '.join(names)}{more_text}. "
             f"Batch ID: {batch_id}"
         ),
         url=reverse("hc_participations"),
@@ -322,17 +330,234 @@ def get_latest_hc_evaluation_for_product(product_id: int) -> dict:
         return None
 
 
-_CHUNK_SIZE = 200
+_CHUNK_SIZE = 25
+
+
+def _is_hc_evaluation_task_live(task_id: str) -> bool:
+    if not task_id:
+        return False
+
+    try:
+        inspector = current_app.control.inspect(timeout=1)
+        active = inspector.active() or {}
+        reserved = inspector.reserved() or {}
+        scheduled = inspector.scheduled() or {}
+    except Exception:
+        # Fail-open: if broker/inspect is temporarily unavailable, avoid false negatives.
+        return True
+
+    for worker_tasks in active.values():
+        if any(task.get("id") == task_id for task in worker_tasks):
+            return True
+
+    for worker_tasks in reserved.values():
+        if any(task.get("id") == task_id for task in worker_tasks):
+            return True
+
+    for worker_tasks in scheduled.values():
+        for task in worker_tasks:
+            request = task.get("request") or {}
+            if request.get("id") == task_id:
+                return True
+
+    return False
+
+
+_ORPHAN_GRACE_PERIOD_SECONDS = 120
+
+
+def finalize_orphan_hc_evaluation_run(run, reason: str | None = None) -> bool:
+    from dojo.engine_participation.models import HCEvaluationRun
+
+    if run.status not in (HCEvaluationRun.STATUS_PENDING, HCEvaluationRun.STATUS_RUNNING):
+        return False
+
+    age_seconds = (timezone.now() - run.create_date).total_seconds()
+    if age_seconds < _ORPHAN_GRACE_PERIOD_SECONDS:
+        return False
+
+    if run.celery_task_id and _is_hc_evaluation_task_live(run.celery_task_id):
+        return False
+
+    run.status = HCEvaluationRun.STATUS_FAILED
+    run.finished_at = timezone.now()
+    if not run.error_message:
+        run.error_message = reason or (
+            "Run was auto-finalized because the Celery task is no longer live "
+            "(worker restart/termination detected)."
+        )
+    run.save(update_fields=["status", "finished_at", "error_message"])
+    return True
+
+
+def reconcile_orphan_hc_evaluation_runs() -> int:
+    from dojo.engine_participation.models import HCEvaluationRun
+
+    finalized = 0
+    candidates = HCEvaluationRun.objects.filter(
+        status__in=[HCEvaluationRun.STATUS_PENDING, HCEvaluationRun.STATUS_RUNNING],
+    ).order_by("-create_date")
+
+    for run in candidates:
+        if finalize_orphan_hc_evaluation_run(run):
+            finalized += 1
+
+    return finalized
+
+
+def get_active_hc_evaluation_run():
+    from dojo.engine_participation.models import HCEvaluationRun
+
+    reconcile_orphan_hc_evaluation_runs()
+    return HCEvaluationRun.objects.filter(
+        status__in=[HCEvaluationRun.STATUS_PENDING, HCEvaluationRun.STATUS_RUNNING],
+    ).order_by("-create_date").first()
+
+
+def _build_empty_summary(total_products: int, candidates_count: int, skipped_by_classid: int) -> dict:
+    return {
+        "postulated": 0,
+        "already_in_hc": 0,
+        "not_eligible": 0,
+        "errors": 0,
+        "total_evaluated": 0,
+        "requests_created": 0,
+        "scope": {
+            "total_products": total_products,
+            "classid_candidates": candidates_count,
+            "skipped_by_classid": skipped_by_classid,
+        },
+    }
 
 
 @app.task(bind=True)
-def run_hc_participation_evaluation_task(self, run_id: str, user_id: int = None):
+def run_hc_participation_evaluation_chunk_task(
+    self,
+    run_id: str,
+    user_id: int | None,
+    batch_id: str,
+    product_ids: list[int],
+):
     from django.contrib.auth import get_user_model
     from dojo.engine_participation.models import HCEvaluationRun
 
     User = get_user_model()
-    run = HCEvaluationRun.objects.get(id=run_id)
     user = User.objects.filter(id=user_id).first() if user_id else None
+    batch_uuid = uuid.UUID(batch_id)
+
+    products = list(Product.objects.select_related("prod_type").filter(id__in=product_ids))
+
+    requests_to_create = []
+    already_in_hc_requests = []
+
+    summary = {
+        "postulated": 0,
+        "already_in_hc": 0,
+        "not_eligible": 0,
+        "errors": 0,
+        "total_evaluated": len(products),
+        "requests_created": 0,
+        "sample_created_products": [],
+    }
+
+    for product in products:
+        process_result = _process_single_product(product, batch_uuid, user)
+        rec = process_result["evaluation_result"]["recommendation"]
+        if rec == "postulated":
+            summary["postulated"] += 1
+            if process_result["hc_request"]:
+                requests_to_create.append(process_result["hc_request"])
+        elif rec == "already_in_hc":
+            summary["already_in_hc"] += 1
+            if process_result["hc_request"]:
+                already_in_hc_requests.append(process_result["hc_request"])
+        elif rec == "not_eligible":
+            summary["not_eligible"] += 1
+        else:
+            summary["errors"] += 1
+
+    created_requests = []
+    requests_to_create.sort(key=lambda r: r.product_id)
+    already_in_hc_requests.sort(key=lambda r: r.product_id)
+
+    with transaction.atomic():
+        for hc_request in requests_to_create:
+            locked_product = Product.objects.select_for_update().get(pk=hc_request.product_id)
+            existing = HCParticipation.objects.filter(
+                product=locked_product,
+                status__in=ACTIVE_HC_REQUEST_STATUSES,
+            ).exists()
+            if not existing:
+                hc_request.product = locked_product
+                hc_request.save()
+                created_requests.append(hc_request)
+
+        if already_in_hc_requests:
+            HCParticipation.objects.bulk_create(already_in_hc_requests, batch_size=500)
+
+    summary["requests_created"] = len(created_requests)
+    summary["sample_created_products"] = [req.product.name for req in created_requests[:5]]
+
+    HCEvaluationRun.objects.filter(id=run_id).update(processed_count=F("processed_count") + len(products))
+
+    return summary
+
+
+@app.task(bind=True)
+def run_hc_participation_evaluation_finalize_task(
+    self,
+    chunk_summaries: list[dict],
+    run_id: str,
+    batch_id: str,
+    total_products: int,
+    candidates_count: int,
+    skipped_by_classid: int,
+):
+    from dojo.engine_participation.models import HCEvaluationRun
+
+    run = HCEvaluationRun.objects.get(id=run_id)
+
+    aggregated = _build_empty_summary(total_products, candidates_count, skipped_by_classid)
+    aggregated["batch_id"] = batch_id
+    sample_created_products = []
+
+    for chunk in chunk_summaries or []:
+        aggregated["postulated"] += chunk.get("postulated", 0)
+        aggregated["already_in_hc"] += chunk.get("already_in_hc", 0)
+        aggregated["not_eligible"] += chunk.get("not_eligible", 0)
+        aggregated["errors"] += chunk.get("errors", 0)
+        aggregated["total_evaluated"] += chunk.get("total_evaluated", 0)
+        aggregated["requests_created"] += chunk.get("requests_created", 0)
+        sample_created_products.extend(chunk.get("sample_created_products", []))
+
+    run.status = HCEvaluationRun.STATUS_COMPLETED
+    run.finished_at = timezone.now()
+    run.result_summary = aggregated
+    run.processed_count = candidates_count
+    run.save(update_fields=["status", "finished_at", "result_summary", "processed_count"])
+
+    if aggregated["requests_created"] > 0:
+        _notify_reviewers_of_new_requests(
+            batch_id=batch_id,
+            product_names=sample_created_products,
+            total_requests=aggregated["requests_created"],
+        )
+
+    logger.info(
+        "[HCEvaluationRun %s] Evaluation completed – %s evaluated, %s new postulation requests created.",
+        run_id,
+        aggregated["total_evaluated"],
+        aggregated["requests_created"],
+    )
+
+    return aggregated
+
+
+@app.task(bind=True)
+def run_hc_participation_evaluation_task(self, run_id: str, user_id: int = None):
+    from dojo.engine_participation.models import HCEvaluationRun
+
+    run = HCEvaluationRun.objects.get(id=run_id)
 
     def _log(msg, level="INFO"):
         if level == "ERROR":
@@ -354,13 +579,14 @@ def run_hc_participation_evaluation_task(self, run_id: str, user_id: int = None)
         run.status = HCEvaluationRun.STATUS_RUNNING
         run.started_at = timezone.now()
         run.celery_task_id = self.request.id
-        run.save(update_fields=["status", "started_at", "celery_task_id"])
+        run.processed_count = 0
+        run.save(update_fields=["status", "started_at", "celery_task_id", "processed_count"])
 
         batch_id = uuid.uuid4()
         _log(f"Evaluation started. Batch ID: {batch_id}")
 
         total_products = Product.objects.count()
-        products_qs = Product.objects.select_related("prod_type").filter(
+        products_qs = Product.objects.filter(
             description__icontains=HC_BMC_APPLICATION_CLASSID_MARKER,
         )
         candidates_count = products_qs.count()
@@ -375,21 +601,12 @@ def run_hc_participation_evaluation_task(self, run_id: str, user_id: int = None)
             f"skipped by CLASSID: {skipped_by_classid}"
         )
 
-        products_list = list(products_qs)
+        product_ids = list(products_qs.values_list("id", flat=True))
 
-        if not products_list:
+        if not product_ids:
             HCParticipation.objects.filter(recommendation="already_in_hc").delete()
             _log("No products matched the CLASSID filter. Nothing to evaluate.")
-            empty_summary = {
-                "postulated": 0, "already_in_hc": 0,
-                "not_eligible": 0, "errors": 0,
-                "total_evaluated": 0, "requests_created": 0,
-                "scope": {
-                    "total_products": total_products,
-                    "classid_candidates": 0,
-                    "skipped_by_classid": skipped_by_classid,
-                },
-            }
+            empty_summary = _build_empty_summary(total_products, 0, skipped_by_classid)
             _flush({
                 "status": HCEvaluationRun.STATUS_COMPLETED,
                 "finished_at": timezone.now(),
@@ -397,91 +614,41 @@ def run_hc_participation_evaluation_task(self, run_id: str, user_id: int = None)
             })
             return empty_summary
 
-        results = []
-        requests_to_create = []
-        already_in_hc_requests = []
-        processed = 0
+        HCParticipation.objects.filter(recommendation="already_in_hc").delete()
 
-        for chunk_start in range(0, len(products_list), _CHUNK_SIZE):
-            chunk = products_list[chunk_start: chunk_start + _CHUNK_SIZE]
+        chunk_tasks = []
+        for chunk_start in range(0, len(product_ids), _CHUNK_SIZE):
+            chunk_ids = product_ids[chunk_start: chunk_start + _CHUNK_SIZE]
+            chunk_tasks.append(
+                run_hc_participation_evaluation_chunk_task.s(
+                    run_id=run_id,
+                    user_id=user_id,
+                    batch_id=str(batch_id),
+                    product_ids=chunk_ids,
+                )
+            )
 
-            with ThreadPoolExecutor(max_workers=10) as executor:
-                future_to_product = {
-                    executor.submit(_process_single_product, product, batch_id, user): product
-                    for product in chunk
-                }
-                for future in as_completed(future_to_product):
-                    process_result = future.result()
-                    results.append(process_result["evaluation_result"])
-                    rec = process_result["evaluation_result"]["recommendation"]
-                    if rec == "already_in_hc" and process_result["hc_request"]:
-                        already_in_hc_requests.append(process_result["hc_request"])
-                    elif rec == "postulated" and process_result["hc_request"]:
-                        requests_to_create.append(process_result["hc_request"])
-
-            processed = min(chunk_start + _CHUNK_SIZE, len(products_list))
-            run.processed_count = processed
-            pct = round(processed * 100 / len(products_list))
-            _log(f"Progress: {processed}/{len(products_list)} products evaluated ({pct}%)")
-            _flush()
-
-        created_requests = []
-        requests_to_create.sort(key=lambda r: r.product_id)
-        already_in_hc_requests.sort(key=lambda r: r.product_id)
+        callback = run_hc_participation_evaluation_finalize_task.s(
+            run_id=run_id,
+            batch_id=str(batch_id),
+            total_products=total_products,
+            candidates_count=candidates_count,
+            skipped_by_classid=skipped_by_classid,
+        )
+        async_result = chord(chunk_tasks)(callback)
 
         _log(
-            f"Processing results – postulated: {sum(1 for r in results if r['recommendation'] == 'postulated')} | "
-            f"already_in_hc: {sum(1 for r in results if r['recommendation'] == 'already_in_hc')} | "
-            f"not_eligible: {sum(1 for r in results if r['recommendation'] == 'not_eligible')} | "
-            f"errors: {sum(1 for r in results if r['recommendation'] == 'error')}"
+            f"Evaluation dispatched – {len(product_ids)} products in "
+            f"{len(chunk_tasks)} chunk tasks. Callback task: {async_result.id}"
         )
-
-        with transaction.atomic():
-            HCParticipation.objects.filter(recommendation="already_in_hc").delete()
-
-            for hc_request in requests_to_create:
-                locked_product = Product.objects.select_for_update().get(pk=hc_request.product_id)
-                existing = HCParticipation.objects.filter(
-                    product=locked_product,
-                    status__in=ACTIVE_HC_REQUEST_STATUSES,
-                ).exists()
-                if not existing:
-                    hc_request.product = locked_product
-                    hc_request.save()
-                    created_requests.append(hc_request)
-
-            if already_in_hc_requests:
-                HCParticipation.objects.bulk_create(already_in_hc_requests, batch_size=500)
-
-        if created_requests:
-            _notify_reviewers_of_new_requests(created_requests, batch_id)
-
-        summary = {
-            "postulated": sum(1 for r in results if r["recommendation"] == "postulated"),
-            "already_in_hc": sum(1 for r in results if r["recommendation"] == "already_in_hc"),
-            "not_eligible": sum(1 for r in results if r["recommendation"] == "not_eligible"),
-            "errors": sum(1 for r in results if r["recommendation"] == "error"),
-            "total_evaluated": len(results),
-            "requests_created": len(created_requests),
-            "scope": {
-                "total_products": total_products,
-                "classid_candidates": candidates_count,
-                "skipped_by_classid": skipped_by_classid,
-            },
+        return {
+            "status": "dispatched",
+            "run_id": run_id,
             "batch_id": str(batch_id),
+            "chunks": len(chunk_tasks),
+            "candidates": len(product_ids),
+            "callback_task_id": async_result.id,
         }
-
-        _log(
-            f"Evaluation completed – {summary['total_evaluated']} evaluated, "
-            f"{summary['requests_created']} new postulation requests created."
-        )
-        _flush({
-            "status": HCEvaluationRun.STATUS_COMPLETED,
-            "finished_at": timezone.now(),
-            "result_summary": summary,
-            "processed_count": len(products_list),
-        })
-        return summary
 
     except Exception as exc:
         logger.exception("[HCEvaluationRun %s] Task failed: %s", run_id, exc)

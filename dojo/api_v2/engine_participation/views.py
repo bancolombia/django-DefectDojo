@@ -6,7 +6,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from dojo.api_v2.utils import http_response
-from dojo.engine_participation.helpers import run_hc_participation_evaluation_task
+from dojo.engine_participation.helpers import (
+    get_active_hc_evaluation_run,
+    run_hc_participation_evaluation_task,
+)
 from dojo.engine_participation.models import HCEvaluationRun
 
 logger = logging.getLogger(__name__)
@@ -26,9 +29,7 @@ class RunHCEvaluationAPIView(APIView):
             )
 
         try:
-            active_run = HCEvaluationRun.objects.filter(
-                status__in=[HCEvaluationRun.STATUS_PENDING, HCEvaluationRun.STATUS_RUNNING],
-            ).first()
+            active_run = get_active_hc_evaluation_run()
 
             if active_run:
                 return http_response.accepted(
