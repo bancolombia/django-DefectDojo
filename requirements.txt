@@ -16,7 +16,7 @@ django-environ==0.13.0
 django-filter==25.1
 django-imagekit==6.1.0
 django-multiselectfield==1.0.1
-django-polymorphic==4.11.4
+django-polymorphic==4.11.5
 django-crispy-forms==2.5
 django_extensions==4.1
 django-slack==5.19.0
