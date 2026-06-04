@@ -380,6 +380,7 @@ def check_new_findings_to_exclusion_list():
                 args=(
                     finding_exclusion.unique_id_from_tool,
                     relative_url,
+                    "black_list"
                 )
             )
 
