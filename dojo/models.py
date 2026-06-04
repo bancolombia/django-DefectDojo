@@ -2443,6 +2443,7 @@ class Finding(models.Model):
                       ('Risk Active', 'Risk Active'),
                       ('On Whitelist', 'On Whitelist'),
                       ('On Blacklist', 'On Blacklist'),
+                      ('On ZeroDay', 'On ZeroDay'),
                       ('Transfer Pending', 'Transfer Pending'),
                       ('Transfer Rejected', 'Transfer Rejected'),
                       ('Transfer Expired', 'Transfer Expired'),
@@ -3280,6 +3281,8 @@ class Finding(models.Model):
             status += ["On Whitelist"]
         if self.risk_status == "On Blacklist":
             status += ["On Blacklist"]
+        if self.risk_status == "On ZeroDay":
+            status += ["On ZeroDay"]
         if self.risk_status == "Risk Expired":
             status += ["Risk Expired"]
         elif self.risk_accepted:

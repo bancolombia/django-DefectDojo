@@ -65,7 +65,8 @@ from dojo.finding.helper import (
     REJECTED_TRANSFERED_FINDINGS_QUERY,
     EXPIRED_TRANSFERED_FINDINGS_QUERY,
     WHITELISTED_FINDINGS_QUERY,
-    BLACKLISTED_FINDINGS_QUERY
+    BLACKLISTED_FINDINGS_QUERY,
+    ZERODAY_FINDINGS_QUERY
 )
 from dojo.finding.queries import get_authorized_findings
 from dojo.finding_group.queries import get_authorized_finding_groups
@@ -216,7 +217,9 @@ class FindingStatusFilter(ChoiceFilter):
 
     def on_blacklist(self, qs, name):
         return qs.filter(BLACKLISTED_FINDINGS_QUERY)
-    
+
+    def on_zeroday(self, qs, name):
+        return qs.filter(ZERODAY_FINDINGS_QUERY)
 
     options = {
         None: (_("Any"), any),
@@ -237,7 +240,8 @@ class FindingStatusFilter(ChoiceFilter):
         14: (_("Transfer Expired"), transfer_expired),
         15: (_("On Whitelist"), on_whitelist),
         16: (_("On Blacklist"), on_blacklist),
-        17: (_("Risk Accepted Long Term"), risk_accepted_long_term),
+        17: (_("On ZeroDay"), on_zeroday),
+        18: (_("Risk Accepted Long Term"), risk_accepted_long_term),
     }
 
     def __init__(self, *args, **kwargs):
