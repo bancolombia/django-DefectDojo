@@ -398,7 +398,7 @@ def add_findings_to_exclusion(unique_id_from_tool, relative_url, type_finding):
         note = get_note(system_user, message)
 
     for finding in findings_to_update:
-        if type_finding in finding.tags:
+        if type_finding not in finding.tags:
             finding.tags.add(type_finding)
         finding.notes.add(note)
         finding.risk_status = Constants.EXCLUSION_TYPE.value.get(type_finding)
@@ -627,13 +627,13 @@ def identify_priority_vulnerabilities(findings, priority_zero) -> int:
                 )
                 add_discussion_to_finding_exclusion(finding_exclusion)
                 add_findings_to_exclusion.apply_async(
-                    args=(new_finding_exclusion.unique_id_from_tool, relative_url)
+                    args=(new_finding_exclusion.unique_id_from_tool, relative_url, "black_list")
                 )
             else:
                 fx = finding_exclusion.first()
                 relative_url = reverse("finding_exclusion", args=[str(fx.pk)])
                 add_findings_to_exclusion.apply_async(
-                    args=(fx.unique_id_from_tool, relative_url)
+                    args=(fx.unique_id_from_tool, relative_url, "black_list")
                 )
 
 

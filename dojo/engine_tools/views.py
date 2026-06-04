@@ -46,11 +46,11 @@ def finding_exclusions(request: HttpRequest):
                                              finding_exclusions.qs,
                                              10)
 
-    add_breadcrumb(title="Vulnerability Black & White Lists", top_level=True, request=request)
+    add_breadcrumb(title="Blacklist - Zero-Day and Whitelist", top_level=True, request=request)
     return render(request, "dojo/view_finding_exclusion.html", {
         "exclusions": paged_finding_exclusion,
         "filtered": finding_exclusions,
-        "name": "Vulnerability Black & White Lists",
+        "name": "Blacklist - Zero-Day and Whitelist",
     })
 
 
@@ -128,7 +128,6 @@ def create_finding_exclusion(request: HttpRequest) -> HttpResponse:
                 
                 relative_url = reverse("finding_exclusion", args=[str(exclusion.pk)])
                 add_findings_to_exclusion.apply_async(args=(exclusion.unique_id_from_tool, relative_url, type_exclusion))
-                # add_findings_to_exclusion(exclusion.unique_id_from_tool, relative_url, type_exclusion)
             else:  
                 exclusion.save()
                 form.save_m2m()
