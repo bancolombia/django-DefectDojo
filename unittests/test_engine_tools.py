@@ -244,6 +244,13 @@ class RemoveFindingFromListTest(TestCase):
         finding = remove_finding_from_list(self.finding, self.note, "black_list")
         self.assertIsNone(finding.risk_status)
         self.assertNotIn("black_list", finding.tags.get_tag_list())
+    
+    def test_remove_from_blacklist(self):
+        self.finding.tags.add("black_list")
+        self.finding.risk_status = "On ZeroDay"
+        finding = remove_finding_from_list(self.finding, self.note, "zero_day")
+        self.assertIsNone(finding.risk_status)
+        self.assertNotIn("zero_day", finding.tags.get_tag_list())
 
 
 class GetSeverityRiskMapTest(TestCase):
