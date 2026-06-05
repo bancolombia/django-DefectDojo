@@ -480,19 +480,18 @@ def accept_or_reject_risk_bulk(eng: Engagement,
             raise ApiError.forbidden(detail="The parameter *action* must be accept or reject")
 
 
-def validate_list_findings(type, finding):
-    if type == "black_list":
-        return next(
-            (
-                item
-                for item in FindingExclusion.objects.filter(
-                    type="black_list", status="Accepted").values_list('unique_id_from_tool', flat=True)
-                if item in finding.vulnerability_ids
-                or item == finding.vuln_id_from_tool
-            ),
-            None,
-        )
-
+def validate_list_findings(finding):
+    types = ["black_list", "zero_day"]
+    return next(
+        (
+            item
+            for item in FindingExclusion.objects.filter(
+                type__in=types, status="Accepted").values_list('unique_id_from_tool', flat=True)
+            if item in finding.vulnerability_ids
+            or item == finding.vuln_id_from_tool
+        ),
+        None,
+    )
 
 @app.task
 def expiration_handler(*args, **kwargs):

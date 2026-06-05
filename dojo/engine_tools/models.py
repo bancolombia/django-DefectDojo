@@ -7,7 +7,8 @@ import uuid
 
 class FindingExclusion(models.Model):
     TYPE_CHOICES = [("white_list", "white_list"),
-                    ("black_list", "black_list")]
+                    ("black_list", "black_list"),
+                    ("zero_day", "zero_day")]
     STATUS_CHOICES = [("Accepted", "Accepted"),
                       ("Pending", "Pending"),
                       ("Reviewed", "Reviewed"),

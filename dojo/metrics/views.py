@@ -253,27 +253,6 @@ def simple_metrics(request):
         "form": form,
     })
 
-# @cache_page(60 * 15)  # cache for 15 minutes
-# @vary_on_cookie
-@dojo_ratelimit_view()
-def metrics_panel(request):
-    page_name = _('Metrics Panel')
-    now = timezone.now()
-    role = Role.objects.get(id=Roles.Maintainer)
-    user = request.user.id
-    cookie_csrftoken = get_token(request)
-    cookie_sessionid = request.COOKIES.get('sessionid', '')
-    grafana_params = f"{settings.GRAFANA_PARAMS}&var-csrftoken={cookie_csrftoken}&var-sessionid={cookie_sessionid}"
-    add_breadcrumb(title=page_name, top_level=not len(request.GET), request=request)
-    return render(request, 'dojo/metrics_panel.html', {
-       'name': page_name,
-       'grafana_url': settings.GRAFANA_URL,
-       'grafana_path': settings.GRAFANA_PATH.get("metrics_panel"),
-       'grafana_params': grafana_params,
-       'role': role,
-       'user': user,
-    })
-
 @user_has_role_permission(Permissions.Metrics_DevSecOps)
 @dojo_ratelimit_view()
 def metrics_devsecops(request: HttpRequest) -> HttpResponse:
@@ -294,21 +273,15 @@ def metrics_devsecops(request: HttpRequest) -> HttpResponse:
 @dojo_ratelimit_view()
 def metrics_panel_admin(request: HttpRequest) -> HttpResponse:
     page_name = _('Metrics Panel Admin')
-    role = Role.objects.get(id=Roles.Maintainer)
     user = request.user.id
     cookie_csrftoken = get_token(request)
     cookie_sessionid = request.COOKIES.get('sessionid', '')
-    grafana_params = f"{settings.GRAFANA_PARAMS}&var-csrftoken={cookie_csrftoken}&var-sessionid={cookie_sessionid}"
+    base_params = f"?csrftoken={cookie_csrftoken}&sessionid={cookie_sessionid}"
     add_breadcrumb(title=page_name, top_level=not len(request.GET), request=request)
-    return render(request, 'dojo/metrics_panel_admin.html', {
-       'name': page_name,
-       'grafana_url': settings.GRAFANA_URL,
-       'grafana_path': settings.GRAFANA_PATH.get("metrics_panel_admin"),
-       'grafana_params': grafana_params,
-       'role': role,
-       'user': user,
-    })
-
+    return render(request, 'dojo/generic_view.html', {
+        'actions': page_name,
+        'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/metrics/panel-metrics{base_params}",
+        'user': user})
 
 @dojo_ratelimit_view()
 def metrics_panel_tenable(request: HttpRequest) -> HttpResponse:

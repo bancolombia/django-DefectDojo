@@ -56,6 +56,7 @@ REJECTED_TRANSFERED_FINDINGS_QUERY = Q(risk_status="Transfer Rejected")
 EXPIRED_TRANSFERED_FINDINGS_QUERY = Q(risk_status="Transfer Expired")
 WHITELISTED_FINDINGS_QUERY = Q(risk_status="On Whitelist")
 BLACKLISTED_FINDINGS_QUERY = Q(risk_status="On Blacklist")
+ZERODAY_FINDINGS_QUERY = Q(risk_status="On ZeroDay")
 
 
 # this signal is triggered just before a finding is getting saved

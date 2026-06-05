@@ -65,7 +65,7 @@ class UseCaseRiskAcceptance:
         """Validate black list findings"""
         for finding in self.__validate_data["accepted_findings"]:
             if (
-                rp_helper.validate_list_findings("black_list", finding)
+                rp_helper.validate_list_findings(finding)
                     and (
                         self.__user.is_superuser
                         or rp_helper.role_has_exclusive_permissions(self.__user)

@@ -822,7 +822,7 @@ def finding_display_status(finding, event="view"):
     
     if ra:
         reverse_risk_acceptance = reverse("view_risk_acceptance", args=(finding.test.engagement.id, ra.id))
-    if finding.risk_status == "On Whitelist" or finding.risk_status == "On Blacklist":
+    if finding.risk_status in ["On Whitelist", "On Blacklist", "On ZeroDay"]:
         finding_exclusion = FindingExclusion.objects.filter(unique_id_from_tool=finding.cve, status="Accepted").first()
         if finding_exclusion:
             reverse_whitelist = reverse('finding_exclusion', args=(finding_exclusion.pk,))

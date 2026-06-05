@@ -464,11 +464,6 @@
                                                         {% trans "Metrics Panel Tenable" %}
                                                     </a>
                                                 </li>
-                                                <li>
-                                                    <a rel="noopener noreferrer" href="{% url 'metrics_panel' %}">
-                                                        {% trans "Metrics Panel" %}
-                                                    </a>
-                                                </li>
                                                 {% if "Metrics_Panel_Admin"|has_role_permission %}
                                                     <li>
                                                         <a rel="noopener noreferrer" href="{% url 'metrics_panel_admin' %}">
@@ -557,7 +552,7 @@
 
                                                 <li>
                                                     <a rel="noopener noreferrer" href="{% url 'finding_exclusions' %}">
-                                                        {% trans "Vulnerability Black & White Lists" %}
+                                                        {% trans "Blacklist - Zero-Day and Whitelist" %}
                                                     </a>
                                                 </li>
                                                 <li>

@@ -13,7 +13,7 @@ from dojo.engine_tools.helpers import (
     expire_finding_exclusion_immediately,
     send_mail_to_cybersecurity,
     has_valid_comments,
-    add_findings_to_blacklist,
+    add_findings_to_exclusion,
     remove_findings_from_deleted_finding_exclusions
 )
 
@@ -46,11 +46,11 @@ def finding_exclusions(request: HttpRequest):
                                              finding_exclusions.qs,
                                              10)
 
-    add_breadcrumb(title="Vulnerability Black & White Lists", top_level=True, request=request)
+    add_breadcrumb(title="Blacklist - Zero-Day and Whitelist", top_level=True, request=request)
     return render(request, "dojo/view_finding_exclusion.html", {
         "exclusions": paged_finding_exclusion,
         "filtered": finding_exclusions,
-        "name": "Vulnerability Black & White Lists",
+        "name": "Blacklist - Zero-Day and Whitelist",
     })
 
 
@@ -100,16 +100,16 @@ def create_finding_exclusion(request: HttpRequest) -> HttpResponse:
 
     if request.method == "POST":
         form = CreateFindingExclusionForm(user=request.user, data=request.POST)
-        list_type = request.POST.get(key="type")    
+        type_exclusion = request.POST.get(key="type")    
         
         if form.is_valid():
             exclusion: FindingExclusion = form.save(commit=False)
             exclusion.practice = default_practice
             exclusion.created_by = request.user
-            if list_type == "black_list":
+            if type_exclusion in ["black_list", "zero_day"]:
                 if not is_in_group(request.user, Constants.REVIEWERS_MAINTAINER_GROUP.value):
                     raise PermissionDenied
-                
+
                 previous_status = exclusion.status
                 exclusion.status = "Accepted"
                 exclusion.final_status = "Accepted"
@@ -127,7 +127,7 @@ def create_finding_exclusion(request: HttpRequest) -> HttpResponse:
                 )
                 
                 relative_url = reverse("finding_exclusion", args=[str(exclusion.pk)])
-                add_findings_to_blacklist.apply_async(args=(exclusion.unique_id_from_tool, relative_url,))
+                add_findings_to_exclusion.apply_async(args=(exclusion.unique_id_from_tool, relative_url, type_exclusion))
             else:  
                 exclusion.save()
                 form.save_m2m()
@@ -138,9 +138,9 @@ def create_finding_exclusion(request: HttpRequest) -> HttpResponse:
                 
                 create_notification(
                     event="finding_exclusion_request",
-                    subject=f"🙋‍♂️New {list_type} Request for the CVE: {cve} 🙏",
-                    title=f"A new request has been created to add {cve} to the {list_type}.",
-                    description=f"A new request has been created to add {cve} to the {list_type}.",
+                    subject=f"🙋‍♂️New {type_exclusion} Request for the CVE: {cve} 🙏",
+                    title=f"A new request has been created to add {cve} to the {type_exclusion}.",
+                    description=f"A new request has been created to add {cve} to the {type_exclusion}.",
                     url=reverse("finding_exclusion", args=[str(exclusion.pk)]),
                     recipients=reviewers,
                     icon="check-circle",

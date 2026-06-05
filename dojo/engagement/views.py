@@ -1353,7 +1353,7 @@ def post_risk_acceptance_pending(request, finding: Finding, eng, eid, product: P
 
         for finding in findings:
             if (
-                rp_helper.validate_list_findings("black_list", finding)
+                rp_helper.validate_list_findings(finding)
                 and (
                     request.user.is_superuser
                     or rp_helper.role_has_exclusive_permissions(request.user)
@@ -1891,7 +1891,7 @@ def view_edit_risk_acceptance(request, eid, raid, *, edit_mode=False):
                             request, reverse("view_risk_acceptance", args=(eid, raid))
                         )
                     for finding in findings:
-                        if rp_helper.validate_list_findings("black_list", finding):
+                        if rp_helper.validate_list_findings(finding):
                             messages.add_message(
                                 request,
                                 messages.WARNING,

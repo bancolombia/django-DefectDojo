@@ -537,13 +537,6 @@ class ProductTest(BaseTestCase):
         # Navigate to the product page
         driver.get(self.base_url + "metrics?date=5&view=dashboard")
         
-    def test_metrics_panel(self):
-        # Test To Edit Product Tracking Files
-        # login to site, password set to fetch from environ
-        driver = self.driver
-        # Navigate to the product page
-        driver.get(self.base_url + "metrics/panel")
-        
     def test_metrics_panel_admin(self):
         # Test To Edit Product Tracking Files
         # login to site, password set to fetch from environ

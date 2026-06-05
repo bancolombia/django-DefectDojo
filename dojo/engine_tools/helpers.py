@@ -42,6 +42,11 @@ class Constants(Enum):
     )
     ON_WHITELIST = "On Whitelist"
     ON_BLACKLIST = "On Blacklist"
+    EXCLUSION_TYPE = {
+        "white_list": "On Whitelist",
+        "black_list": "On Blacklist",
+        "zero_day": "On ZeroDay"
+    }
     REVIEWERS_MAINTAINER_GROUP = settings.REVIEWER_GROUP_NAME
     APPROVERS_CYBERSECURITY_GROUP = settings.APPROVER_GROUP_NAME
     ENGINE_CONTAINER_TAG = settings.DD_CUSTOM_TAG_PARSER.get("twistlock")
@@ -177,6 +182,11 @@ def accept_finding_exclusion_inmediately(finding_exclusion: FindingExclusion) ->
 
 
 def check_prisma_and_tenable_cve(cve: str) -> tuple[bool, bool]:
+
+    if not cve:
+        logger.error("Not found Cve or unique_id_from_tool for query filter")
+        return False, False
+
     has_prisma_findings = (
         Finding.objects.filter(cve=cve, active=True)
         .filter(
@@ -220,7 +230,7 @@ def send_mail_to_cybersecurity(
     # The practice is not in the list of providers
     if not recipient:
         # Set approve status inmediately
-        if finding_exclusion.type == "white_list":
+        if finding_exclusion.type in ["white_list", "zero_day"]:
             accept_finding_exclusion_inmediately(finding_exclusion)
 
         return
@@ -252,16 +262,16 @@ def send_mail_to_cybersecurity(
     )
 
 
-def remove_finding_from_list(finding: Finding, note: Notes, list_type: str) -> Finding:
+def remove_finding_from_list(finding: Finding, note: Notes, type: str) -> Finding:
     finding.risk_status = None
     finding.notes.add(note)
 
-    if list_type == "white_list":
+    if type == "white_list":
         if not finding.is_mitigated:
             finding.active = True
         finding.tags.remove("white_list") if "white_list" in finding.tags else None
-    elif list_type == "black_list":
-        finding.tags.remove("black_list") if "black_list" in finding.tags else None
+    elif type in ["black_list", "zero_day"]:
+        finding.tags.remove(type) if type in finding.tags else None
 
     return finding
 
@@ -287,11 +297,8 @@ def expire_finding_exclusion(expired_fex_id: str) -> None:
                 f"Finding has been removed from the {expired_fex.type} as it has expired.",
             )
 
-            risk_status = (
-                Constants.ON_BLACKLIST.value
-                if expired_fex.type == "black_list"
-                else Constants.ON_WHITELIST.value
-            )
+            risk_status = Constants.EXCLUSION_TYPE.value.get(expired_fex.type)
+
 
             findings = Finding.objects.filter(
                 Q(cve=expired_fex.unique_id_from_tool)
@@ -369,54 +376,59 @@ def check_new_findings_to_exclusion_list():
                 )
             )
         else:
-            add_findings_to_blacklist.apply_async(
+            add_findings_to_exclusion.apply_async(
                 args=(
                     finding_exclusion.unique_id_from_tool,
                     relative_url,
+                    finding_exclusion.type
                 )
             )
 
 
 @app.task
-def add_findings_to_blacklist(unique_id_from_tool, relative_url):
+def add_findings_to_exclusion(unique_id_from_tool, relative_url, type_finding):
     findings_to_update = Finding.objects.filter(
         Q(cve=unique_id_from_tool) | Q(vuln_id_from_tool=unique_id_from_tool),
         active=True,
-    ).exclude(risk_status=Constants.ON_BLACKLIST.value)
+    ).exclude(risk_status=Constants.EXCLUSION_TYPE.value.get(type_finding))
 
     if findings_to_update.exists():
         finding_exclusion_url = get_full_url(relative_url)
         system_user = get_user(settings.SYSTEM_USER)
-        message = f"Finding added to blacklist, for more details check the finding exclusion request: {finding_exclusion_url}"
+        message = f"Finding added to {Constants.EXCLUSION_TYPE.value.get(type_finding)}, for more details check the finding exclusion request: {finding_exclusion_url}"
         note = get_note(system_user, message)
 
     for finding in findings_to_update:
-        if "black_list" not in finding.tags:
-            finding.tags.add("black_list")
+        if type_finding not in finding.tags:
+            finding.tags.add(type_finding)
         finding.notes.add(note)
-        finding.risk_status = Constants.ON_BLACKLIST.value
+        finding.risk_status = Constants.EXCLUSION_TYPE.value.get(type_finding)
+        finding.set_sla_expiration_date() if type_finding == "zero_day" else None
 
-    Finding.objects.bulk_update(findings_to_update, ["risk_status"], 1000)
+    update_fields = ["risk_status"]
+    if type_finding == "zero_day":
+        update_fields = ["risk_status", "sla_expiration_date"]
+    Finding.objects.bulk_update(findings_to_update, update_fields, 1000)
     findings_to_update_count = findings_to_update.count()
-    logger.info(f"{findings_to_update_count} findings added to blacklist.")
+    logger.info(f"{findings_to_update_count} findings added to {Constants.EXCLUSION_TYPE.value.get(type_finding)}.")
 
     if findings_to_update_count > 0:
-        blacklist_message = f"{findings_to_update_count} findings added to the blacklist. CVE: {unique_id_from_tool}."
+        type_finding_message = f"{findings_to_update_count} findings added to the {Constants.EXCLUSION_TYPE.value.get(type_finding)}. CVE: {unique_id_from_tool}."
         create_notification(
             event="finding_exclusion_request",
-            subject=f"✅Findings added to blacklist with the CVE: {unique_id_from_tool}",
-            title=blacklist_message,
-            description=blacklist_message,
+            subject=f"✅Findings added to {Constants.EXCLUSION_TYPE.value.get(type_finding)} with the CVE: {unique_id_from_tool}",
+            title=type_finding_message,
+            description=type_finding_message,
             url=relative_url,
             recipients=get_reviewers_members() + get_approvers_members(),
             color_icon="#52A3FA",
         )
         finding_exclusion = FindingExclusion.objects.filter(
             unique_id_from_tool=unique_id_from_tool,
-            type="black_list",
+            type=type_finding,
             status="Accepted",
         ).first()
-        send_mail_to_cybersecurity(finding_exclusion, blacklist_message)
+        send_mail_to_cybersecurity(finding_exclusion, type_finding_message)
 
 
 def add_discussion_to_finding_exclusion(finding_exclusion) -> None:
@@ -616,14 +628,14 @@ def identify_priority_vulnerabilities(findings, priority_zero) -> int:
                     "finding_exclusion", args=[str(new_finding_exclusion.pk)]
                 )
                 add_discussion_to_finding_exclusion(finding_exclusion)
-                add_findings_to_blacklist.apply_async(
-                    args=(new_finding_exclusion.unique_id_from_tool, relative_url)
+                add_findings_to_exclusion.apply_async(
+                    args=(new_finding_exclusion.unique_id_from_tool, relative_url, "black_list")
                 )
             else:
                 fx = finding_exclusion.first()
                 relative_url = reverse("finding_exclusion", args=[str(fx.pk)])
-                add_findings_to_blacklist.apply_async(
-                    args=(fx.unique_id_from_tool, relative_url)
+                add_findings_to_exclusion.apply_async(
+                    args=(fx.unique_id_from_tool, relative_url, "black_list")
                 )
 
 
@@ -721,7 +733,7 @@ def calculate_priority_epss_kev_finding(
         else str(finding.tags)
     )
     # Remove unwanted tags and normalize the string
-    unwanted_tags = ["black_list", "white_list", "transferred", " ", ","]
+    unwanted_tags = ["black_list", "zero_day", "white_list", "transferred", " ", ","]
     for tag in unwanted_tags:
         tags_str = tags_str.replace(tag, "")
 
@@ -978,12 +990,8 @@ def remove_findings_from_deleted_finding_exclusions(
                 f"Finding has been removed from the {fx_type} as it has deleted.",
             )
 
-            is_active = True if fx_type == "black_list" else False
-            risk_status = (
-                Constants.ON_BLACKLIST.value
-                if fx_type == "black_list"
-                else Constants.ON_WHITELIST.value
-            )
+            is_active = True if fx_type in ["black_list", "zero_day"] else False
+            risk_status = Constants.EXCLUSION_TYPE.value.get(fx_type)
 
             findings = Finding.objects.filter(
                 Q(cve=unique_id_from_tool) | Q(vuln_id_from_tool=unique_id_from_tool),
