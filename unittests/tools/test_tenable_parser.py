@@ -293,7 +293,7 @@ class TestTenableParser(DojoTestCase):
             self.assertEqual("Amazon Linux 2 : kernel (ALAS-2023-2050)", finding.title)
             self.assertEqual("tcp", finding.unsaved_endpoints[0].protocol)
             self.assertEqual(None, finding.unsaved_endpoints[0].port)
-            self.assertIn("https://alas.aws.amazon.com/AL2/ALAS-2023-2050.html", finding.references)
+            self.assertIn("Tenable Plugin ID: N/A", finding.references)
             self.assertEqual(1, len(finding.unsaved_vulnerability_ids))
             for vulnerability_id in finding.unsaved_vulnerability_ids:
                 self.assertEqual("CVE-2023-32233", vulnerability_id)
@@ -346,10 +346,5 @@ class TestTenableParser(DojoTestCase):
             for finding in findings:
                 for endpoint in finding.unsaved_endpoints:
                     endpoint.clean()
-            reference = """https://www.openssl.org/blog/blog/2016/08/24/sweet32/
-https://sweet32.info
-Tenable Plugin ID: 42873
-Plugin Information: N/A
-Plugin Publication Date: Nov 23, 2009 12:00:00 UTC
-Plugin Modification Date: Feb 3, 2021 12:00:00 UTC"""
+            reference = "\nTenable Plugin ID: 42873\nPlugin Information: SSL Medium Strength Cipher Suites Supported (SWEET32)\nPlugin Publication Date: Nov 23, 2009 12:00:00 UTC\nPlugin Modification Date: Feb 3, 2021 12:00:00 UTC"
             self.assertEqual(reference, findings[0].references)

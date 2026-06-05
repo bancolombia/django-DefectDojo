@@ -292,9 +292,8 @@ class TenableCSVParser:
                 severity_justification += f"{field}: {row.get(field, 'N/A')}\n"
 
             mitigation = str(row.get("Solution", row.get("definition.solution", row.get("Steps to Remediate", "N/A"))))
-            references = row.get("See Also", row.get("definition.see_also", "N/A"))
-            references += "\nTenable Plugin ID: " + row.get("Plugin", "N/A")
-            references += "\nPlugin Information: " + row.get("Plugin Information", "N/A")
+            references = "\nTenable Plugin ID: " + row.get("Plugin", "N/A")
+            references += "\nPlugin Information: " + row.get("Plugin Name", "N/A")
             references += "\nPlugin Publication Date: " + row.get("Plugin Publication Date", "N/A")
             references += "\nPlugin Modification Date: " + row.get("Plugin Modification Date", "N/A")
             # Determine if the current row has already been processed
