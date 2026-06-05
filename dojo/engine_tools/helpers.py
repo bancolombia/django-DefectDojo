@@ -380,7 +380,7 @@ def check_new_findings_to_exclusion_list():
                 args=(
                     finding_exclusion.unique_id_from_tool,
                     relative_url,
-                    "black_list"
+                    finding_exclusion.type
                 )
             )
 
@@ -395,7 +395,7 @@ def add_findings_to_exclusion(unique_id_from_tool, relative_url, type_finding):
     if findings_to_update.exists():
         finding_exclusion_url = get_full_url(relative_url)
         system_user = get_user(settings.SYSTEM_USER)
-        message = f"Finding added to blacklist, for more details check the finding exclusion request: {finding_exclusion_url}"
+        message = f"Finding added to {Constants.EXCLUSION_TYPE.value.get(type_finding)}, for more details check the finding exclusion request: {finding_exclusion_url}"
         note = get_note(system_user, message)
 
     for finding in findings_to_update:
@@ -403,10 +403,11 @@ def add_findings_to_exclusion(unique_id_from_tool, relative_url, type_finding):
             finding.tags.add(type_finding)
         finding.notes.add(note)
         finding.risk_status = Constants.EXCLUSION_TYPE.value.get(type_finding)
+        finding.set_sla_expiration_date() if type_finding == "zero_day" else None
 
     update_fields = ["risk_status"]
     if type_finding == "zero_day":
-        update_fields = ["risk_status", "sla"]
+        update_fields = ["risk_status", "sla_expiration_date"]
     Finding.objects.bulk_update(findings_to_update, update_fields, 1000)
     findings_to_update_count = findings_to_update.count()
     logger.info(f"{findings_to_update_count} findings added to {Constants.EXCLUSION_TYPE.value.get(type_finding)}.")

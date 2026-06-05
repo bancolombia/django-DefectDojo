@@ -518,6 +518,7 @@ env = environ.FileAwareEnv(
     # Reviewer and approver groups (for Finding Exclusion / Whitelist)
     DD_REVIEWER_GROUP_NAMES=(str, ""),
     DD_APPROVER_GROUP_NAMES=(str, ""),
+    DD_SLA_ZERO_DAY_PERIOD=(int, 30),
     # HC Participation reviewer and approver groups
     DD_HC_REVIEWER_GROUP_NAME=(str, ""),
     DD_HC_APPROVER_GROUP_NAME=(str, ""),
@@ -1206,6 +1207,7 @@ MAX_TAG_LENGTH = env("DD_MAX_TAG_LENGTH")
 
 # Approver and reviewer group names (for Finding Exclusion / Whitelist)
 APPROVER_GROUP_NAME = env("DD_APPROVER_GROUP_NAMES")
+SLA_ZERO_DAY_PERIOD = env("DD_SLA_ZERO_DAY_PERIOD")
 REVIEWER_GROUP_NAME = env("DD_REVIEWER_GROUP_NAMES")
 
 # HC Participation reviewer and approver groups (defaults to same as Whitelist if not set)

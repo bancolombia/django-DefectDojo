@@ -127,7 +127,7 @@ def create_finding_exclusion(request: HttpRequest) -> HttpResponse:
                 )
                 
                 relative_url = reverse("finding_exclusion", args=[str(exclusion.pk)])
-                add_findings_to_exclusion.apply_async(args=(exclusion.unique_id_from_tool, relative_url, type_exclusion, "black_list"))
+                add_findings_to_exclusion.apply_async(args=(exclusion.unique_id_from_tool, relative_url, type_exclusion))
             else:  
                 exclusion.save()
                 form.save_m2m()
