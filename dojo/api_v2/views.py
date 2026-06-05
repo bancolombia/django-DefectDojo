@@ -3747,7 +3747,7 @@ class FindingExclusionViewSet(
     PrefetchDojoModelViewSet,
 ):
     serializer_class = serializers.FindingExclusionSerializer
-    queryset = FindingExclusion.objects.filter(status="Accepted")
+    queryset = FindingExclusion.objects.all()
     filter_backends = (DjangoFilterBackend,)
     filterset_fields = ["type", "unique_id_from_tool"]
     permission_classes = (
@@ -3756,4 +3756,9 @@ class FindingExclusionViewSet(
     )
 
     def get_queryset(self):
-        return self.queryset
+        queryset = self.queryset
+        status_param = self.request.query_params.get("status")
+        if status_param:
+            status_list = [s.strip() for s in status_param.split(",")]
+            queryset = queryset.filter(status__in=status_list)
+        return queryset

@@ -3431,6 +3431,18 @@ class NotificationWebhooksSerializer(serializers.ModelSerializer):
 
 
 class FindingExclusionSerializer(serializers.ModelSerializer):
+    reviewed_by_username = serializers.CharField(source="reviewed_by.username", read_only=True)
+    accepted_by_username = serializers.CharField(source="accepted_by.username", read_only=True)
+
     class Meta:
         model = FindingExclusion
-        fields = ["uuid", "unique_id_from_tool", "type", "create_date", "expiration_date"]
+        fields = [
+            "uuid",
+            "unique_id_from_tool",
+            "type",
+            "status",
+            "create_date",
+            "expiration_date",
+            "reviewed_by_username",
+            "accepted_by_username",
+        ]
