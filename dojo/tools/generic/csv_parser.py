@@ -4,12 +4,26 @@ import io
 
 from cvss import parser as cvss_parser
 from dateutil.parser import parse
+from django.conf import settings
 
 from dojo.models import Endpoint, Finding
 
 
 class GenericCSVParser:
     ID = "Generic Findings Import"
+
+    def _get_tags(self, row):
+        tags = row.get("customTag")
+        if tags is None:
+            tags = row.get("Custom Tag")
+        if tags is None:
+            tags = row.get("Tag")
+
+        if tags is not None and "," in str(tags):
+            return [tag.strip() for tag in str(tags).split(",") if tag.strip()]
+        if tags is not None:
+            return [str(tags).strip()]
+        return [settings.DD_CUSTOM_TAG_PARSER.get("generic")]
 
     def _get_findings_csv(self, filename):
         content = filename.read()
@@ -80,6 +94,8 @@ class GenericCSVParser:
                 cvss_objects = cvss_parser.parse_cvss_from_text(row["CVSSV3"])
                 if len(cvss_objects) > 0:
                     finding.cvssv3 = cvss_objects[0].clean_vector()
+
+            finding.unsaved_tags = self._get_tags(row)
 
             # manage endpoints
             if "Url" in row:
