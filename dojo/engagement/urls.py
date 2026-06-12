@@ -66,7 +66,7 @@ urlpatterns = [
     re_path(r"^engagement/excel_export$",
         views.excel_export, name="engagement_excel_export"),
     re_path(
-        r"^long_risk_acceptance/(?P<pid>\d+)$",
+        r"^long_risk_acceptance/(?P<pid>\d+)/engagement/(?P<eid>\d+)$",
         views.long_risk_acceptance,
         name="long_risk_acceptance"
     ),
