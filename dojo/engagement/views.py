@@ -2377,13 +2377,14 @@ def _sync_scan_cycle_logic(engagement, request):
     return False
 
 @dojo_ratelimit_view()
-def long_risk_acceptance(request: HttpRequest, pid) -> HttpResponse:
+def long_risk_acceptance(request: HttpRequest, pid, eng) -> HttpResponse:
     page_name = ('long_term_acceptance')
     user = request.user.id
     cookie_csrftoken = get_token(request)
     cookie_sessionid = request.COOKIES.get('sessionid', '')
     base_params = f"?csrftoken={cookie_csrftoken}&sessionid={cookie_sessionid}"
     base_params += f"&product={pid}" if pid else ""
+    base_params += f"&engagement={eng}" if eng else ""
     add_breadcrumb(title=page_name, top_level=False, request=request)
     return render(request, 'dojo/generic_view.html', {
         'name': page_name,
