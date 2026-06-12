@@ -15,6 +15,7 @@ class Notification:
 
         title = f"{transfer_finding.title[:30]} Expired"
         pid = transfer_finding.origin_product.id
+        recipients = [transfer_finding.accepted_by.get_username()] if transfer_finding.accepted_by else []
         create_notification(
             event=event,
             title=title,
@@ -22,7 +23,7 @@ class Notification:
             subject=subject,
             product=transfer_finding.destination_product,
             description=description,
-            recipients=[transfer_finding.accepted_by.get_username()],
+            recipients=recipients,
             icon="check-circle",
             color_icon="#b97a0c",
             owner=transfer_finding.owner,
@@ -31,6 +32,7 @@ class Notification:
     @staticmethod
     def transfer_finding_request(transfer_finding: TransferFinding):
         title = f"{transfer_finding.title[:30]} Acceptance"
+        recipients = [transfer_finding.accepted_by.get_username()] if transfer_finding.accepted_by else []
         create_notification(
             event='transfer_finding',
             title=title,
@@ -38,7 +40,7 @@ class Notification:
             subject=f"🙋‍♂️Acceptance request for transfer-finding: {transfer_finding.id}🙏",
             product=transfer_finding.destination_product,
             description=f"Acceptance request for <b>{transfer_finding.title}</b> for the findings:",
-            recipients=[transfer_finding.accepted_by.get_username()],
+            recipients=recipients,
             icon="check-circle",
             color_icon="#DE9F16",
             owner=transfer_finding.owner,
