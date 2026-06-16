@@ -19,6 +19,7 @@ from dojo.authorization.roles_permissions import Permissions
 from dojo.templatetags.authorization_tags import is_in_group
 from dojo.importers.auto_create_context import AutoCreateContextManager
 from dojo.engine_tools.helpers import Constants
+from dojo.api_v2.long_risk_acceptance.models import RiskAcceptanceEngagement
 from dojo.models import (
     Cred_Mapping,
     Dojo_Group,
@@ -1286,6 +1287,41 @@ class UserHasLongRiskAcceptancePermission(permissions.BasePermission):
             Permissions.Long_Risk_Acceptance_Eng_View,
             Permissions.Long_Risk_Acceptance_Eng_Edit,
             Permissions.Long_Risk_Acceptance_Eng_Delete,
+        )
+
+class UserHasLongRiskAcceptanceRulePermission(permissions.BasePermission):
+    # Permission checks for related objects (like notes or metadata) can be moved
+    # into a seperate class, when the legacy authorization will be removed.
+    path_post = re.compile(r"^/api/v2/long_risk_acceptance_rule/$")
+    path = re.compile(r"^/api/v2/long_risk_acceptance_rule/\d+/$")
+
+    def has_permission(self, request, view):
+        if UserHasLongRiskAcceptanceRulePermission.path_post.match(
+            request.path,
+        ) or UserHasLongRiskAcceptanceRulePermission.path.match(request.path):
+            return check_post_permission(
+                request, RiskAcceptanceEngagement, "ra_engagement", Permissions.Long_Risk_Acceptance_Eng_View,
+            )
+        # related object only need object permission
+        return True
+
+    def has_object_permission(self, request, view, obj):
+        if UserHasLongRiskAcceptancePermission.path_post.match(
+            request.path,
+        ) or UserHasLongRiskAcceptancePermission.path.match(request.path):
+            return check_object_permission(
+                request,
+                obj,
+                Permissions.Long_Risk_Acceptance_Rule_Eng_View,
+                Permissions.Long_Risk_Acceptance_Rule_Eng_Edit,
+                Permissions.Long_Risk_Acceptance_Rule_Eng_Delete,
+            )
+        return check_object_permission(
+            request,
+            obj,
+            Permissions.Long_Risk_Acceptance_Rule_Eng_View,
+            Permissions.Long_Risk_Acceptance_Rule_Eng_Edit,
+            Permissions.Long_Risk_Acceptance_Rule_Eng_Delete,
         )
 
 class UserHasTransferFindingFindingPermission(permissions.BasePermission):

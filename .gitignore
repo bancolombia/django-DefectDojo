@@ -92,6 +92,7 @@ celerybeat.pid
 # Celery
 *.db-shm
 *.db-wal
+*dojo.celery.beat.db.*
 
 weekly.txt
 Monthly.txt
