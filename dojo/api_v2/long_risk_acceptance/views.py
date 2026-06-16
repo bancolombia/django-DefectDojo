@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 class RiskAcceptanceEngagementViewSet(prefetch.PrefetchListMixin,
                              prefetch.PrefetchRetrieveMixin,
                              DojoModelViewSet):
-    queryset = RiskAcceptanceEngagement.objects.all() 
+    queryset = RiskAcceptanceEngagement.objects.all().order_by("-id")
     permission_classes = (IsAuthenticated,
                           permissions.UserHasLongRiskAcceptancePermission,)
     serializer_class = RiskAcceptanceEngagementSerializer 
@@ -234,7 +234,7 @@ class RiskAcceptanceExclusionRuleViewSet(prefetch.PrefetchListMixin,
                              DojoModelViewSet):
     queryset = RiskAcceptanceExclusionRule.objects.all() 
     permission_classes = (IsAuthenticated,
-                          permissions.UserHasLongRiskAcceptancePermission,)
+                          permissions.UserHasLongRiskAcceptanceRulePermission,)
     serializer_class = RiskAcceptanceExclusionRuleSerializer 
     filter_backends = (DjangoFilterBackend,)
     filterset_fields = [
