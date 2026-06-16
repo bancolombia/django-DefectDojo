@@ -19,6 +19,7 @@ from dojo.authorization.roles_permissions import Permissions
 from dojo.templatetags.authorization_tags import is_in_group
 from dojo.importers.auto_create_context import AutoCreateContextManager
 from dojo.engine_tools.helpers import Constants
+from dojo.api_v2.long_risk_acceptance.models import RiskAcceptanceEngagement
 from dojo.models import (
     Cred_Mapping,
     Dojo_Group,
@@ -1299,7 +1300,7 @@ class UserHasLongRiskAcceptanceRulePermission(permissions.BasePermission):
             request.path,
         ) or UserHasLongRiskAcceptanceRulePermission.path.match(request.path):
             return check_post_permission(
-                request, Product, "product", Permissions.Product_View,
+                request, RiskAcceptanceEngagement, "ra_engagement", Permissions.Long_Risk_Acceptance_Eng_View,
             )
         # related object only need object permission
         return True

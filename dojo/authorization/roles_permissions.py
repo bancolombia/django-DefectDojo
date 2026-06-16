@@ -190,9 +190,9 @@ class Permissions(IntEnum):
     Risk_Acceptance_Eng_Review = 5006
 
     Long_Risk_Acceptance_Rule_Eng_Add = 6001
-    Long_Risk_Acceptance_rule_Eng_Edit = 6002
-    Long_Risk_Acceptance_rule_Eng_Delete = 6003
-    Long_Risk_Acceptance_rule_Eng_View = 6004
+    Long_Risk_Acceptance_Rule_Eng_Edit = 6002
+    Long_Risk_Acceptance_Rule_Eng_Delete = 6003
+    Long_Risk_Acceptance_Rule_Eng_View = 6004
 
     @classmethod
     def has_value(cls, value):
@@ -234,9 +234,9 @@ class Permissions(IntEnum):
             Permissions.Long_Risk_Acceptance_Eng_Delete,
             Permissions.Long_Risk_Acceptance_Eng_View,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Add,
-            Permissions.Long_Risk_Acceptance_rule_Eng_Edit,
-            Permissions.Long_Risk_Acceptance_rule_Eng_Delete,
-            Permissions.Long_Risk_Acceptance_rule_Eng_View,
+            Permissions.Long_Risk_Acceptance_Rule_Eng_View,
+            Permissions.Long_Risk_Acceptance_Rule_Eng_Delete,
+            Permissions.Long_Risk_Acceptance_Rule_Eng_Edit,
             Permissions.Risk_Acceptance_Eng_Render,
             Permissions.Risk_Acceptance_Eng_Review
 
@@ -620,9 +620,9 @@ def get_roles_with_permissions():
             Permissions.Risk_Acceptance_Eng_Render,
             Permissions.Risk_Acceptance_Eng_Review,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Add,
-            Permissions.Long_Risk_Acceptance_rule_Eng_Edit,
-            Permissions.Long_Risk_Acceptance_rule_Eng_Delete,
-            Permissions.Long_Risk_Acceptance_rule_Eng_View,
+            Permissions.Long_Risk_Acceptance_Rule_Eng_Edit,
+            Permissions.Long_Risk_Acceptance_Rule_Eng_Delete,
+            Permissions.Long_Risk_Acceptance_Rule_Eng_View,
         },
         Roles.Owner: {
             Permissions.Product_Type_Add_Product,
@@ -717,9 +717,9 @@ def get_roles_with_permissions():
             Permissions.Input_Add,
             Permissions.Input_Delete,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Add,
-            Permissions.Long_Risk_Acceptance_rule_Eng_Edit,
-            Permissions.Long_Risk_Acceptance_rule_Eng_Delete,
-            Permissions.Long_Risk_Acceptance_rule_Eng_View,
+            Permissions.Long_Risk_Acceptance_Rule_Eng_Edit,
+            Permissions.Long_Risk_Acceptance_Rule_Eng_Delete,
+            Permissions.Long_Risk_Acceptance_Rule_Eng_View,
 
         },
         Roles.Developer: {
@@ -755,9 +755,9 @@ def get_roles_with_permissions():
             Permissions.Long_Risk_Acceptance_Eng_View,
             Permissions.Long_Risk_Acceptance_Eng_Add,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Add,
-            Permissions.Long_Risk_Acceptance_rule_Eng_Edit,
-            Permissions.Long_Risk_Acceptance_rule_Eng_Delete,
-            Permissions.Long_Risk_Acceptance_rule_Eng_View,
+            Permissions.Long_Risk_Acceptance_Rule_Eng_Edit,
+            Permissions.Long_Risk_Acceptance_Rule_Eng_Delete,
+            Permissions.Long_Risk_Acceptance_Rule_Eng_View,
             Permissions.Risk_Acceptance_Eng_Render,
 
         },
@@ -808,9 +808,9 @@ def get_roles_with_permissions():
             Permissions.Long_Risk_Acceptance_Eng_View,
             Permissions.Long_Risk_Acceptance_Eng_Add,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Add,
-            Permissions.Long_Risk_Acceptance_rule_Eng_Edit,
-            Permissions.Long_Risk_Acceptance_rule_Eng_Delete,
-            Permissions.Long_Risk_Acceptance_rule_Eng_View,
+            Permissions.Long_Risk_Acceptance_Rule_Eng_Edit,
+            Permissions.Long_Risk_Acceptance_Rule_Eng_Delete,
+            Permissions.Long_Risk_Acceptance_Rule_Eng_View,
         },
         Roles.Cibersecurity: {
             Permissions.Product_Type_View,
@@ -846,9 +846,9 @@ def get_roles_with_permissions():
             Permissions.Input_Add,
             Permissions.Input_Delete,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Add,
-            Permissions.Long_Risk_Acceptance_rule_Eng_Edit,
-            Permissions.Long_Risk_Acceptance_rule_Eng_Delete,
-            Permissions.Long_Risk_Acceptance_rule_Eng_View,
+            Permissions.Long_Risk_Acceptance_Rule_Eng_Edit,
+            Permissions.Long_Risk_Acceptance_Rule_Eng_Delete,
+            Permissions.Long_Risk_Acceptance_Rule_Eng_View,
         },
         Roles.Risk: {
             Permissions.Product_Type_View,
@@ -885,9 +885,9 @@ def get_roles_with_permissions():
             Permissions.Risk_Acceptance_Eng_Render,
             Permissions.Risk_Acceptance_Eng_Review,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Add,
-            Permissions.Long_Risk_Acceptance_rule_Eng_Edit,
-            Permissions.Long_Risk_Acceptance_rule_Eng_Delete,
-            Permissions.Long_Risk_Acceptance_rule_Eng_View,
+            Permissions.Long_Risk_Acceptance_Rule_Eng_Edit,
+            Permissions.Long_Risk_Acceptance_Rule_Eng_Delete,
+            Permissions.Long_Risk_Acceptance_Rule_Eng_View,
 
         },
     }
