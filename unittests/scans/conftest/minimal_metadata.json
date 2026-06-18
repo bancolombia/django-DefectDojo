@@ -1,0 +1,17 @@
+[
+    {
+        "filename": "deploy.yaml",
+        "namespace": "main",
+        "successes": 0,
+        "failures": [
+            {
+                "msg": "Missing required label",
+                "metadata": {}
+            },
+            {
+                "msg": "No metadata.id or severity available"
+            }
+        ],
+        "warnings": []
+    }
+]

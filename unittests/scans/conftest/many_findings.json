@@ -1,0 +1,51 @@
+[
+    {
+        "filename": "deploy.yaml",
+        "namespace": "main",
+        "successes": 1,
+        "failures": [
+            {
+                "msg": "Containers must not run as root",
+                "metadata": {
+                    "query": "data.main.deny",
+                    "id": "POLICY-001",
+                    "severity": "high"
+                }
+            },
+            {
+                "msg": "Image tag must be specified and not 'latest'",
+                "metadata": {
+                    "query": "data.main.deny",
+                    "id": "POLICY-002",
+                    "severity": "medium"
+                }
+            }
+        ],
+        "warnings": [
+            {
+                "msg": "Resource limits not defined for container",
+                "metadata": {
+                    "query": "data.main.warn",
+                    "id": "POLICY-003",
+                    "severity": "low"
+                }
+            }
+        ]
+    },
+    {
+        "filename": "service.yaml",
+        "namespace": "main",
+        "successes": 2,
+        "failures": [
+            {
+                "msg": "Service must not expose port 22 (SSH)",
+                "metadata": {
+                    "query": "data.main.deny",
+                    "id": "POLICY-004",
+                    "severity": "critical"
+                }
+            }
+        ],
+        "warnings": []
+    }
+]
