@@ -118,9 +118,9 @@ class ConftestParser:
         if rule_id:
             description_parts.append(f"**Rule ID:** {rule_id}")
         if node_type:
-            description_parts.append(f"**Node Type:** {node_type}")
+            description_parts.append(f"**node_type:** {node_type}")
         if node_id:
-            description_parts.append(f"**Node ID:** {node_id}")
+            description_parts.append(f"**node_id:** {node_id}")
         if metadata.get("query"):
             description_parts.append(f"**Query:** {metadata['query']}")
 
