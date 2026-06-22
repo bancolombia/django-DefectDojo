@@ -46,7 +46,7 @@ def get_authorized_transfer_finding(permission, queryset=None, user=None):
         user = get_current_user()
     if user is None:
         return TransferFinding.objects.none()
-    transfer_findings = TransferFinding.objects.all().order_by("id") if queryset is None else queryset
+    transfer_findings = TransferFinding.objects.all().order_by("-id") if queryset is None else queryset
 
     if user.is_superuser:
         return transfer_findings

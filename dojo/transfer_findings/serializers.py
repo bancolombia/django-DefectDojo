@@ -125,7 +125,7 @@ class TransferFindingBasicSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True
     )
-
+    status = serializers.SerializerMethodField()
     class Meta:
         model = TransferFinding
         fields = [
@@ -141,8 +141,23 @@ class TransferFindingBasicSerializer(serializers.ModelSerializer):
             "origin_product",
             "origin_engagement",
             "accepted_by",
+            "status",
             "owner"
         ]
+    
+    def get_status(self, obj):
+        """Status of the transfer finding based on the risk status of transfer_finding_finding"""
+        statuses = obj.transfer_findings.prefetch_related("findings").values_list("findings__risk_status", flat=True)
+        statuses = set(statuses)
+        if not statuses:        
+            return "No Findings"
+        if "Transfer Pending" in statuses:
+            return "Transfer Pending"
+        if "Transfer Expired" in statuses:
+            return "Transfer Expired"
+        if "Transfer Rejected" in statuses:
+            return "Transfer Rejected"
+        return statuses.pop()
 
 class TransferFindingFindingSerializer(serializers.ModelSerializer):
     findings = FindingTfSerlilizer(read_only=True)
