@@ -21,5 +21,9 @@ urlpatterns = [
          
     path("view_received_transfer/<int:pk>/",
         views.view_received_transfer,
-        name="view_received_transfer")
+        name="view_received_transfer"),
+    
+    path("view_all_transfer/",
+        views.view_all_transfer,
+        name="view_all_transfer")
 ]
