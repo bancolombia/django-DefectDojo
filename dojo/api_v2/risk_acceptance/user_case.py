@@ -74,6 +74,16 @@ class UseCaseRiskAcceptance:
                 ):
                 raise ApiError.bad_request(
                     f"The finding {finding.id} with vulnerability id {finding.vulnerability_ids}-{finding.vuln_id_from_tool} is on the black list")
+    
+    def __asigned_status(self, risk_acceptance):
+        """Assign the status of the risk acceptance based on the accepted findings."""
+        if self.user.is_superuser or rp_helper.role_has_exclusive_permissions(self.user):
+            risk_acceptance.accepted_findings.update(
+                active=False,
+                risk_status="Risk Accepted",
+                risk_accepted=True,
+                verified=True
+            )
 
     def __create_risk_acceptance(self) -> Risk_Acceptance:
         """Create the risk acceptance with the validated data."""
@@ -111,4 +121,5 @@ class UseCaseRiskAcceptance:
         self.__abuse_control()
         self.__validate_findings_black_list()
         instance = self.__create_risk_acceptance()
+        instance = self.__asigned_status(instance)
         return instance
