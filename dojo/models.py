@@ -3062,7 +3062,7 @@ class Finding(models.Model):
 
     @property
     def risk_acceptance(self):
-        ras = self.risk_acceptance_set.all()
+        ras = self.risk_acceptance_set.all().order_by('-created')
         if ras:
             return ras[0]
 
