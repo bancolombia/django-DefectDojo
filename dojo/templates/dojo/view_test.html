@@ -533,7 +533,9 @@
         <div class="panel-heading tight">
             <div class="clearfix">
                 <h4 class="has-filters">
-                    {% trans "Findings" %} ({{ findings.total_count }}) <small>{{ test.id|get_severity_count:"test" }}</small>
+                    {% trans "Findings" %} 
+                    {% comment %} ({{ findings.total_count }}) <small>{{ test.id|get_severity_count:"test" }} {% endcomment %}
+                    {% comment %} </small> {% endcomment %}
                     <div class="dropdown pull-right"></div>
                     <div id="test-pulldown" class="dropdown pull-right">
                         &nbsp;
@@ -607,7 +609,7 @@
         <div id="the-filters" class="is-filters panel-body collapse">
             {% include "dojo/filter_snippet.html" with form=filtered.form %}
         </div>
-        {% if findings %}
+        {% if findings.exists %}
             <div class="clearfix pagination-in-panel">
                 {% include "dojo/paging_snippet.html" with page=findings prefix='findings' page_size=True %}
             </div>

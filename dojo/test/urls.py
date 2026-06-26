@@ -29,4 +29,8 @@ urlpatterns = [
         r"^test/(?P<test_id>\d+)/re_import_scan_results",
         views.ReImportScanResultsView.as_view(),
         name="re_import_scan_results"),
+    re_path(
+        r"^test/(?P<test_id>\d+)/test_details$",
+        views.view_test_details,
+        name="view_test_details"),
 ]

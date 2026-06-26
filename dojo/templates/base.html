@@ -309,6 +309,7 @@
                                             </ul>
                                             <!-- /.nav-second-level -->
                                         </li>
+                                        {% if system_settings.enable_transfer_finding %}
                                          <li>
                                                <a rel="noopener noreferrer" href="{% url 'view_all_transfer' %}" aria-expanded="false" aria-label="Findings">
                                                 <i class="fa-solid fa-shuffle"></i>
@@ -316,7 +317,8 @@
                                                 <span class="glyphicon arrow"></span>
                                             </a>
                                         </li>
-
+                                        {% endif %}
+                                        {% if "RENDER_NEW_VIEWS"|general_settings_get_value:"False" %}
                                         <li>
                                                <a rel="noopener noreferrer" href="{% url 'finding_list_frontend' %}" aria-expanded="false" aria-label="Findings">
                                                 <i class="fa-solid fa-bug fa-fw"></i>
@@ -324,6 +326,7 @@
                                                 <span class="glyphicon arrow"></span>
                                             </a>
                                         </li>
+                                        {% endif %}
                                         <li>
                                         {% if request.user.username|permission_view_findings %} 
                                             <!-- /.nav-second-level -->
@@ -751,7 +754,7 @@
                                          <li role="presentation"{% if product_tab.tab == 'metrics' %} class="active"{% endif %}>
                                             <a rel="noopener noreferrer" href="{% url 'product_risk_posture_view' %}?product_id={{ prod.id }}">
                                                 <span class="fa-solid fa-chart-column" aria-hidden="true"></span>
-                                                <span class="hidden-xs">{% trans "Security Posture" %}</span>
+                                                <span class="hidden-xs">{% trans "Risk Posture" %}</span>
                                             </a>
                                         </li>
                                         {% endif %}
@@ -816,7 +819,7 @@
                                                 <span class="caret"></span>
                                             </a>
                                             <ul class="dropdown-menu">
-                                                {% if "RENDER_ALL_FINDING_V2"|has_user_permission_view:product_tab.product %}
+                                                {% if "RENDER_NEW_VIEWS"|general_settings_get_value:"False" %}
                                                  <li>
                                                     <a rel="noopener noreferrer" href="{% url 'all_findings_frontend' product_tab.product.id %}">
                                                         <i class="fa-solid fa-rectangle-list"></i>
