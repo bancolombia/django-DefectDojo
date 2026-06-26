@@ -23,6 +23,7 @@ from django.views.decorators.vary import vary_on_cookie
 
 import dojo.finding.helper as finding_helper
 import dojo.jira_link.helper as jira_helper
+from django.middleware.csrf import get_token
 from dojo.decorators import dojo_ratelimit_view
 from django.utils.decorators import method_decorator
 from dojo.authorization.exclusive_permissions import user_has_exclusive_permission_product_or_404
@@ -1078,3 +1079,17 @@ class ReImportScanResultsView(View):
             return self.failure_redirect(request, context)
         # Otherwise return the user back to the engagement (if present) or the product
         return self.success_redirect(request, context)
+
+@dojo_ratelimit_view()
+def view_test_details(request: HttpRequest, test_id) -> HttpResponse:
+    page_name = ('view_test_details')
+    user = request.user.id
+    cookie_csrftoken = get_token(request)
+    cookie_sessionid = request.COOKIES.get('sessionid', '')
+    base_params = f"?csrftoken={cookie_csrftoken}&sessionid={cookie_sessionid}"
+    base_params += f"&testId={test_id}"
+    add_breadcrumb(title=page_name, request=request, top_level=False)
+    return render(request, 'dojo/generic_view.html', {
+        'actions': page_name,
+        'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/test/detail{base_params}",
+        'user': user})
