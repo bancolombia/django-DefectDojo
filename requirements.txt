@@ -41,7 +41,7 @@ psycopg-pool==3.3.1
 cryptography==48.0.1
 python-dateutil==2.9.0.post0
 pytz==2026.2
-redis==8.0.0
+redis==8.0.1
 requests==2.34.2
 sqlalchemy==2.0.51  # Required by Celery broker transport
 urllib3==2.7.0
