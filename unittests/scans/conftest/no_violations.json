@@ -1,0 +1,9 @@
+[
+    {
+        "filename": "deploy.yaml",
+        "namespace": "main",
+        "successes": 3,
+        "failures": [],
+        "warnings": []
+    }
+]
