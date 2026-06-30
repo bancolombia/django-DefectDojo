@@ -2,7 +2,7 @@ import logging
 from django.db import transaction
 from rest_framework import serializers
 from dojo.models import Engagement, Product, Dojo_User
-from dojo.api_v2.scope.models import InputSecret, InputFile, Input, InputEngagement
+from dojo.api_v2.scope.models import InputSecret, InputFile, Input, InputEngagement, InputScenario, InputFlow, InputURL
 from dojo.utils import dojo_crypto_encrypt, prepare_for_view
 from drf_spectacular.utils import extend_schema_field
 import dojo.authorization.helper as authorization_helper
@@ -209,3 +209,67 @@ class InputSerializer(serializers.Serializer):
     @extend_schema_field(serializers.ListField())
     def get_permissions(self, obj):
         return authorization_helper.get_permissions(obj)
+
+class InputScenarioSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = InputScenario
+        fields = [
+            "id",
+            "estimated_time",
+            "designed_by",
+            "description",
+            "verified",
+        ]
+
+class InputURLSerializer(serializers.ModelSerializer):
+
+    scenarios = InputScenarioSerializer(many=True)
+
+    class Meta:
+        model = InputURL
+        fields = [
+            "id",
+            "url",
+            "created",
+            "scenarios",
+        ]
+    def create(self, validated_data):
+        scenarios_data = validated_data.pop("scenarios", [])
+
+        with transaction.atomic():
+            url = InputURL.objects.create(**validated_data)
+
+            for scenario_data in scenarios_data:
+                InputScenario.objects.create(url=url, **scenario_data)
+
+        return url
+
+class InputFlowSerializer(serializers.ModelSerializer):
+    urls = InputURLSerializer(many=True)
+
+    class Meta:
+        model = InputFlow
+        fields = [
+            "id",
+            "flowName",
+            "engagement",
+            "created",
+            "updated",
+            "urls",
+        ]
+
+    def create(self, validated_data):
+        urls_data = validated_data.pop("urls", [])
+
+        with transaction.atomic():
+            flow = InputFlow.objects.create(**validated_data)
+
+            for url_data in urls_data:
+                scenarios_data = url_data.pop("scenarios", [])
+                url = InputURL.objects.create(flow=flow, **url_data)
+
+                for scenario_data in scenarios_data:
+                    InputScenario.objects.create(url=url, **scenario_data)
+
+        return flow

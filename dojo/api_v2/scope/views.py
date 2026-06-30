@@ -214,3 +214,98 @@ class InputFileViewSet(prefetch.PrefetchListMixin,
             logger.error(f"Validation error on PATCH InputFile: {e}")
             return http_response.error(
                 message="Validation error occurred.", data=serializer.errors, status_code=status.HTTP_400_BAD_REQUEST)
+
+@extend_schema(tags=["scope"])
+class InputFlowViewSet(
+    prefetch.PrefetchListMixin,
+    prefetch.PrefetchRetrieveMixin,
+    DojoModelViewSet
+):
+    queryset = InputFlow.objects.select_related(
+        "engagement"
+    ).prefetch_related(
+        "urls__scenarios"
+    ).order_by("id")
+
+    serializer_class = InputFlowSerializer
+
+    filter_backends = (DjangoFilterBackend,)
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
+
+    permission_classes = (
+        IsAuthenticated,
+        permissions.UserHasEngagementPermission,
+    )
+
+    @action(detail=True, methods=["post"], url_path="add_url")
+    def add_url(self, request, pk=None):
+        flow = self.get_object()
+
+        serializer = InputURLSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        instance = serializer.save(flow=flow)
+    
+        return http_response.ok(
+        message="URL added successfully.",
+        data=InputURLSerializer(instance).data
+    )
+
+@extend_schema(tags=["scope"])
+class InputURLViewSet(
+    prefetch.PrefetchListMixin,
+    prefetch.PrefetchRetrieveMixin,
+    DojoModelViewSet
+):
+    queryset = InputURL.objects.select_related(
+        "flow",
+        "flow__engagement",
+    ).prefetch_related(
+        "scenarios"
+    ).order_by("id")
+
+    serializer_class = InputURLSerializer
+
+    filter_backends = (DjangoFilterBackend,)
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
+
+    permission_classes = (
+        IsAuthenticated,
+       permissions.UserHasEngagementPermission,
+    )
+    
+    @action(detail=True, methods=["post"], url_path="add_scenario")
+    def add_scenario(self, request, pk=None):
+        url_instance = self.get_object()
+
+        serializer = InputScenarioSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        instance = serializer.save(url=url_instance)
+
+        return http_response.ok(
+            message="Scenario added successfully.",
+            data=InputScenarioSerializer(instance).data
+        )
+
+@extend_schema(tags=["scope"])
+class InputScenarioViewSet(
+    prefetch.PrefetchListMixin,
+    prefetch.PrefetchRetrieveMixin,
+    DojoModelViewSet
+):
+    queryset = InputScenario.objects.select_related(
+        "url",
+        "url__flow",
+        "url__flow__engagement",
+    ).order_by("id")
+
+    serializer_class = InputScenarioSerializer
+
+    filter_backends = (DjangoFilterBackend,)
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
+
+    permission_classes = (
+        IsAuthenticated,
+        permissions.UserHasEngagementPermission,
+    )
