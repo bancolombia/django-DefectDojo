@@ -609,7 +609,7 @@
         <div id="the-filters" class="is-filters panel-body collapse">
             {% include "dojo/filter_snippet.html" with form=filtered.form %}
         </div>
-        {% if findings.exists %}
+        {% if findings %}
             <div class="clearfix pagination-in-panel">
                 {% include "dojo/paging_snippet.html" with page=findings prefix='findings' page_size=True %}
             </div>
