@@ -237,6 +237,7 @@
                                                 </li>
                                                 <li class="divider"></li>
                                             {% endif %}
+                                             {% if "RENDER_OLD_VIEWS"|general_settings_get_value:"True" %}
                                             <li role="presentation">
                                                 <a rel="noopener noreferrer" href="{% url 'engagement_open_findings' eng.id %}">
                                                 <i class="fa-solid fa-file-lines"></i> View Open Findings
@@ -247,6 +248,7 @@
                                                 <i class="fa-solid fa-file-lines"></i> View All Findings
                                                 </a>
                                             </li>
+                                            {% endif %}
                                         </ul>
                                     </div>
                                 </h4>
@@ -268,10 +270,12 @@
                                         <th>Title / Type</th>
                                         <th>Date</th>
                                         <th>Lead</th>
-                                        <th>Total Findings</th>
-                                        <th>Active (Verified / Fixable)</th>
-                                        <th>Mitigated</th>
-                                        <th>Duplicates</th>
+                                       {% if "RENDER_OLD_VIEWS"|general_settings_get_value:"True" %} 
+                                            <th>Total Findings</th> 
+                                            <th>Active (Verified / Fixable)</th>
+                                            <th>Mitigated</th>
+                                            <th>Duplicates</th>
+                                        {% endif %}
                                         <th>Notes</th>
                                         {% if 'TRACK_IMPORT_HISTORY'|setting_enabled %}
                                             <th>Reimports</th>
@@ -362,6 +366,7 @@
                                                     {{ test.lead }}
                                                 {% endif %}
                                             </td>
+                                             {% if "RENDER_OLD_VIEWS"|general_settings_get_value:"True" %}
                                             <td><a rel="noopener noreferrer" href="#">{{ test.count_findings_test_all }}</a></td>
                                             <td>
                                                 <a rel="noopener noreferrer" href="#">{{ test.count_findings_test_active }}</a>&nbsp;
@@ -370,6 +375,7 @@
                                             </td>
                                             <td><a rel="noopener noreferrer" href="#">{{ test.count_findings_test_mitigated }}</a></td>
                                             <td><a rel="noopener noreferrer" href="#">{{ test.count_findings_test_dups }}</a></td>
+                                            {% endif %}
                                             <td class="nowrap">
                                                 {% if test.notes.count %}
                                                     <a rel="noopener noreferrer" href="{% url 'view_test' test.id %}#vuln_notes" alt="{{ test.notes.count }} comment{{ test.notes.count|pluralize }}">

@@ -99,33 +99,35 @@
                                                     </a>
                                                 </li>
                                                 {% endif %}
-                                                <li class="divider" role="separator"></li>
-                                                <li role="presentation">
-                                                    <a rel="noopener noreferrer" href="{% url 'engagement_open_findings' e.id %}" role="menuitem">
-                                                        <i class="fa-solid fa-file-lines"></i> View Active Findings
-                                                    </a>
-                                                </li>
-                                                <li role="presentation">
-                                                    <a rel="noopener noreferrer" href="{% url 'engagement_verified_findings' e.id %}" role="menuitem">
-                                                        <i class="fa-solid fa-file-lines"></i> View Active and Verified Findings
-                                                    </a>
-                                                </li>
-                                                <li role="presentation">
-                                                    <a rel="noopener noreferrer" href="{% url 'engagement_closed_findings' e.id %}" role="menuitem">
-                                                        <i class="fa-solid fa-file-lines"></i> View Mitigated Findings
-                                                    </a>
-                                                </li>
-                                                <li role="presentation">
-                                                    <a rel="noopener noreferrer" href="{% url 'engagement_accepted_findings' e.id %}" role="menuitem">
-                                                        <i class="fa-solid fa-file-lines"></i> View Accepted Findings
-                                                    </a>
-                                                </li>
-                                                <li role="presentation">
-                                                    <a rel="noopener noreferrer" href="{% url 'engagement_all_findings' e.id %}" role="menuitem">
-                                                        <i class="fa-solid fa-file-lines"></i> View All Findings
-                                                    </a>
-                                                </li>
-                                                <li class="divider" role="separator"></li>
+                                                {% if "RENDER_OLD_VIEWS"|general_settings_get_value:"True" %}
+                                                    <li class="divider" role="separator"></li>
+                                                    <li role="presentation">
+                                                        <a rel="noopener noreferrer" href="{% url 'engagement_open_findings' e.id %}" role="menuitem">
+                                                            <i class="fa-solid fa-file-lines"></i> View Active Findings
+                                                        </a>
+                                                    </li>
+                                                    <li role="presentation">
+                                                        <a rel="noopener noreferrer" href="{% url 'engagement_verified_findings' e.id %}" role="menuitem">
+                                                            <i class="fa-solid fa-file-lines"></i> View Active and Verified Findings
+                                                        </a>
+                                                    </li>
+                                                    <li role="presentation">
+                                                        <a rel="noopener noreferrer" href="{% url 'engagement_closed_findings' e.id %}" role="menuitem">
+                                                            <i class="fa-solid fa-file-lines"></i> View Mitigated Findings
+                                                        </a>
+                                                    </li>
+                                                    <li role="presentation">
+                                                        <a rel="noopener noreferrer" href="{% url 'engagement_accepted_findings' e.id %}" role="menuitem">
+                                                            <i class="fa-solid fa-file-lines"></i> View Accepted Findings
+                                                        </a>
+                                                    </li>
+                                                    <li role="presentation">
+                                                        <a rel="noopener noreferrer" href="{% url 'engagement_all_findings' e.id %}" role="menuitem">
+                                                            <i class="fa-solid fa-file-lines"></i> View All Findings
+                                                        </a>
+                                                    </li>
+                                                    <li class="divider" role="separator"></li>
+                                                {% endif %}
                                                 <!-- <li role="presentation">
                                                     <a rel="noopener noreferrer" href="{% url 'engagement_report' e.id %}?title=&active=1&verified=1&false_p=2&duplicate=2" role="menuitem">
                                                         <i class="fa-solid fa-file-lines"></i> Engagement Report

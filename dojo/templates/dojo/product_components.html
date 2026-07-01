@@ -31,9 +31,11 @@
                         <th>Name</th>
                         <th>Version</th>
                         <th>Engagement Name</th>
-                        <th class="text-center">Active Findings</th>
-                        <th class="text-center">Closed Findings</th>
-                        <th class="text-center">Total Findings</th>
+                        {% if "RENDER_OLD_VIEWS"|general_settings_get_value:"True" %}
+                            <th class="text-center">Active Findings</th>
+                            <th class="text-center">Closed Findings</th>
+                            <th class="text-center">Total Findings</th>
+                        {% endif %}
                     </tr>
                 </thead>
 
@@ -48,6 +50,7 @@
                             <a href="{% url 'view_engagement' result.engagement.id %}" data-toggle="tooltip" data-placement="bottom"> 
                              {{ result.engagement_name }}
                             </a></td>
+                        {% if "RENDER_OLD_VIEWS"|general_settings_get_value:"True" %} 
                         <td class="text-center">
                             {% if result.active_findings %}
                                 {{ result.active_findings }}
@@ -71,6 +74,7 @@
                             0
                             {% endif %}
                         </td>
+                        {% endif %}
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -122,6 +126,22 @@
         };
 
         // DataTables initialization
+        // Build columns array dynamically based on view settings
+        var renderOldViews = "{{ "RENDER_OLD_VIEWS"|general_settings_get_value:"True" }}" === "True";
+        var columnsConfig = [
+            { "data": "Component_name" },
+            { "data": "Version" },
+            { "data": "Engagement_name"}
+        ];
+        
+        if (renderOldViews) {
+            columnsConfig.push(
+                { "data": "Active" },
+                { "data": "Closed" },
+                { "data": "Total" }
+            );
+        }
+        
         var dojoTable = $('#components').DataTable({
             drawCallback: function () {
                 $('#components .has-popover').hover(
@@ -129,14 +149,7 @@
                     function () { $(this).popover('hide'); } // unhover
                 );
             },
-            "columns": [
-                { "data": "Component_name" },
-                { "data": "Version" },
-                { "data": "Engagement_name"},
-                { "data": "Active" },
-                { "data": "Closed" },
-                { "data": "Total" },
-            ],
+            "columns": columnsConfig,
             order: [],  // Default order (can be customized)
             columnDefs: [
                 {
