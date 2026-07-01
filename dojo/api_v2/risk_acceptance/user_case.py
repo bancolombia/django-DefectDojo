@@ -48,6 +48,12 @@ class UseCaseRiskAcceptance:
         return data
 
     def __asigned_expiration_date(self) -> dict:
+        if (
+            self.user.is_superuser or 
+            rp_helper.role_has_exclusive_permissions(self.user)
+            and self.__validate_data["expiration_date"]
+            ):
+                return self.__validate_data["expiration_date"]
         expiration_delta_days = sla_expiration_risk_acceptance(
             "RiskAcceptanceExpiration"
         )
