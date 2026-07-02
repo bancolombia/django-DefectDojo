@@ -87,8 +87,10 @@
                                 {% comment %} The display field is translated in the function. No need to translate here as well{% endcomment %}    
                                 <th scope="col">{% dojo_sort request 'Product' 'product' 'asc' %}</th>
                             {% endif %}
-              {% if not host_view %}
-							  <th class="text-center" nowrap="nowrap" scope="col">Active (Verified) Findings</th>
+              {% if "RENDER_OLD_VIEWS"|general_settings_get_value:"True" %}
+                {% if not host_view %}
+                  <th class="text-center" nowrap="nowrap" scope="col">Active (Verified) Findings</th>
+                {% endif %}
               {% endif %}
 							<th scope="col">Status</th>
                         </tr>
@@ -117,11 +119,13 @@
                                     {% include "dojo/snippets/tags.html" with tags=e.product.tags.all %}
                                   </td>
                                 {% endif %}
-                                {% if not host_view %}
-                                  <td class="text-center">
-                                      <a href="{% url 'open_findings' %}?endpoints={{ e.id }}">{{ e.active_findings_count }}</a>
-                                      <a rel="noopener noreferrer" href="{% url 'verified_findings' %}?endpoints={{ e.id }}">({{ e.active_verified_findings_count }})</a>
-                                  </td>
+                                {% if "RENDER_OLD_VIEWS"|general_settings_get_value:"True" %}
+                                  {% if not host_view %}
+                                    <td class="text-center">
+                                        <a href="{% url 'open_findings' %}?endpoints={{ e.id }}">{{ e.active_findings_count }}</a>
+                                        <a rel="noopener noreferrer" href="{% url 'verified_findings' %}?endpoints={{ e.id }}">({{ e.active_verified_findings_count }})</a>
+                                    </td>
+                                  {% endif %}
                                 {% endif %}
                                 <td>
                                   {% if host_view %}
