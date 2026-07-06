@@ -153,7 +153,7 @@ isodate==0.7.2
 oauthlib==3.3.1
 rpds-py==2026.6.3
 s3transfer==0.19.0
-setuptools==82.0.1
+setuptools==83.0.0
 referencing==0.37.0
 tzdata==2026.2
 jsonschema-specifications==2025.9.1
