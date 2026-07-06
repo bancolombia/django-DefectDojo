@@ -1259,6 +1259,7 @@ class UserHasLongRiskAcceptancePermission(permissions.BasePermission):
     # into a seperate class, when the legacy authorization will be removed.
     path_post = re.compile(r"^/api/v2/long_risk_acceptance/$")
     path = re.compile(r"^/api/v2/long_risk_acceptance/\d+/$")
+    path_apply_rule = re.compile(r"^/api/v2/long_risk_acceptance/apply_rule/\d+/$")
 
     def has_permission(self, request, view):
         if UserHasLongRiskAcceptancePermission.path_post.match(
@@ -1266,7 +1267,7 @@ class UserHasLongRiskAcceptancePermission(permissions.BasePermission):
         ) or UserHasLongRiskAcceptancePermission.path.match(request.path):
             return check_post_permission(
                 request, Product, "product", Permissions.Product_View,
-            )
+            ) 
         # related object only need object permission
         return True
 
@@ -1281,12 +1282,22 @@ class UserHasLongRiskAcceptancePermission(permissions.BasePermission):
                 Permissions.Long_Risk_Acceptance_Eng_Edit,
                 Permissions.Long_Risk_Acceptance_Eng_Delete,
             )
+        elif UserHasLongRiskAcceptancePermission.path_apply_rule.match(
+            request.path,
+        ):
+            return check_object_permission(
+                request,
+                obj,
+                Permissions.Risk_Acceptance_Eng_Reject,
+            )
+
         return check_object_permission(
             request,
             obj,
             Permissions.Long_Risk_Acceptance_Eng_View,
             Permissions.Long_Risk_Acceptance_Eng_Edit,
             Permissions.Long_Risk_Acceptance_Eng_Delete,
+            Permissions.Risk_Acceptance_Eng_Reject,
         )
 
 class UserHasLongRiskAcceptanceRulePermission(permissions.BasePermission):
