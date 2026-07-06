@@ -40,7 +40,16 @@ class RiskAcceptanceExclusionRuleSerializers(serializers.ModelSerializer):
     class Meta:
         model = RiskAcceptanceExclusionRule 
         fields = "__all__"
-    
+
+class RiskAcceptanceEngagementRequestSerializer(serializers.Serializer):
+    CHOICES = [
+        ("accept", "accept"),
+        ("reject", "reject"),
+        ("review", "review"),
+    ]
+    event = serializers.ChoiceField(required=True, choices=CHOICES)
+
+
 class ExpirationSerializer(serializers.Serializer):
     expiration_date = serializers.DateField()
     
@@ -73,6 +82,7 @@ class RiskAcceptanceEngagementSerializer(serializers.ModelSerializer):
             Permissions.Long_Risk_Acceptance_Eng_View,
             Permissions.Risk_Acceptance_Eng_Render,
             Permissions.Risk_Acceptance_Eng_Review,
+            Permissions.Risk_Acceptance_Eng_Reject,
             Permissions.Risk_Acceptance_Send_Email
             ]
         user = self.context["request"].user

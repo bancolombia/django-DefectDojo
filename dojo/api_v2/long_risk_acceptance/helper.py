@@ -43,12 +43,33 @@ def apply_review(request, ra_engagement: RiskAcceptanceEngagement):
     ra_engagement.reviewed_date = timezone.now()
     ra_engagement.save()
 
+def active_findings_long_risk_acceptance(finding_qs: QuerySet[Finding]):
+    for finding in finding_qs.iterator(chunk_size=200):
+        finding.risk_status = "Risk Active"
+        finding.active = True
+        finding.risk_accepted = False
+
+        finding.save(update_fields=[
+            "risk_status",
+            "active",
+            "risk_accepted"
+        ])
+        finding.tags.remove("long_term_risk_acceptance")
+
 @app.task
-def async_apply_rule_long_risk_acceptance(ra_engagement_id, user_id):
+def async_apply_rule_long_risk_acceptance(ra_engagement_id, user_id, event):
     ra_engagement = get_object_or_404(RiskAcceptanceEngagement, id=ra_engagement_id) 
     user = get_object_or_404(User, id=user_id)
     finding_qs = render_rule(ra_engagement)
     if finding_qs:
+        if event == "reject":
+            if ra_engagement.risk_status in ["Risks Reviewed"]:
+                ra_engagement.risk_status = "Risks Reject"
+                ra_engagement.save()
+            elif ra_engagement.risk_status in ["Risks Accepted"]:
+                ra_engagement.risk_status = "Risks Reject"
+                ra_engagement.save()
+                active_findings_long_risk_acceptance(finding_qs)
         if ra_engagement.risk_status in ["Risks Reviewed"]:
             ra_engagement.risk_status = "Risks Accepted"
             ra_engagement.save()

@@ -188,6 +188,7 @@ class Permissions(IntEnum):
     Long_Risk_Acceptance_Eng_Delete = 5004
     Risk_Acceptance_Eng_Render = 5005
     Risk_Acceptance_Eng_Review = 5006
+    Risk_Acceptance_Eng_Reject = 5007
 
     Long_Risk_Acceptance_Rule_Eng_Add = 6001
     Long_Risk_Acceptance_Rule_Eng_Edit = 6002
@@ -238,7 +239,8 @@ class Permissions(IntEnum):
             Permissions.Long_Risk_Acceptance_Rule_Eng_Delete,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Edit,
             Permissions.Risk_Acceptance_Eng_Render,
-            Permissions.Risk_Acceptance_Eng_Review
+            Permissions.Risk_Acceptance_Eng_Review,
+            Permissions.Risk_Acceptance_Eng_Reject
 
         }.union(cls.get_test_permissions())
 
@@ -619,6 +621,7 @@ def get_roles_with_permissions():
             Permissions.Long_Risk_Acceptance_Eng_Delete,
             Permissions.Risk_Acceptance_Eng_Render,
             Permissions.Risk_Acceptance_Eng_Review,
+            Permissions.Risk_Acceptance_Eng_Reject,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Add,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Edit,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Delete,
@@ -884,6 +887,7 @@ def get_roles_with_permissions():
             Permissions.Long_Risk_Acceptance_Eng_Edit,
             Permissions.Risk_Acceptance_Eng_Render,
             Permissions.Risk_Acceptance_Eng_Review,
+            Permissions.Risk_Acceptance_Eng_Reject,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Add,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Edit,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Delete,
