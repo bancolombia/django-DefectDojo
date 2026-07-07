@@ -47,7 +47,7 @@ class RiskAcceptanceEngagementRequestSerializer(serializers.Serializer):
         ("reject", "reject"),
         ("review", "review"),
     ]
-    event = serializers.ChoiceField(required=True, choices=CHOICES)
+    event = serializers.ChoiceField(required=False, choices=CHOICES)
 
 
 class ExpirationSerializer(serializers.Serializer):
