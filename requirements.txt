@@ -136,7 +136,7 @@ PyNaCl==1.6.2
 charset-normalizer==3.4.7
 xmlschema==2.5.1
 sqlparse==0.5.5
-cffi==2.0.0
+cffi==2.1.0
 gitdb==4.0.12
 click-plugins==1.1.1.2
 asgiref==3.11.1
