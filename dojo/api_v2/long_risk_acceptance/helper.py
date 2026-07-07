@@ -64,10 +64,10 @@ def async_apply_rule_long_risk_acceptance(ra_engagement_id, user_id, event):
     if finding_qs:
         if event == "reject":
             if ra_engagement.risk_status in ["Risks Reviewed"]:
-                ra_engagement.risk_status = "Risks Reject"
+                ra_engagement.risk_status = "Risks Rejected"
                 ra_engagement.save()
             elif ra_engagement.risk_status in ["Risks Accepted"]:
-                ra_engagement.risk_status = "Risks Reject"
+                ra_engagement.risk_status = "Risks Rejected"
                 ra_engagement.save()
                 active_findings_long_risk_acceptance(finding_qs)
         if ra_engagement.risk_status in ["Risks Reviewed"]:

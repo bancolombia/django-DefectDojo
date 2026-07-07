@@ -7,6 +7,7 @@ class RiskAcceptanceEngagement(models.Model):
         ("Risks Reviewed", "Risks Reviewed"),
         ("Risks Pending", "Risks Pending"),
         ("Risks Accepted", "Risks Accepted"),
+        ("Risks Rejected", "Risks Rejected"),
         )
     product = models.ForeignKey(
         "Product", null=True, blank=True, on_delete=models.CASCADE
@@ -23,7 +24,7 @@ class RiskAcceptanceEngagement(models.Model):
     risk_status = models.CharField(max_length=50, default="Risks Pending", choices=STATUS_CHOICES)
     owner = models.ForeignKey("Dojo_User", editable=True, null=True, on_delete=models.RESTRICT, help_text=_("User in DefectDojo owning this acceptance. Only the owner and staff users can edit the risk acceptance."))
     notes = models.ManyToManyField("Notes", editable=False)
-    path = models.FileField(upload_to='transfer_finding/%Y/%m/%d',
+    path = models.FileField(upload_to='long_risk_acceptance/%Y/%m/%d',
                         editable=True, null=True,
                         blank=True, verbose_name=('Proof'))
     created = models.DateTimeField(auto_now_add=True)
