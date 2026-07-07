@@ -294,10 +294,10 @@ class DojoGroupViewSet(
             return get_authorized_groups(Permissions.Group_View).distinct()
         
     def get_serializer(self, *args, **kwargs):
-        if self.request.user.is_superuser:
-            return super().get_serializer(*args, **kwargs)
+        if self.request.query_params.get("name"):
+            return serializers.DojoGroupBasicSerializer(*args, **kwargs)
         else:
-           return serializers.DojoGroupBasicSerializer(*args, **kwargs)
+            return super().get_serializer(*args, **kwargs)
     
 # Authorization: object-based
 @extend_schema_view(**schema_with_prefetch())
