@@ -58,7 +58,7 @@ def get_ia_recommendation(fid, user):
     if version == "v2":
         body["metadata"].update({
             "agent_id": GeneralSettings.get_value("IA_AGENT_ID", "agent_id"),
-            "consumer": ""
+            "consumer": "string"
             }) 
     logger.debug("IA RECOMMENDATION: get recomendation by finding: %s", fid)
     response = requests.request("POST",
@@ -85,14 +85,14 @@ def get_ia_recommendation(fid, user):
         "messages": str(fid),
         "metadata": {
             "user_id": user.email,
-            "consumer": ""
+            "consumer": "string"
         }
     }
 
     if version == "v2":
         body["metadata"].update({
             "user_id": user.email,
-            "consumer": ""
+            "consumer": "string"
             })
 
     logger.debug("IA RECOMMENDATION: get recomendation by finding: %s", fid)

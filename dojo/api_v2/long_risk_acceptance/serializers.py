@@ -53,6 +53,12 @@ class RiskAcceptanceEngagementRequestSerializer(serializers.Serializer):
 class ExpirationSerializer(serializers.Serializer):
     expiration_date = serializers.DateField()
     
+class LongRiskAcceptanceToNotesSerializer(serializers.Serializer):
+    long_risk_acceptance_id = serializers.PrimaryKeyRelatedField(
+        queryset=RiskAcceptanceEngagement.objects.all(), many=False, allow_null=True,
+    )
+    notes = NoteSerializer(many=True)
+
 class RiskAcceptanceEngagementSerializer(serializers.ModelSerializer):
     description = serializers.CharField(
         validators=[validators.valid_chars_validator],
@@ -67,6 +73,7 @@ class RiskAcceptanceEngagementSerializer(serializers.ModelSerializer):
     owner_id = serializers.PrimaryKeyRelatedField(source="owner", queryset=Dojo_User.objects.all(), many=False, required=False, write_only=True)
     owner = UserStubSerializer(read_only=True)
     product = serializers.PrimaryKeyRelatedField(queryset=Product.objects.all(), many=False, required=True)
+    notes = NoteSerializer(many=True, read_only=True)
     class Meta:
         model = RiskAcceptanceEngagement
         fields = '__all__'
@@ -83,6 +90,10 @@ class RiskAcceptanceEngagementSerializer(serializers.ModelSerializer):
             Permissions.Risk_Acceptance_Eng_Render,
             Permissions.Risk_Acceptance_Eng_Review,
             Permissions.Risk_Acceptance_Eng_Reject,
+            Permissions.Risk_Acceptance_Eng_Note_View,
+            Permissions.Risk_Acceptance_Eng_Note_Delete,
+            Permissions.Risk_Acceptance_Eng_Note_Edit,
+            Permissions.Risk_Acceptance_Eng_Note_Add,
             Permissions.Risk_Acceptance_Send_Email
             ]
         user = self.context["request"].user
@@ -156,10 +167,5 @@ class RiskAcceptanceExclusionRuleSerializer(serializers.ModelSerializer):
             "exclusions",
         ]
 
-class LongRiskAcceptanceToNotesSerializer(serializers.Serializer):
-    long_risk_acceptance_id = serializers.PrimaryKeyRelatedField(
-        queryset=RiskAcceptanceEngagement.objects.all(), many=False, allow_null=True,
-    )
-    notes = NoteSerializer(many=True)
 
 
