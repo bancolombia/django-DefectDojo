@@ -1260,6 +1260,7 @@ class UserHasLongRiskAcceptancePermission(permissions.BasePermission):
     path_post = re.compile(r"^/api/v2/long_risk_acceptance/$")
     path = re.compile(r"^/api/v2/long_risk_acceptance/\d+/$")
     path_apply_rule = re.compile(r"^/api/v2/long_risk_acceptance/apply_rule/\d+/$")
+    path_notes = re.compile(r"^/api/v2/long_risk_acceptance/\d+/notes/$")
 
     def has_permission(self, request, view):
         if UserHasLongRiskAcceptancePermission.path_post.match(
@@ -1289,6 +1290,17 @@ class UserHasLongRiskAcceptancePermission(permissions.BasePermission):
                 request,
                 obj,
                 Permissions.Risk_Acceptance_Eng_Reject,
+            )
+        elif UserHasLongRiskAcceptancePermission.path_notes.match(
+            request.path,
+        ):
+            return check_object_permission(
+                request,
+                obj,
+                Permissions.Long_Risk_Acceptance_Eng_View,
+                Permissions.Risk_Acceptance_Eng_Note_Edit,
+                Permissions.Risk_Acceptance_Eng_Note_Delete,
+                Permissions.Risk_Acceptance_Eng_Note_Add,
             )
 
         return check_object_permission(

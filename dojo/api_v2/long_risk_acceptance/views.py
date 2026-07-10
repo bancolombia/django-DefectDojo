@@ -1,9 +1,10 @@
 import logging
 import os
 import mimetypes
+from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework import status
-from dojo.models import RiskAcceptanceEngagement
+from dojo.models import RiskAcceptanceEngagement, Notes
 from rest_framework.permissions import IsAuthenticated
 from dojo.api_v2.long_risk_acceptance.models import *
 from dojo.api_v2.long_risk_acceptance.serializers import * 
@@ -201,19 +202,19 @@ class RiskAcceptanceEngagementViewSet(prefetch.PrefetchListMixin,
                     new_note.errors, status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            notes = long_risk_acceptance.note.filter(note_type=note_type).first()
+            notes = long_risk_acceptance.notes.filter(note_type=note_type).first()
             if notes and note_type and note_type.is_single:
                 return Response("Only one instance of this note_type allowed on an engagement.", status=status.HTTP_400_BAD_REQUEST)
 
             author = request.user
-            note = Notes(
+            notes = Notes(
                 entry=entry,
                 author=author,
                 private=private,
                 note_type=note_type,
             )
-            note.save()
-            long_risk_acceptance.note.add(note)
+            notes.save()
+            long_risk_acceptance.notes.add(notes)
 
             serialized_note = serializers.NoteSerializer(
                 {"author": author, "entry": entry, "private": private},
@@ -221,7 +222,7 @@ class RiskAcceptanceEngagementViewSet(prefetch.PrefetchListMixin,
             return Response(
                 serialized_note.data, status=status.HTTP_201_CREATED,
             )
-        notes = long_risk_acceptance.note.all()
+        notes = long_risk_acceptance.notes.all()
 
         serialized_notes = serializers.TransferFindingToNotesSerializer(
             {"engagement_id": long_risk_acceptance, "notes": notes},
