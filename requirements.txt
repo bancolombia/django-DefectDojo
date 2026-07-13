@@ -155,7 +155,7 @@ rpds-py==2026.6.3
 s3transfer==0.19.0
 setuptools==83.0.0
 referencing==0.37.0
-tzdata==2026.2
+tzdata==2026.3
 jsonschema-specifications==2025.9.1
 googleapis-common-protos==1.75.0
 grpcio==1.82.1
