@@ -11,18 +11,84 @@ from dojo.models import User
 from django.db.models import Q
 logger = logging.getLogger(__name__)
 
+def parse_filter_values(filter_string: str) -> list[str]:
+    if not filter_string:
+        return []
+    return [value.strip() for value in filter_string.split(',') if value.strip()]
+
+def apply_dynamic_filter(query: QuerySet[Finding], filter_field: str, filter_values: str) -> QuerySet[Finding]:
+    """
+    Aplica un filtro dinámico a nivel de BD.
+    
+    Ejemplo:
+        apply_dynamic_filter(Finding.objects.all(), "cve", "CVE-2024-1,CVE-2024-2")
+        -> Retorna findings con ese CVE
+    
+    Args:
+        query: QuerySet de Finding
+        filter_field: Campo a filtrar (ej: "cve", "severity", "title")
+        filter_values: String de valores separados por comas
+    
+    Returns:
+        QuerySet filtrado
+    """
+    values = parse_filter_values(filter_values)
+    if not values:
+        return query
+    
+    # Crear un Q object con OR para múltiples valores
+    q_filter = Q()
+    for value in values:
+        q_filter |= Q(**{f"{filter_field}__icontains": value})
+    
+    return query.filter(q_filter)
+
 def to_execute_rule(query: QuerySet[Finding], rules: list[dict]) -> QuerySet[Finding]:
-    combined_rules_include = {}
-    combined_rules_exclude = {}
+    """
+    Ejecuta las reglas de filtro sobre un QuerySet de findings.
+    Maneja filtros que pueden ser strings con valores separados por comas.
+    
+    Estructura esperada de rules:
+    {
+        "filters": {"cve": "CVE-2024-1,CVE-2024-2", "severity": "High"},
+        "exclusions": {"title__icontains": "test"}
+    }
+    """
+    combined_rules_include = Q()
+    combined_rules_exclude = Q()
+    
     for rule in rules:
         if not rule:
             return query
+        
         if rule.filters:
-            combined_rules_include.update(rule.filters)
+            for field, value in rule.filters.items():
+                if isinstance(value, str) and ',' in value:
+                    values = parse_filter_values(value)
+                    q_filter = Q()
+                    for v in values:
+                        q_filter |= Q(**{f"{field}__icontains": v})
+                    combined_rules_include &= q_filter
+                else:
+                    combined_rules_include &= Q(**{field: value})
+        
         if rule.exclusions:
-            combined_rules_exclude.update(rule.exclusions)
+            for field, value in rule.exclusions.items():
+                if isinstance(value, str) and ',' in value:
+                    values = parse_filter_values(value)
+                    q_filter = Q()
+                    for v in values:
+                        q_filter |= Q(**{f"{field}__icontains": v})
+                    combined_rules_exclude |= q_filter
+                else:
+                    combined_rules_exclude |= Q(**{field: value})
 
-    return query.exclude(**combined_rules_exclude).filter(**combined_rules_include)
+    if combined_rules_include:
+        query = query.filter(combined_rules_include)
+    if combined_rules_exclude:
+        query = query.exclude(combined_rules_exclude)
+    
+    return query
 
 def render_rule(ra_engagement: RiskAcceptanceEngagement):
     rules = ra_engagement.riskacceptanceexclusionrule_set.all()
