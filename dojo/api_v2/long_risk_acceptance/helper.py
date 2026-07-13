@@ -21,7 +21,6 @@ def apply_dynamic_filter(query: QuerySet[Finding], filter_field: str, filter_val
     if not values:
         return query
     
-    # Crear un Q object con OR para múltiples valores
     q_filter = Q()
     for value in values:
         q_filter |= Q(**{f"{filter_field}__icontains": value})
