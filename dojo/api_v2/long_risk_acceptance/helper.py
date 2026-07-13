@@ -17,21 +17,6 @@ def parse_filter_values(filter_string: str) -> list[str]:
     return [value.strip() for value in filter_string.split(',') if value.strip()]
 
 def apply_dynamic_filter(query: QuerySet[Finding], filter_field: str, filter_values: str) -> QuerySet[Finding]:
-    """
-    Aplica un filtro dinámico a nivel de BD.
-    
-    Ejemplo:
-        apply_dynamic_filter(Finding.objects.all(), "cve", "CVE-2024-1,CVE-2024-2")
-        -> Retorna findings con ese CVE
-    
-    Args:
-        query: QuerySet de Finding
-        filter_field: Campo a filtrar (ej: "cve", "severity", "title")
-        filter_values: String de valores separados por comas
-    
-    Returns:
-        QuerySet filtrado
-    """
     values = parse_filter_values(filter_values)
     if not values:
         return query
@@ -44,16 +29,6 @@ def apply_dynamic_filter(query: QuerySet[Finding], filter_field: str, filter_val
     return query.filter(q_filter)
 
 def to_execute_rule(query: QuerySet[Finding], rules: list[dict]) -> QuerySet[Finding]:
-    """
-    Ejecuta las reglas de filtro sobre un QuerySet de findings.
-    Maneja filtros que pueden ser strings con valores separados por comas.
-    
-    Estructura esperada de rules:
-    {
-        "filters": {"cve": "CVE-2024-1,CVE-2024-2", "severity": "High"},
-        "exclusions": {"title__icontains": "test"}
-    }
-    """
     combined_rules_include = Q()
     combined_rules_exclude = Q()
     
