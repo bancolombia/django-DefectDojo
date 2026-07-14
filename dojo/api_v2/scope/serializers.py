@@ -211,6 +211,7 @@ class InputSerializer(serializers.Serializer):
         return authorization_helper.get_permissions(obj)
 
 class InputScenarioSerializer(serializers.ModelSerializer):
+    description = serializers.CharField(required=False, allow_null=True, allow_blank=True)
 
     class Meta:
         model = InputScenario
@@ -220,11 +221,43 @@ class InputScenarioSerializer(serializers.ModelSerializer):
             "designed_by",
             "description",
             "verified",
+
         ]
+        read_only_fields = ["id"]
+
+    def validate_estimated_time(self, value):
+        if value is None:
+            raise serializers.ValidationError("estimated_time is required.")
+        if value <= 0:
+            raise serializers.ValidationError("estimated_time must be greater than 0.")
+        if value > 10080:
+            raise serializers.ValidationError("estimated_time is too large.")
+        return value
+
+    def validate_description(self, value):
+        if value is None:
+            return None
+
+        value = value.strip()
+
+        if not value:
+            return None
+
+        if len(value) > 5000:
+            raise serializers.ValidationError("description is too long.")
+
+        return value
+
+    def validate(self, attrs):
+        designed_by = attrs.get("designed_by")
+        if designed_by and not getattr(designed_by, "is_active", True):
+            raise serializers.ValidationError({
+                "designed_by": "The selected user is inactive."
+            })
+        return attrs
 
 class InputURLSerializer(serializers.ModelSerializer):
-
-    scenarios = InputScenarioSerializer(many=True)
+    scenarios = InputScenarioSerializer(many=True, required=False)
 
     class Meta:
         model = InputURL
@@ -232,8 +265,22 @@ class InputURLSerializer(serializers.ModelSerializer):
             "id",
             "url",
             "created",
+            "updated",
             "scenarios",
         ]
+        read_only_fields = ["id", "created", "updated"]
+
+    def validate_url(self, value):
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError("url cannot be empty.")
+
+        if len(value) > 500:
+            raise serializers.ValidationError("url is too long.")
+
+        return value
+
     def create(self, validated_data):
         scenarios_data = validated_data.pop("scenarios", [])
 
@@ -246,7 +293,7 @@ class InputURLSerializer(serializers.ModelSerializer):
         return url
 
 class InputFlowSerializer(serializers.ModelSerializer):
-    urls = InputURLSerializer(many=True)
+    urls = InputURLSerializer(many=True, required=False)
 
     class Meta:
         model = InputFlow
@@ -258,6 +305,26 @@ class InputFlowSerializer(serializers.ModelSerializer):
             "updated",
             "urls",
         ]
+        read_only_fields = ["id", "created", "updated"]
+
+    def validate_flowName(self, value):
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError("flowName cannot be empty.")
+
+        if len(value) > 255:
+            raise serializers.ValidationError("flowName is too long.")
+
+        return value
+
+    def validate(self, attrs):
+        engagement = attrs.get("engagement")
+        if engagement is None:
+            raise serializers.ValidationError({
+                "engagement": "engagement is required."
+            })
+        return attrs
 
     def create(self, validated_data):
         urls_data = validated_data.pop("urls", [])
@@ -273,3 +340,5 @@ class InputFlowSerializer(serializers.ModelSerializer):
                     InputScenario.objects.create(url=url, **scenario_data)
 
         return flow
+    
+    
