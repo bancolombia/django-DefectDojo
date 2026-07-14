@@ -220,6 +220,34 @@ class RunHCEvaluationTest(TestCase):
 
     @override_settings(
         HC_PARTICIPATION_POSTULATED_ENDPOINT="http://hc-microservice.local/postulated",
+        OPERATIVE_USER="operative",
+    )
+    @patch('dojo.engine_participation.helpers.requests.post')
+    def test_run_evaluation_without_user_uses_operative_user_token(self, mock_post):
+        """Evaluation without explicit user resolves DD_OPERATIVE_USER."""
+        operative_user = Dojo_User.objects.create_user(
+            username="operative",
+            email="operative@test.com",
+            password="testpass123",
+        )
+        operative_token, _created = Token.objects.get_or_create(user=operative_user)
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = []
+        mock_post.return_value = mock_response
+
+        result = run_hc_participation_evaluation(user=None)
+
+        self.assertEqual(result["total_evaluated"], 0)
+        kwargs = mock_post.call_args.kwargs
+        self.assertEqual(
+            kwargs["headers"]["Authorization"],
+            f"Token {operative_token.key}",
+        )
+
+    @override_settings(
+        HC_PARTICIPATION_POSTULATED_ENDPOINT="http://hc-microservice.local/postulated",
         HC_PARTICIPATION_ALREADY_IN_HC_ENDPOINT="http://hc-microservice.local/already",
         HC_PARTICIPATION_POSTULATED_TAGS=["fluidattacks", "fluid_hacker", "devsecops_hacker"],
         HC_PARTICIPATION_DAYS=300,

@@ -54,12 +54,16 @@ def _resolve_user_for_hc_evaluation(user):
     if user is not None:
         return user
 
-    fallback_user = Dojo_User.objects.filter(is_superuser=True).order_by("id").first()
+    operative_username = (getattr(settings, "OPERATIVE_USER", "") or "").strip()
+    fallback_user = None
+    if operative_username:
+        fallback_user = Dojo_User.objects.filter(username=operative_username).first()
+
     if fallback_user:
         return fallback_user
 
     raise ValueError(
-        "Unable to resolve an admin user token to call HC participation endpoint."
+        "Unable to resolve the operative user token to call HC participation endpoint."
     )
 
 
@@ -123,15 +127,22 @@ def _fetch_microservice(user, endpoint_url: str) -> list:
     timeout_seconds = getattr(settings, "HC_PARTICIPATION_POSTULATED_TIMEOUT_SECONDS", 30)
     request_body = _build_hc_common_body()
 
-    response = requests.post(
-        endpoint_url,
-        json=request_body,
-        headers=_build_hc_auth_headers(token_key),
-        timeout=timeout_seconds,
-        verify=False,
-    )
-    response.raise_for_status()
-    payload = response.json()
+    try:
+        response = requests.post(
+            endpoint_url,
+            json=request_body,
+            headers=_build_hc_auth_headers(token_key),
+            timeout=timeout_seconds,
+            verify=False,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except requests.RequestException as exc:
+        logger.error("HC microservice call failed for %s: %s", endpoint_url, exc)
+        return []
+    except ValueError as exc:
+        logger.error("HC microservice returned invalid JSON for %s: %s", endpoint_url, exc)
+        return []
 
     return _extract_rows(payload)
 
