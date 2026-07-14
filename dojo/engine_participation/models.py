@@ -15,6 +15,7 @@ class HCParticipation(models.Model):
     
     RECOMMENDATION_CHOICES = [
         ("postulated", "Postulated to HC"),
+        ("postulated_manually", "Postulated to HC (manual)"),
         ("already_in_hc", "Already in Hacking Continuous"),
         ("not_eligible", "Not eligible"),
     ]

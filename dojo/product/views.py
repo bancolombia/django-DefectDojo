@@ -114,6 +114,8 @@ from dojo.product_type.queries import (
 )
 from dojo.query_utils import build_count_subquery
 from dojo.templatetags.display_tags import asvs_calc_level
+from dojo.templatetags.authorization_tags import is_in_group
+from dojo.engine_participation.helpers import HCConstants
 from dojo.tool_config.factory import create_API
 from dojo.tools.factory import get_api_scan_configuration_hints
 from dojo.utils import (
@@ -318,6 +320,13 @@ def view_product(request, pid):
     total = critical + high + medium + low + info
 
     product_tab = Product_Tab(prod, title=_("Product"), tab="overview")
+    can_create_manual_hc_postulation = (
+        request.user.is_superuser
+        or request.user.is_staff
+        or
+        is_in_group(request.user, HCConstants.REVIEWERS_GROUP.value)
+        or is_in_group(request.user, HCConstants.APPROVERS_GROUP.value)
+    )
 
     add_breadcrumb(parent=prod, top_level=False, request=request)
 
@@ -347,7 +356,9 @@ def view_product(request, pid):
         "product_type_groups": product_type_groups,
         "personal_notifications_form": personal_notifications_form,
         "enabled_notifications": get_enabled_notifications_list(),
-        "sla": sla})
+        "sla": sla,
+        "can_create_manual_hc_postulation": can_create_manual_hc_postulation,
+    })
 
 
 @dojo_ratelimit_view()

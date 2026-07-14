@@ -1,27 +1,25 @@
 import uuid
-import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from enum import Enum
+from urllib.parse import urlencode
+
+import requests
 
 from django.db import transaction
 from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
+from rest_framework.authtoken.models import Token
 
 from celery.utils.log import get_task_logger
 
-from dojo.celery import app
-from dojo.models import Product, Dojo_Group
+from dojo.models import Product, Dojo_Group, Dojo_User
 from dojo.group.queries import get_group_members_for_group
 from dojo.notifications.helper import create_notification
-from dojo.api_v2.risk_posture.helper import get_product_risk_posture as get_product_security_posture
 from dojo.engine_participation.models import HCParticipation, HCParticipationLog
 
 logger = get_task_logger(__name__)
 
-ELIGIBLE_CRITICALITIES = ("very high", "high")
 ACTIVE_HC_REQUEST_STATUSES = ("Pending", "Reviewed")
-HC_BMC_APPLICATION_CLASSID_MARKER = "CLASSID: BMC_APPLICATION"
 HC_STATUS_TRANSITIONS = {
     "Reviewed": {"Pending"},
     "Approved": {"Reviewed"},
@@ -36,6 +34,106 @@ class HCConstants(Enum):
 
 class InvalidHCParticipationTransition(Exception):
     """Raised when a workflow action is attempted from an invalid state."""
+
+
+def _get_hc_postulated_endpoint_url() -> str:
+    endpoint_url = (getattr(settings, "HC_PARTICIPATION_POSTULATED_ENDPOINT", "") or "").strip()
+    if not endpoint_url:
+        raise ValueError(
+            "HC participation endpoint is not configured. "
+            "Set HC_PARTICIPATION_POSTULATED_ENDPOINT in settings/environment."
+        )
+    return endpoint_url
+
+
+def _get_hc_already_in_hc_endpoint_url() -> str:
+    return (getattr(settings, "HC_PARTICIPATION_ALREADY_IN_HC_ENDPOINT", "") or "").strip()
+
+
+def _resolve_user_for_hc_evaluation(user):
+    if user is not None:
+        return user
+
+    fallback_user = Dojo_User.objects.filter(is_superuser=True).order_by("id").first()
+    if fallback_user:
+        return fallback_user
+
+    raise ValueError(
+        "Unable to resolve an admin user token to call HC participation endpoint."
+    )
+
+
+def _get_user_token(user) -> str:
+    token, _ = Token.objects.get_or_create(user=user)
+    return token.key
+
+
+def _get_hc_postulated_auth_token(user) -> str:
+    configured_token = (getattr(settings, "HC_PARTICIPATION_POSTULATED_AUTH_TOKEN", "") or "").strip()
+    if configured_token:
+        return configured_token
+    return _get_user_token(user)
+
+
+def _extract_rows(payload) -> list:
+    if isinstance(payload, list):
+        return payload
+
+    if not isinstance(payload, dict):
+        return []
+
+    for key in ("postulated_products", "products", "results", "data"):
+        value = payload.get(key)
+        if isinstance(value, list):
+            return value
+
+    return []
+
+
+def _build_product_risk_posture_url(product_id: int) -> str:
+    query = urlencode({"product_id": product_id})
+    return f"{reverse('product_risk_posture_view')}?{query}"
+
+
+def _build_hc_common_body() -> dict:
+    request_body = {
+        "tags": list(getattr(settings, "HC_PARTICIPATION_POSTULATED_TAGS", [])),
+        "days": int(getattr(settings, "HC_PARTICIPATION_DAYS", 300)),
+        "classID": list(getattr(settings, "HC_PARTICIPATION_POSTULATED_CLASSID", [])),
+        "businessCriticality": list(getattr(settings, "HC_PARTICIPATION_POSTULATED_BUSINESS_CRITICALITY", [])),
+    }
+    
+    return request_body
+
+
+def _build_hc_auth_headers(token_key: str) -> dict:
+    return {
+        "Authorization": f"Token {token_key}",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
+
+def _fetch_microservice(user, endpoint_url: str) -> list:
+    if not endpoint_url:
+        return []
+
+    effective_user = _resolve_user_for_hc_evaluation(user)
+    token_key = _get_hc_postulated_auth_token(effective_user)
+    timeout_seconds = getattr(settings, "HC_PARTICIPATION_POSTULATED_TIMEOUT_SECONDS", 30)
+    request_body = _build_hc_common_body()
+
+    response = requests.post(
+        endpoint_url,
+        json=request_body,
+        headers=_build_hc_auth_headers(token_key),
+        timeout=timeout_seconds,
+        verify=False,
+    )
+    response.raise_for_status()
+    payload = response.json()
+
+    return _extract_rows(payload)
 
 
 def get_hc_reviewers_members():
@@ -82,139 +180,108 @@ def _validate_hc_status_transition(current_status: str, target_status: str) -> N
         )
 
 
-def evaluate_product_for_hc(product: Product) -> dict:
-    result = {
-        "product_id": product.id,
-        "product_name": product.name,
-        "business_criticality": product.business_criticality,
-        "was_in_hacking_continuous": False,
-        "recommendation": None,
-        "reason": None,
-        "security_posture": None,
-    }
-    
-    security_posture = get_product_security_posture(product, None)
-    result["security_posture"] = {
-        "is_in_hacking_continuos": security_posture.get("is_in_hacking_continuos", False),
-        "counter_active_findings": security_posture.get("counter_active_findings", 0),
-        "counter_total_findings": security_posture.get("counter_total_findings", 0),
-        "adoption_devsecops": security_posture.get("adoption_devsecops", []),
-        "result": security_posture.get("result", 0),
-        "status": security_posture.get("status", "UNKNOWN"),
-    }
-    
-    result["was_in_hacking_continuous"] = security_posture.get("is_in_hacking_continuos", False)
-    
-    criticality = product.business_criticality
-    if not criticality or criticality.lower() not in ELIGIBLE_CRITICALITIES:
-        result["recommendation"] = HCParticipation.RECOMMENDATION_CHOICES[2][0]  # not_eligible
-        result["reason"] = (
-            f"Business criticality '{criticality or 'Not defined'}' "
-            f"is not eligible. Only High/Very High are eligible."
-        )
-        return result
-    
-    if security_posture.get("is_in_hacking_continuos", False):
-        result["recommendation"] = HCParticipation.RECOMMENDATION_CHOICES[1][0]  # already_in_hc
-        result["reason"] = "Product is already in Hacking Continuous. Documented, no postulation required."
-        return result
-    
-    result["recommendation"] = HCParticipation.RECOMMENDATION_CHOICES[0][0]  # postulated
-    result["reason"] = (
-        f"Product eligible for Hacking Continuous postulation. "
-        f"Criticality: {criticality}. Requires review and approval."
-    )
-    
-    return result
-
-
-def _process_single_product(product: Product, batch_id: uuid.UUID, user) -> dict:
-    try:
-        evaluation_result = evaluate_product_for_hc(product)
-        
-        hc_request = HCParticipation(
-            product=product,
-            recommendation=evaluation_result["recommendation"],
-            business_criticality=evaluation_result["business_criticality"],
-            was_in_hacking_continuous=evaluation_result["was_in_hacking_continuous"],
-            security_posture_data=evaluation_result["security_posture"],
-            reason=evaluation_result["reason"],
-            status="Pending",
-            created_by=user,
-            batch_id=batch_id,
-        )
-        
-        return {
-            "evaluation_result": evaluation_result,
-            "hc_request": hc_request,
-        }
-    except Exception as e:
-        logger.exception(f"Error evaluating product {product.id}: {e}")
-        return {
-            "evaluation_result": {
-                "product_id": product.id,
-                "product_name": product.name,
-                "recommendation": "error",
-                "reason": str(e),
-            },
-            "hc_request": None,
-        }
-
-
 def run_hc_participation_evaluation(user=None) -> dict:
     batch_id = uuid.uuid4()
-    
-    total_products = Product.objects.count()
+    postulated_rows = _fetch_microservice(user, _get_hc_postulated_endpoint_url())
+    already_in_hc_rows = _fetch_microservice(user, _get_hc_already_in_hc_endpoint_url())
+    rows = [(row, "postulated") for row in postulated_rows] + [(row, "already_in_hc") for row in already_in_hc_rows]
 
-    products_qs = Product.objects.select_related("prod_type").filter(
-        description__icontains=HC_BMC_APPLICATION_CLASSID_MARKER,
-    )
-    candidates_count = products_qs.count()
-    skipped_by_classid = max(total_products - candidates_count, 0)
-
-    logger.info(
-        "HC Participation Evaluation scope. Total products: %s, "
-        "CLASSID candidates: %s, skipped by CLASSID filter: %s",
-        total_products,
-        candidates_count,
-        skipped_by_classid,
-    )
-    
-    products_list = list(products_qs)
-    
-    if not products_list:
-        return {
-            "batch_id": str(batch_id),
-            "total_evaluated": 0,
-            "scope": {
-                "total_products": total_products,
-                "classid_candidates": candidates_count,
-                "skipped_by_classid": skipped_by_classid,
-            },
-            "summary": {
-                "postulated": 0,
-                "already_in_hc": 0,
-                "not_eligible": 0,
-                "errors": 0,
-            },
-            "requests_created": 0,
-        }
-    
     results = []
     requests_to_create = []
-    
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        future_to_product = {
-            executor.submit(_process_single_product, product, batch_id, user): product
-            for product in products_list
+
+    product_ids = []
+    for row, _default_recommendation in rows:
+        if not isinstance(row, dict):
+            continue
+        product_id = row.get("id_product") or row.get("product_id") or row.get("id")
+        if product_id is None:
+            continue
+        try:
+            product_ids.append(int(product_id))
+        except (TypeError, ValueError):
+            logger.warning("Invalid id_product in HC microservice payload: %s", product_id)
+
+    products_map = Product.objects.in_bulk(product_ids)
+
+    for row, default_recommendation in rows:
+        if not isinstance(row, dict):
+            results.append(
+                {
+                    "product_id": None,
+                    "product_name": None,
+                    "recommendation": "error",
+                    "reason": "Invalid row format returned by microservice.",
+                }
+            )
+            continue
+
+        product_id = row.get("id_product") or row.get("product_id") or row.get("id")
+        try:
+            product_id = int(product_id)
+        except (TypeError, ValueError):
+            results.append(
+                {
+                    "product_id": product_id,
+                    "product_name": row.get("product") or row.get("product_name") or row.get("name"),
+                    "recommendation": "error",
+                    "reason": "Invalid id_product in microservice payload.",
+                }
+            )
+            continue
+
+        product = products_map.get(product_id)
+        if not product:
+            results.append(
+                {
+                    "product_id": product_id,
+                    "product_name": row.get("product") or row.get("product_name") or row.get("name"),
+                    "recommendation": "error",
+                    "reason": "Product not found in DefectDojo.",
+                }
+            )
+            continue
+
+        recommendation = row.get("recommendation") or default_recommendation
+        if recommendation not in ("postulated", "already_in_hc", "not_eligible"):
+            recommendation = "error"
+        security_posture = {}
+        security_posture.setdefault(
+            "product_risk_posture_url",
+            _build_product_risk_posture_url(product.id),
+        )
+
+        if recommendation == "already_in_hc":
+            default_reason = "Product already in Hacking Continuous. Review required to continue."
+        elif recommendation == "not_eligible":
+            default_reason = "Product is not eligible for Hacking Continuous."
+        else:
+            default_reason = "Postulated to Hacking Continuous Test."
+
+        evaluation_result = {
+            "product_id": product.id,
+            "product_name": product.name,
+            "business_criticality": row.get("business_criticality") or product.business_criticality,
+            "was_in_hacking_continuous": row.get("was_in_hacking_continuous", recommendation == "already_in_hc"),
+            "recommendation": recommendation,
+            "reason": row.get("reason") or default_reason,
+            "security_posture": security_posture,
         }
-        
-        for future in as_completed(future_to_product):
-            process_result = future.result()
-            results.append(process_result["evaluation_result"])
-            
-            if process_result["hc_request"] and process_result["evaluation_result"]["recommendation"] == "postulated":
-                requests_to_create.append(process_result["hc_request"])
+        results.append(evaluation_result)
+
+        if recommendation in ("postulated", "already_in_hc"):
+            requests_to_create.append(
+                HCParticipation(
+                    product=product,
+                    recommendation=recommendation,
+                    business_criticality=evaluation_result["business_criticality"],
+                    was_in_hacking_continuous=evaluation_result["was_in_hacking_continuous"],
+                    security_posture_data=evaluation_result["security_posture"],
+                    reason=evaluation_result["reason"],
+                    status="Pending",
+                    created_by=user,
+                    batch_id=batch_id,
+                )
+            )
     
     created_requests = []
     requests_to_create.sort(key=lambda request: request.product_id)
@@ -244,9 +311,7 @@ def run_hc_participation_evaluation(user=None) -> dict:
     
     logger.info(
         f"HC Participation Evaluation completed. Batch: {batch_id}, "
-        f"Total products: {total_products}, "
-        f"CLASSID candidates: {candidates_count}, "
-        f"Skipped by CLASSID: {skipped_by_classid}, "
+        f"Rows received from microservice: {len(rows)}, "
         f"Postulated: {summary['postulated']}, "
         f"Already in HC: {summary['already_in_hc']}, "
         f"Not eligible: {summary['not_eligible']}, "
@@ -257,9 +322,9 @@ def run_hc_participation_evaluation(user=None) -> dict:
         "batch_id": str(batch_id),
         "total_evaluated": len(results),
         "scope": {
-            "total_products": total_products,
-            "classid_candidates": candidates_count,
-            "skipped_by_classid": skipped_by_classid,
+            "rows_from_microservice": len(rows),
+            "rows_postulated_from_microservice": len(postulated_rows),
+            "rows_already_in_hc_from_microservice": len(already_in_hc_rows),
         },
         "summary": summary,
         "requests_created": len(created_requests),
@@ -293,6 +358,81 @@ def _notify_reviewers_of_new_requests(requests, batch_id):
     )
 
 
+def is_product_in_hacking_continuous_from_requests(product) -> bool:
+    latest_request = HCParticipation.objects.filter(
+        product=product,
+    ).order_by("-create_date").first()
+
+    if not latest_request:
+        return False
+
+    if latest_request.recommendation in ("postulated", "postulated_manually"):
+        return latest_request.status == "Approved"
+
+    if latest_request.recommendation == "already_in_hc":
+        return latest_request.status in ("Pending", "Reviewed", "Rejected")
+
+    return False
+
+
+def _get_product_class_id_from_description(product):
+    description = (product.description or "")
+    for raw_line in description.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        upper_line = line.upper()
+        if upper_line.startswith("CLASSID:"):
+            return line.split(":", 1)[1].strip() or None
+        if upper_line.startswith("CLASS ID:"):
+            return line.split(":", 1)[1].strip() or None
+
+    return None
+
+
+def create_manual_hc_postulation(product, user):
+    with transaction.atomic():
+        locked_product = Product.objects.select_for_update().get(pk=product.pk)
+
+        allowed_class_ids = list(getattr(settings, "HC_PARTICIPATION_POSTULATED_CLASSID", []))
+        product_class_id = _get_product_class_id_from_description(locked_product)
+        if allowed_class_ids and product_class_id not in allowed_class_ids:
+            return None, (
+                "This product class_id is not allowed for HC postulation. "
+                f"Allowed class_id values: {', '.join(allowed_class_ids)}."
+            )
+
+        pending_postulation_exists = HCParticipation.objects.filter(
+            product=locked_product,
+            status="Pending",
+        ).exists()
+        if pending_postulation_exists:
+            return None, "A pending HC postulation already exists for this product."
+
+        if is_product_in_hacking_continuous_from_requests(locked_product):
+            return None, "This product is already in Hacking Continuous."
+
+        batch_id = uuid.uuid4()
+        requested_by = getattr(user, "username", "System")
+        hc_request = HCParticipation.objects.create(
+            product=locked_product,
+            recommendation="postulated_manually",
+            business_criticality=locked_product.business_criticality,
+            was_in_hacking_continuous=False,
+            security_posture_data={
+                "product_risk_posture_url": _build_product_risk_posture_url(locked_product.id),
+            },
+            reason=f"Manual postulation created from Product view by {requested_by}.",
+            status="Pending",
+            created_by=user,
+            batch_id=batch_id,
+        )
+
+    _notify_reviewers_of_new_requests([hc_request], batch_id)
+    return hc_request, None
+
+
 def mark_hc_participation_reviewed(hc_participation, user):
     with transaction.atomic():
         locked_hc_participation = HCParticipation.objects.select_for_update().get(pk=hc_participation.pk)
@@ -308,12 +448,16 @@ def mark_hc_participation_reviewed(hc_participation, user):
         locked_hc_participation.status_updated_by = user
         locked_hc_participation.save()
 
+        review_note = "Request marked as reviewed"
+        if locked_hc_participation.was_in_hacking_continuous:
+            review_note = "Request marked as reviewed for HC continuity decision"
+
         HCParticipationLog.objects.create(
             hc_participation=locked_hc_participation,
             changed_by=user,
             previous_status=previous_status,
             current_status="Reviewed",
-            notes="Request marked as reviewed",
+            notes=review_note,
         )
 
     return locked_hc_participation
@@ -336,12 +480,16 @@ def approve_hc_participation(hc_participation, user):
         hc_participation.status_updated_by = user
         hc_participation.save()
 
+        approval_note = "Request approved for Hacking Continuous participation"
+        if hc_participation.was_in_hacking_continuous:
+            approval_note = "Request approved for removal from Hacking Continuous"
+
         HCParticipationLog.objects.create(
             hc_participation=hc_participation,
             changed_by=user,
             previous_status=previous_status,
             current_status="Approved",
-            notes="Request approved for Hacking Continuous participation",
+            notes=approval_note,
         )
 
     if hc_participation.created_by:
@@ -379,12 +527,16 @@ def reject_hc_participation(hc_participation, user):
 
         hc_participation.save()
 
+        rejection_note = "Request rejected"
+        if hc_participation.was_in_hacking_continuous:
+            rejection_note = "Request rejected: product remains in Hacking Continuous"
+
         HCParticipationLog.objects.create(
             hc_participation=hc_participation,
             changed_by=user,
             previous_status=previous_status,
             current_status="Rejected",
-            notes="Request rejected",
+            notes=rejection_note,
         )
 
     if hc_participation.created_by:
@@ -427,24 +579,5 @@ def get_latest_hc_evaluation_for_product(product_id: int) -> dict:
         logger.exception(f"Error getting latest HC evaluation for product {product_id}: {e}")
         return None
 
-
-@app.task
-def run_monthly_hc_evaluation():
-    logger.info("Starting monthly HC participation evaluation...")
-    
-    try:
-        result = run_hc_participation_evaluation()
-        
-        logger.info(
-            f"Monthly HC evaluation completed. "
-            f"Total evaluated: {result['total_evaluated']}, "
-            f"Requests created: {result['requests_created']}"
-        )
-        
-        return result
-        
-    except Exception as e:
-        logger.exception(f"Error in monthly HC evaluation: {e}")
-        raise
 
 

@@ -42,4 +42,9 @@ urlpatterns = [
         views.run_hc_evaluation,
         name="run_hc_evaluation"
     ),
+    re_path(
+        r"^engine_participation/product/(?P<pid>\d+)/manual-postulation/$",
+        views.create_manual_hc_postulation_request,
+        name="create_manual_hc_postulation"
+    ),
 ]
