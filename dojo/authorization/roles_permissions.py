@@ -189,6 +189,10 @@ class Permissions(IntEnum):
     Risk_Acceptance_Eng_Render = 5005
     Risk_Acceptance_Eng_Review = 5006
     Risk_Acceptance_Eng_Reject = 5007
+    Risk_Acceptance_Eng_Note_View = 5008
+    Risk_Acceptance_Eng_Note_Delete = 5009
+    Risk_Acceptance_Eng_Note_Edit = 5010
+    Risk_Acceptance_Eng_Note_Add = 5011
 
     Long_Risk_Acceptance_Rule_Eng_Add = 6001
     Long_Risk_Acceptance_Rule_Eng_Edit = 6002
@@ -240,7 +244,12 @@ class Permissions(IntEnum):
             Permissions.Long_Risk_Acceptance_Rule_Eng_Edit,
             Permissions.Risk_Acceptance_Eng_Render,
             Permissions.Risk_Acceptance_Eng_Review,
-            Permissions.Risk_Acceptance_Eng_Reject
+            Permissions.Risk_Acceptance_Eng_Reject,
+            Permissions.Risk_Acceptance_Eng_Note_View,
+            Permissions.Risk_Acceptance_Eng_Note_Delete,
+            Permissions.Risk_Acceptance_Eng_Note_Edit,
+            Permissions.Risk_Acceptance_Eng_Note_Add,
+            
 
         }.union(cls.get_test_permissions())
 
@@ -622,6 +631,10 @@ def get_roles_with_permissions():
             Permissions.Risk_Acceptance_Eng_Render,
             Permissions.Risk_Acceptance_Eng_Review,
             Permissions.Risk_Acceptance_Eng_Reject,
+            Permissions.Risk_Acceptance_Eng_Note_View,
+            Permissions.Risk_Acceptance_Eng_Note_Delete,
+            Permissions.Risk_Acceptance_Eng_Note_Edit,
+            Permissions.Risk_Acceptance_Eng_Note_Add,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Add,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Edit,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Delete,
@@ -759,8 +772,9 @@ def get_roles_with_permissions():
             Permissions.Long_Risk_Acceptance_Eng_Add,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Add,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Edit,
-            Permissions.Long_Risk_Acceptance_Rule_Eng_Delete,
             Permissions.Long_Risk_Acceptance_Rule_Eng_View,
+            Permissions.Risk_Acceptance_Eng_Note_View,
+            Permissions.Risk_Acceptance_Eng_Note_Add,
             Permissions.Risk_Acceptance_Eng_Render,
 
         },
@@ -888,6 +902,10 @@ def get_roles_with_permissions():
             Permissions.Risk_Acceptance_Eng_Render,
             Permissions.Risk_Acceptance_Eng_Review,
             Permissions.Risk_Acceptance_Eng_Reject,
+            Permissions.Risk_Acceptance_Eng_Note_View,
+            Permissions.Risk_Acceptance_Eng_Note_Delete,
+            Permissions.Risk_Acceptance_Eng_Note_Edit,
+            Permissions.Risk_Acceptance_Eng_Note_Add,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Add,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Edit,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Delete,

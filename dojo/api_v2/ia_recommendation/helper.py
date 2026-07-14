@@ -13,13 +13,13 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 def get_ia_recommendation(fid, user):
+    version = GeneralSettings.get_value("HOST_IA_RECOMMENDATION_VERSION", "v1")
     error_response = {
-        "status": "Ok",
-        "ia_recommendations": (
-                "At the moment, you can't generate a recommendation for this finding.\n"
-                "Please try again later or with a different finding.🫣"
-            )}
-
+    "status": "Ok",
+    "ia_recommendations": (
+            "At the moment, you can't generate a recommendation for this finding.\n"
+            "Please try again later or with a different finding.🫣"
+        )}
     url = GeneralSettings.get_value("HOST_IA_RECOMMENDATION")
     params = {
         "grant_type": "client_credentials",
@@ -36,7 +36,6 @@ def get_ia_recommendation(fid, user):
                                 params=params,
                                 verify=settings.VERIFY_REQUEST_ENABLED
                                 )
-
     if response.status_code != 200:
         logger.error(" IA RECOMMENDATION: Error generating token %s", response.text)
         error_response["status"] = "Error"
@@ -45,20 +44,25 @@ def get_ia_recommendation(fid, user):
             data=error_response
         )
 
+    # Create threads
     access_token = response.json()["access_token"]
     url = GeneralSettings.get_value("HOST_IA_RECOMMENDATION_CORE")
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
     body = {
         "thread_id": "",
         "metadata": {
-            "user_id": "string"
+            "user_id": user.email
         },
         "if_exists": "raise"
     }
-
+    if version == "v2":
+        body["metadata"].update({
+            "agent_id": GeneralSettings.get_value("IA_AGENT_ID", "agent_id"),
+            "consumer": "string"
+            }) 
     logger.debug("IA RECOMMENDATION: get recomendation by finding: %s", fid)
     response = requests.request("POST",
-                                url=f"{url}/core/api/v1/threads",
+                                url=f"{url}/core/api/{version}/threads",
                                 headers=headers,
                                 json=body,
                                 verify=settings.VERIFY_REQUEST_ENABLED
@@ -66,23 +70,34 @@ def get_ia_recommendation(fid, user):
     if response.status_code != 200:
         logger.error(" IA RECOMMENDATIONE: error getting IA RECOMMENDATION: %s", response.text)
         error_response["status"] = "Error"
-        return http_response.error(message="Error get Thereads", data=error_response)
+        return http_response.error(
+            message="Error Get threads",
+            data=error_response
+        )
 
+    # Create runs
     thread_id = response.json()["thread_id"]
     url = GeneralSettings.get_value("HOST_IA_RECOMMENDATION_CORE")
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
     body = {
-        "agent_id": GeneralSettings.get_value("IA_AGENT_ID", "marvin_ia_recommendation_agent"),
+        "agent_id": GeneralSettings.get_value("IA_AGENT_ID", "agent_id"),
         "thread_id": thread_id,
-        "messages": fid,
+        "messages": str(fid),
         "metadata": {
-            "user_id": "string"
+            "user_id": user.email,
+            "consumer": "string"
         }
     }
 
+    if version == "v2":
+        body["metadata"].update({
+            "user_id": user.email,
+            "consumer": "string"
+            })
+
     logger.debug("IA RECOMMENDATION: get recomendation by finding: %s", fid)
     response = requests.request("POST",
-                                url=f"{url}/core/api/v1/runs",
+                                url=f"{url}/core/api/{version}/runs",
                                 headers=headers,
                                 json=body,
                                 verify=settings.VERIFY_REQUEST_ENABLED
@@ -100,5 +115,5 @@ def get_ia_recommendation(fid, user):
     finding.ia_recommendation["data"]["user"] = user.username
     finding.ia_recommendation["data"]["last_modified"] = str(timezone.now().date())
     finding.save()
-    contex = finding_helper.parser_ia_recommendation(finding.ia_recommendation)
-    return http_response.ok(message="OK", data=contex)
+    context = finding_helper.parser_ia_recommendation(finding.ia_recommendation)
+    return http_response.ok(message="OK", data=context) 
