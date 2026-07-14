@@ -1136,11 +1136,9 @@ class RiskPendingForm(forms.ModelForm):
         label="Select Findings to Accept")
     long_term_acceptance = forms.ChoiceField(
         choices=YES_NO_CHOICES,
-        widget=forms.widgets.Select(attrs={'size': 1}),
-        required=True,
-        initial=False,
-        help_text=("You can request long-term acceptance for this vulnerability. For more information, please review documentation"),
-        label="Do you want to submit this request as a long-term acceptance?")
+        widget=forms.widgets.HiddenInput(),
+        required=False,
+        initial=False)
     accepted_by = forms.ModelMultipleChoiceField(
         help_text=("acceptors depending on the severity of the risk"),
         queryset=Dojo_User.objects.none(),
