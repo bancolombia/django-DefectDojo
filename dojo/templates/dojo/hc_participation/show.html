@@ -145,7 +145,11 @@
                                 <form method="post" action="{% url 'approve_hc_participation' hc_participation.uuid %}" style="margin: 0;">
                                     {% csrf_token %}
                                     <button type="submit" class="dropdown-item btn btn-link" style="width: 100%; text-align: left;">
-                                        <i class="fa-solid fa-circle-exclamation"></i> Approve HC Participation
+                                        {% if hc_participation.was_in_hacking_continuous %}
+                                            <i class="fa-solid fa-circle-check"></i> Approve Removal from HC
+                                        {% else %}
+                                            <i class="fa-solid fa-circle-exclamation"></i> Approve HC Participation
+                                        {% endif %}
                                     </button>
                                 </form>
                             </li>
@@ -158,7 +162,11 @@
                                 <form method="post" action="{% url 'reject_hc_participation' hc_participation.uuid %}" style="margin: 0;">
                                     {% csrf_token %}
                                     <button type="submit" class="dropdown-item btn btn-link" style="width: 100%; text-align: left;">
-                                        <i class="fa-solid fa-circle-xmark"></i> Reject HC Participation
+                                        {% if hc_participation.was_in_hacking_continuous %}
+                                            <i class="fa-solid fa-circle-xmark"></i> Keep Product in HC
+                                        {% else %}
+                                            <i class="fa-solid fa-circle-xmark"></i> Reject HC Participation
+                                        {% endif %}
                                     </button>
                                 </form>
                             </li>
@@ -227,40 +235,41 @@
             </div>
         </div>
 
-        {% if hc_participation.security_posture_data %}
         <div class="panel panel-default">
             <div class="panel-heading">
-                <h4>Security Posture (at evaluation time) <span class="pull-right"><a rel="noopener noreferrer" data-toggle="collapse" href="#vuln_posture"><i
+                <h4>Risk Posture (on demand) <span class="pull-right"><a rel="noopener noreferrer" data-toggle="collapse" href="#vuln_posture"><i
                         class="glyphicon glyphicon-chevron-up"></i></a></span></h4>
             </div>
             <div id="vuln_posture" class="panel-body finding-description collapse in">
                 <table class="table table-condensed">
                     <tr>
                         <th width="30%">Active Findings</th>
-                        <td>{{ hc_participation.security_posture_data.counter_active_findings|default:0 }}</td>
+                        <td id="hc-posture-active-findings">Loading...</td>
                     </tr>
                     <tr>
                         <th>Total Findings</th>
-                        <td>{{ hc_participation.security_posture_data.counter_total_findings|default:0 }}</td>
+                        <td id="hc-posture-total-findings">Loading...</td>
                     </tr>
                     <tr>
                         <th>Status</th>
-                        <td>{{ hc_participation.security_posture_data.status|default:"-" }}</td>
+                        <td id="hc-posture-status">Loading...</td>
                     </tr>
                     <tr>
                         <th>DevSecOps Adoption</th>
+                        <td id="hc-posture-adoption">Loading...</td>
+                    </tr>
+                    <tr>
+                        <th>Details</th>
                         <td>
-                            {% for tag in hc_participation.security_posture_data.adoption_devsecops %}
-                                <span class="label label-info">{{ tag }}</span>
-                            {% empty %}
-                                -
-                            {% endfor %}
+                            <a id="hc-posture-link" href="{{ risk_posture_view_url }}" target="_blank" rel="noopener noreferrer">Open Risk Posture</a>
                         </td>
                     </tr>
                 </table>
+                <div id="hc-posture-error" class="text-danger" style="display: none; margin-top: 8px;">
+                    Could not load Security Posture data.
+                </div>
             </div>
         </div>
-        {% endif %}
 
         <div class="panel panel-default">
             <div class="panel-heading">
@@ -344,7 +353,19 @@
                             <span class="log-status" style="background-color: {% if log.current_status == 'Pending' %}#1B30DE{% elif log.current_status == 'Approved' %}#096C11{% elif log.current_status == 'Rejected' %}#d11d38{% elif log.current_status == 'Cancelled' %}#6c757d{% elif log.current_status == 'Reviewed' %}#b97a0c{% else %}#6c757d{% endif %};">
                                 {{ log.current_status }}
                             </span>
-                            {% if log.notes %}<span class="text-muted"> - {{ log.notes }}</span>{% endif %}
+                            {% if log.notes %}
+                                <span class="text-muted"> - 
+                                    {% if hc_participation.was_in_hacking_continuous and log.notes == 'Request approved for Hacking Continuous participation' %}
+                                        Request approved for removal from Hacking Continuous
+                                    {% elif hc_participation.was_in_hacking_continuous and log.notes == 'Request marked as reviewed' %}
+                                        Request marked as reviewed for HC continuity decision
+                                    {% elif hc_participation.was_in_hacking_continuous and log.notes == 'Request rejected' %}
+                                        Request rejected: product remains in Hacking Continuous
+                                    {% else %}
+                                        {{ log.notes }}
+                                    {% endif %}
+                                </span>
+                            {% endif %}
                         </div>
                     {% empty %}
                         <div class="cli-log-line">No history found.</div>
@@ -403,4 +424,49 @@
         </div>
     </div>
 </div>
+
+<script>
+    (function () {
+        const apiUrl = "{{ risk_posture_api_url }}";
+        const activeEl = document.getElementById("hc-posture-active-findings");
+        const totalEl = document.getElementById("hc-posture-total-findings");
+        const statusEl = document.getElementById("hc-posture-status");
+        const adoptionEl = document.getElementById("hc-posture-adoption");
+        const errorEl = document.getElementById("hc-posture-error");
+
+        function setError() {
+            activeEl.textContent = "-";
+            totalEl.textContent = "-";
+            statusEl.textContent = "-";
+            adoptionEl.textContent = "-";
+            errorEl.style.display = "block";
+        }
+
+        fetch(apiUrl, {
+            method: "GET",
+            credentials: "same-origin",
+            headers: {
+                "Accept": "application/json"
+            }
+        })
+            .then(function (response) {
+                if (!response.ok) {
+                    throw new Error("Risk posture request failed");
+                }
+                return response.json();
+            })
+            .then(function (payload) {
+                const data = payload && payload.data ? payload.data : {};
+                const adoption = Array.isArray(data.adoption_devsecops) ? data.adoption_devsecops : [];
+
+                activeEl.textContent = String(data.counter_active_findings ?? 0);
+                totalEl.textContent = String(data.counter_total_findings ?? 0);
+                statusEl.textContent = data.status || "-";
+                adoptionEl.textContent = adoption.length ? adoption.join(", ") : "-";
+            })
+            .catch(function () {
+                setError();
+            });
+    })();
+</script>
 {% endblock %}

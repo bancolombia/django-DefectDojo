@@ -1,16 +1,14 @@
 """
 Tests for HC (Hacking Continuo) Participation module.
 """
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
-from rest_framework import status
 from unittest.mock import patch, MagicMock
 
 from dojo.models import (
-    Product, 
-    Product_Type,
+    Product,
     GeneralSettings,
     Dojo_User,
 )
@@ -20,11 +18,8 @@ from dojo.engine_participation.models import (
     HCParticipationLog,
 )
 from dojo.engine_participation.helpers import (
-    evaluate_product_for_hc,
     run_hc_participation_evaluation,
     get_latest_hc_evaluation_for_product,
-    ELIGIBLE_CRITICALITIES,
-    HC_BMC_APPLICATION_CLASSID_MARKER,
     InvalidHCParticipationTransition,
     approve_hc_participation,
     mark_hc_participation_reviewed,
@@ -95,162 +90,40 @@ class HCParticipationDiscussionTest(TestCase):
         self.assertIn("test comment", discussion.content)
 
 
-class EvaluateProductForHCTest(TestCase):
-    """Tests for the evaluate_product_for_hc helper function"""
-    fixtures = ['dojo_testdata.json']
-    
-    def setUp(self):
-        self.product = Product.objects.first()
-        self.setup_general_settings()
-    
-    def setup_general_settings(self):
-        """Configure GeneralSettings for tests"""
-        GeneralSettings.objects.get_or_create(
-            name_key='SECURITY_POSTURE_STATUS',
-            defaults={
-                'value': '{"APETITO": 50, "TOLERANCIA": 100, "EXCEDIDO": 150}',
-                'data_type': 'DICT'
-            }
-        )
-        GeneralSettings.objects.get_or_create(
-            name_key='HACKING_CONTINUOUS_TAGS',
-            defaults={
-                'value': '["hacking_continuous"]',
-                'data_type': 'LIST'
-            }
-        )
-        GeneralSettings.objects.get_or_create(
-            name_key='HACKING_CONTINUOUS_DAYS_TOLERANCE',
-            defaults={
-                'value': '30',
-                'data_type': 'INT'
-            }
-        )
-    
-    def test_r1_not_eligible_low_criticality(self):
-        """R1: Products with low criticality are not eligible"""
-        self.product.business_criticality = "low"
-        self.product.save()
-        
-        result = evaluate_product_for_hc(self.product)
-        
-        self.assertEqual(result["recommendation"], "not_eligible")
-        self.assertIn("Business criticality 'low'", result["reason"])
-        self.assertIn("is not eligible", result["reason"])
-    
-    def test_r1_not_eligible_none_criticality(self):
-        """R1: Products with no criticality are not eligible"""
-        self.product.business_criticality = None
-        self.product.save()
-        
-        result = evaluate_product_for_hc(self.product)
-        
-        self.assertEqual(result["recommendation"], "not_eligible")
-        self.assertIn("Business criticality 'Not defined'", result["reason"])
-        self.assertIn("is not eligible", result["reason"])
-    
-    def test_r1_eligible_high_criticality(self):
-        """R1: Products with high criticality are eligible"""
-        self.product.business_criticality = "high"
-        self.product.save()
-        
-        result = evaluate_product_for_hc(self.product)
-        
-        self.assertIn(result["recommendation"], ["postulated", "already_in_hc"])
-    
-    def test_r1_not_eligible_medium_criticality(self):
-        """R1: Products with medium criticality are not eligible"""
-        self.product.business_criticality = "medium"
-        self.product.save()
-        
-        result = evaluate_product_for_hc(self.product)
-        
-        self.assertEqual(result["recommendation"], "not_eligible")
-        self.assertIn("Business criticality 'medium'", result["reason"])
-        self.assertIn("is not eligible", result["reason"])
-    
-    @patch('dojo.engine_participation.helpers.get_product_security_posture')
-    def test_r2_already_in_hc(self, mock_security_posture):
-        """R2: Products already in HC should be documented, not postulated"""
-        self.product.business_criticality = "high"
-        self.product.save()
-        
-        mock_security_posture.return_value = {
-            "is_in_hacking_continuos": True,
-            "counter_active_findings": 5,
-            "counter_total_findings": 10,
-            "adoption_devsecops": [],
-            "result": 10.0,
-            "status": "APETITO",
-        }
-        
-        result = evaluate_product_for_hc(self.product)
-        
-        self.assertEqual(result["recommendation"], "already_in_hc")
-        self.assertIn("already in Hacking Continuous", result["reason"])
-        self.assertTrue(result["was_in_hacking_continuous"])
-    
-    @patch('dojo.engine_participation.helpers.get_product_security_posture')
-    def test_r3_postulated(self, mock_security_posture):
-        """R3: Eligible products not in HC should be postulated"""
-        self.product.business_criticality = "high"
-        self.product.save()
-        
-        mock_security_posture.return_value = {
-            "is_in_hacking_continuos": False,
-            "counter_active_findings": 5,
-            "counter_total_findings": 10,
-            "adoption_devsecops": ["engine_iac"],
-            "result": 10.0,
-            "status": "APETITO",
-        }
-        
-        result = evaluate_product_for_hc(self.product)
-        
-        self.assertEqual(result["recommendation"], "postulated")
-        self.assertIn("eligible for Hacking Continuous postulation", result["reason"])
-        self.assertFalse(result["was_in_hacking_continuous"])
-
-
 class RunHCEvaluationTest(TestCase):
     """Tests for the run_hc_participation_evaluation function"""
     fixtures = ['dojo_testdata.json']
     
     def setUp(self):
         self.user = Dojo_User.objects.get(username="admin")
+        Token.objects.get_or_create(user=self.user)
         self.product = Product.objects.first()
         self.product.business_criticality = "high"
-        self.product.description = f"Service Metadata | {HC_BMC_APPLICATION_CLASSID_MARKER}"
+        self.product.description = "Service Metadata"
         self.product.save()
-        self.setup_general_settings()
     
-    def setup_general_settings(self):
-        GeneralSettings.objects.get_or_create(
-            name_key='SECURITY_POSTURE_STATUS',
-            defaults={
-                'value': '{"APETITO": 50, "TOLERANCIA": 100, "EXCEDIDO": 150}',
-                'data_type': 'DICT'
-            }
-        )
-        GeneralSettings.objects.get_or_create(
-            name_key='HACKING_CONTINUOUS_TAGS',
-            defaults={
-                'value': '["hacking_continuous"]',
-                'data_type': 'LIST'
-            }
-        )
-    
-    @patch('dojo.engine_participation.helpers.get_product_security_posture')
-    def test_run_evaluation_creates_records(self, mock_security_posture):
+    @override_settings(
+        HC_PARTICIPATION_POSTULATED_ENDPOINT="http://hc-microservice.local/postulated",
+        HC_PARTICIPATION_POSTULATED_TAGS=["fluidattacks", "fluid_hacker", "devsecops_hacker"],
+        HC_PARTICIPATION_DAYS=30,
+        HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"],
+        HC_PARTICIPATION_POSTULATED_BUSINESS_CRITICALITY=[],
+    )
+    @patch('dojo.engine_participation.helpers.requests.post')
+    def test_run_evaluation_creates_records(self, mock_post):
         """Test that evaluation creates database records"""
-        mock_security_posture.return_value = {
-            "is_in_hacking_continuos": False,
-            "counter_active_findings": 5,
-            "counter_total_findings": 10,
-            "adoption_devsecops": [],
-            "result": 10.0,
-            "status": "APETITO",
-        }
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = [
+            {
+                "product": self.product.name,
+                "id_product": str(self.product.id),
+                "product_type": "EVC - APIS",
+                "business_criticality": "high",
+                "class_id": "BMC_APPLICATION",
+            }
+        ]
+        mock_post.return_value = mock_response
         
         initial_count = HCParticipation.objects.count()
         
@@ -261,18 +134,34 @@ class RunHCEvaluationTest(TestCase):
             initial_count
         )
         self.assertIsNotNone(result["batch_id"])
+        mock_post.assert_called_once()
+        kwargs = mock_post.call_args.kwargs
+        self.assertEqual(
+            kwargs["json"],
+            {
+                "tags": ["fluidattacks", "fluid_hacker", "devsecops_hacker"],
+                "days": 30,
+                "classID": ["BMC_APPLICATION"],
+                "businessCriticality": [],
+            },
+        )
     
-    @patch('dojo.engine_participation.helpers.get_product_security_posture')
-    def test_run_evaluation_returns_summary(self, mock_security_posture):
+    @override_settings(HC_PARTICIPATION_POSTULATED_ENDPOINT="http://hc-microservice.local/postulated")
+    @patch('dojo.engine_participation.helpers.requests.post')
+    def test_run_evaluation_returns_summary(self, mock_post):
         """Test that evaluation returns proper summary"""
-        mock_security_posture.return_value = {
-            "is_in_hacking_continuos": False,
-            "counter_active_findings": 5,
-            "counter_total_findings": 10,
-            "adoption_devsecops": [],
-            "result": 10.0,
-            "status": "APETITO",
-        }
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = [
+            {
+                "product": self.product.name,
+                "id_product": str(self.product.id),
+                "product_type": "EVC - APIS",
+                "business_criticality": "high",
+                "class_id": "BMC_APPLICATION",
+            }
+        ]
+        mock_post.return_value = mock_response
         
         result = run_hc_participation_evaluation(user=self.user)
         
@@ -281,21 +170,24 @@ class RunHCEvaluationTest(TestCase):
         self.assertIn("already_in_hc", result["summary"])
         self.assertIn("not_eligible", result["summary"])
         self.assertIn("scope", result)
-        self.assertIn("total_products", result["scope"])
-        self.assertIn("classid_candidates", result["scope"])
-        self.assertIn("skipped_by_classid", result["scope"])
+        self.assertIn("rows_from_microservice", result["scope"])
 
-    @patch('dojo.engine_participation.helpers.get_product_security_posture')
-    def test_run_evaluation_skips_existing_active_request(self, mock_security_posture):
+    @override_settings(HC_PARTICIPATION_POSTULATED_ENDPOINT="http://hc-microservice.local/postulated")
+    @patch('dojo.engine_participation.helpers.requests.post')
+    def test_run_evaluation_skips_existing_active_request(self, mock_post):
         """Test that evaluation does not duplicate active HC requests"""
-        mock_security_posture.return_value = {
-            "is_in_hacking_continuos": False,
-            "counter_active_findings": 5,
-            "counter_total_findings": 10,
-            "adoption_devsecops": [],
-            "result": 10.0,
-            "status": "APETITO",
-        }
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = [
+            {
+                "product": self.product.name,
+                "id_product": str(self.product.id),
+                "product_type": "EVC - APIS",
+                "business_criticality": "high",
+                "class_id": "BMC_APPLICATION",
+            }
+        ]
+        mock_post.return_value = mock_response
 
         HCParticipation.objects.create(
             product=self.product,
@@ -312,19 +204,116 @@ class RunHCEvaluationTest(TestCase):
         )
         self.assertEqual(result["requests_created"], 0)
     
-    @patch('dojo.engine_participation.helpers.Product.objects')
-    def test_run_evaluation_empty_products(self, mock_products):
-        """Test evaluation with no products"""
-        mock_products.count.return_value = 0
-        mock_products.select_related.return_value.filter.return_value.count.return_value = 0
-        mock_products.select_related.return_value.filter.return_value.all.return_value = []
+    @override_settings(HC_PARTICIPATION_POSTULATED_ENDPOINT="http://hc-microservice.local/postulated")
+    @patch('dojo.engine_participation.helpers.requests.post')
+    def test_run_evaluation_empty_products(self, mock_post):
+        """Test evaluation with empty microservice response"""
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = []
+        mock_post.return_value = mock_response
         
         result = run_hc_participation_evaluation(user=self.user)
         
         self.assertEqual(result["total_evaluated"], 0)
-        self.assertEqual(result["scope"]["total_products"], 0)
-        self.assertEqual(result["scope"]["classid_candidates"], 0)
-        self.assertEqual(result["scope"]["skipped_by_classid"], 0)
+        self.assertEqual(result["scope"]["rows_from_microservice"], 0)
+
+    @override_settings(
+        HC_PARTICIPATION_POSTULATED_ENDPOINT="http://hc-microservice.local/postulated",
+        OPERATIVE_USER="operative",
+    )
+    @patch('dojo.engine_participation.helpers.requests.post')
+    def test_run_evaluation_without_user_uses_operative_user_token(self, mock_post):
+        """Evaluation without explicit user resolves DD_OPERATIVE_USER."""
+        operative_user = Dojo_User.objects.create_user(
+            username="operative",
+            email="operative@test.com",
+            password="testpass123",
+        )
+        operative_token, _created = Token.objects.get_or_create(user=operative_user)
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = []
+        mock_post.return_value = mock_response
+
+        result = run_hc_participation_evaluation(user=None)
+
+        self.assertEqual(result["total_evaluated"], 0)
+        kwargs = mock_post.call_args.kwargs
+        self.assertEqual(
+            kwargs["headers"]["Authorization"],
+            f"Token {operative_token.key}",
+        )
+
+    @override_settings(
+        HC_PARTICIPATION_POSTULATED_ENDPOINT="http://hc-microservice.local/postulated",
+        HC_PARTICIPATION_ALREADY_IN_HC_ENDPOINT="http://hc-microservice.local/already",
+        HC_PARTICIPATION_POSTULATED_TAGS=["fluidattacks", "fluid_hacker", "devsecops_hacker"],
+        HC_PARTICIPATION_DAYS=300,
+        HC_PARTICIPATION_POSTULATED_CLASSID=[],
+        HC_PARTICIPATION_POSTULATED_BUSINESS_CRITICALITY=[],
+    )
+    @patch('dojo.engine_participation.helpers.requests.post')
+    def test_run_evaluation_fetches_already_in_hc_and_creates_requests(self, mock_post):
+        """Evaluation calls both endpoints and creates review requests for already_in_hc."""
+        postulated_response = MagicMock()
+        postulated_response.raise_for_status.return_value = None
+        postulated_response.json.return_value = [
+            {
+                "product": self.product.name,
+                "id_product": str(self.product.id),
+                "business_criticality": "high",
+            }
+        ]
+
+        product_two = Product.objects.exclude(id=self.product.id).first()
+        if not product_two:
+            product_two = Product.objects.create(
+                name="HC Product Two",
+                description="HC second product",
+                business_criticality="medium",
+                prod_type=self.product.prod_type,
+            )
+
+        already_response = MagicMock()
+        already_response.raise_for_status.return_value = None
+        already_response.json.return_value = [
+            {
+                "product": product_two.name,
+                "id_product": str(product_two.id),
+                "business_criticality": "medium",
+            }
+        ]
+
+        mock_post.side_effect = [postulated_response, already_response]
+
+        result = run_hc_participation_evaluation(user=self.user)
+
+        self.assertEqual(mock_post.call_count, 2)
+        first_call = mock_post.call_args_list[0].kwargs
+        second_call = mock_post.call_args_list[1].kwargs
+
+        expected_body = {
+            "tags": ["fluidattacks", "fluid_hacker", "devsecops_hacker"],
+            "days": 300,
+            "classID": [],
+            "businessCriticality": [],
+        }
+        self.assertEqual(first_call["json"], expected_body)
+        self.assertEqual(second_call["json"], expected_body)
+
+        self.assertEqual(result["summary"]["postulated"], 1)
+        self.assertEqual(result["summary"]["already_in_hc"], 1)
+        self.assertEqual(result["requests_created"], 2)
+
+        self.assertTrue(
+            HCParticipation.objects.filter(
+                product=product_two,
+                recommendation="already_in_hc",
+                status="Pending",
+            ).exists()
+        )
 
 
 class ApproveRejectHCTest(TestCase):
@@ -435,20 +424,6 @@ class GetLatestEvaluationTest(TestCase):
         self.assertEqual(result["status"], "Approved")
 
 
-class EligibleCriticalitiesTest(TestCase):
-    """Tests for eligible criticalities constant"""
-    
-    def test_eligible_criticalities_values(self):
-        """Test that eligible criticalities are correctly defined"""
-        self.assertIn("very high", ELIGIBLE_CRITICALITIES)
-        self.assertIn("high", ELIGIBLE_CRITICALITIES)
-        self.assertNotIn("medium", ELIGIBLE_CRITICALITIES)
-        
-        self.assertNotIn("low", ELIGIBLE_CRITICALITIES)
-        self.assertNotIn("very low", ELIGIBLE_CRITICALITIES)
-        self.assertNotIn("none", ELIGIBLE_CRITICALITIES)
-
-
 class HCParticipationViewsTest(TestCase):
     """Tests for HC Participation views"""
     fixtures = ['dojo_testdata.json']
@@ -489,6 +464,21 @@ class HCParticipationViewsTest(TestCase):
         
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.product.name)
+
+    def test_show_view_includes_security_posture_async_loader(self):
+        """Detail view includes async loader for security posture data."""
+        from django.test import Client
+
+        self.hc.security_posture_data = {"product_risk_posture_url": "/product/risk_posture/product?product_id=1"}
+        self.hc.save()
+
+        client = Client()
+        client.force_login(self.user)
+        response = client.get(reverse("hc_participation", args=[str(self.hc.uuid)]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("product_risk_posture") + f"?product_id={self.product.id}")
+        self.assertContains(response, "Open Risk Posture")
     
     def test_run_evaluation_requires_admin(self):
         """Test that run evaluation requires admin privileges"""

@@ -44,13 +44,24 @@
             <div class="panel panel-default">
                 <div class="panel-heading">
                     <span class="fa-solid fa-bullseye"></span> {{ name }}
-                    <span class="pull-right text-muted small">
-                        <i class="fa fa-clock"></i> Monthly automatic evaluation (1st day, 6:00 AM)
+                    <span class="pull-right">
+                        {% if can_run_hc_evaluation %}
+                            <form method="post" action="{% url 'run_hc_evaluation' %}" style="display: inline; margin-right: 10px;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-primary btn-sm">
+                                    <i class="fa fa-play"></i> Run Evaluation
+                                </button>
+                            </form>
+                        {% endif %}
+                        <span class="text-muted small">
+                            <i class="fa fa-clock"></i> Monthly automatic evaluation (1st day, 6:00 AM)
+                        </span>
                     </span>
                 </div>
             </div>
             {% if hc_requests %}
             <div class="panel panel-default table-responsive">
+                <div class="panel-heading"><strong>Postulated Requests</strong></div>
                 <table id="hc-requests" class="tablesorter-bootstrap table table-condensed table-striped">
                     <thead>
                         <tr>
@@ -63,7 +74,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for hc in hc_requests %}
+                        {% for hc in postulated_requests %}
                             <tr>
                                 <td>
                                     <a href="{% url 'hc_participation' hc.uuid %}">{{ hc.product.name }}</a>
@@ -88,6 +99,64 @@
                                         {{ hc.status }}
                                     {% endif %}
                                 </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">No postulated requests in this page.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="panel panel-default table-responsive">
+                <div class="panel-heading"><strong>Already in Hacking Continuous - Review Requests</strong></div>
+                <table id="hc-requests-already" class="tablesorter-bootstrap table table-condensed table-striped">
+                    <thead>
+                        <tr>
+                            <th>Product</th>
+                            <th>Product Type</th>
+                            <th>Criticality</th>
+                            <th>Recommendation</th>
+                            <th>Created Date</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for hc in already_in_hc_requests %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'hc_participation' hc.uuid %}">{{ hc.product.name }}</a>
+                                </td>
+                                <td>{{ hc.product.prod_type.name }}</td>
+                                <td>{{ hc.business_criticality|default:"-" }}</td>
+                                <td>{{ hc.get_recommendation_display }}</td>
+                                <td>{{ hc.create_date|date:"d M Y H:i" }}</td>
+                                <td>
+                                    {% if hc.status in "Pending,Approved,Rejected,Reviewed,Cancelled" %}
+                                        <span style="background-color:
+                                            {% if hc.status == 'Pending' %}#1B30DE
+                                            {% elif hc.status == 'Approved' %}#d11d38
+                                            {% elif hc.status == 'Rejected' %}#096C11
+                                            {% elif hc.status == 'Cancelled' %}#6c757d
+                                            {% else %}#b97a0c
+                                            {% endif %}"
+                                            class="pass_fail Pass">
+                                            {% if hc.status == 'Approved' %}
+                                                Removal Approved
+                                            {% elif hc.status == 'Rejected' %}
+                                                Continues in HC
+                                            {% else %}
+                                                {{ hc.status }}
+                                            {% endif %}
+                                        </span>
+                                    {% else %}
+                                        {{ hc.status }}
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">No already_in_hc requests in this page.</td>
                             </tr>
                         {% endfor %}
                     </tbody>

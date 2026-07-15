@@ -7,6 +7,7 @@ from django.views.decorators.http import require_POST
 
 from dojo.utils import get_page_items, add_breadcrumb
 from dojo.templatetags.authorization_tags import is_in_group
+from dojo.models import Product
 from dojo.engine_participation.models import (
     HCParticipation,
     HCParticipationDiscussion,
@@ -17,6 +18,7 @@ from dojo.engine_participation.helpers import (
     HCConstants,
     InvalidHCParticipationTransition,
     approve_hc_participation,
+    create_manual_hc_postulation,
     reject_hc_participation,
     has_valid_comments,
     get_hc_approvers_members,
@@ -37,6 +39,11 @@ def hc_participations(request: HttpRequest) -> HttpResponse:
     
     filtered = HCParticipationFilter(request.GET, queryset=hc_requests)
     paged_requests = get_page_items(request, filtered.qs, 25)
+    postulated_requests = [
+        hc for hc in paged_requests
+        if hc.recommendation in ("postulated", "postulated_manually")
+    ]
+    already_in_hc_requests = [hc for hc in paged_requests if hc.recommendation == "already_in_hc"]
     
     add_breadcrumb(
         title="HC Participation Requests",
@@ -48,6 +55,9 @@ def hc_participations(request: HttpRequest) -> HttpResponse:
         "hc_requests": paged_requests,
         "filtered": filtered,
         "name": "Hacking Continuous - Participation Requests",
+        "postulated_requests": postulated_requests,
+        "already_in_hc_requests": already_in_hc_requests,
+        "can_run_hc_evaluation": request.user.is_staff or request.user.is_superuser,
     })
 
 
@@ -68,6 +78,9 @@ def show_hc_participation(request: HttpRequest, hcid: str) -> HttpResponse:
     discussion_form = HCParticipationDiscussionForm()
     logs = hc_participation.logs.select_related("changed_by").all()
     discussions = hc_participation.discussions.select_related("author").all()
+    security_posture_data = hc_participation.security_posture_data if isinstance(hc_participation.security_posture_data, dict) else {}
+    risk_posture_api_url = f"{reverse('product_risk_posture')}?product_id={hc_participation.product.id}"
+    risk_posture_view_url = security_posture_data.get("product_risk_posture_url") or f"{reverse('product_risk_posture_view')}?product_id={hc_participation.product.id}"
     
     add_breadcrumb(
         title=f"HC - {hc_participation.product.name}",
@@ -80,6 +93,9 @@ def show_hc_participation(request: HttpRequest, hcid: str) -> HttpResponse:
         "discussion_form": discussion_form,
         "logs": logs,
         "discussions": discussions,
+        "security_posture_data": security_posture_data,
+        "risk_posture_api_url": risk_posture_api_url,
+        "risk_posture_view_url": risk_posture_view_url,
         "can_review_hc_participation": is_in_group(request.user, HCConstants.REVIEWERS_GROUP.value),
         "can_approve_hc_participation": is_in_group(request.user, HCConstants.APPROVERS_GROUP.value),
         "can_reject_hc_participation": (
@@ -288,3 +304,33 @@ def run_hc_evaluation(request: HttpRequest) -> HttpResponse:
         )
     
     return redirect("hc_participations")
+
+
+@require_POST
+def create_manual_hc_postulation_request(request: HttpRequest, pid: int) -> HttpResponse:
+    can_create_manual_postulation = (
+        is_in_group(request.user, HCConstants.REVIEWERS_GROUP.value)
+        or is_in_group(request.user, HCConstants.APPROVERS_GROUP.value)
+    )
+    if not can_create_manual_postulation:
+        raise PermissionDenied
+
+    product = get_object_or_404(Product, pk=pid)
+    _hc_request, error_message = create_manual_hc_postulation(product, request.user)
+
+    if error_message:
+        messages.add_message(
+            request,
+            messages.INFO,
+            error_message,
+            extra_tags="alert-info"
+        )
+    else:
+        messages.add_message(
+            request,
+            messages.SUCCESS,
+            "Manual HC postulation created successfully.",
+            extra_tags="alert-success"
+        )
+
+    return redirect("view_product", pid=pid)
