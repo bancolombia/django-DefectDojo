@@ -127,16 +127,10 @@ from dojo.utils import (
 )
 from dojo.validators import ImporterFileExtensionValidator, tag_validator
 from dojo.widgets import TableCheckboxWidget
-from dojo.engine_tools.helpers import (
-    calculate_priority_epss_kev_finding,
-    get_severity_risk_map,
-    get_risk_priority_epss_kev_data,
-)
 
 logger = logging.getLogger(__name__)
 
 RE_DATE = re.compile(r"(\d{4})-(\d\d?)-(\d\d?)$")
-CVE_PRIORITY_PATTERN = re.compile(r"^CVE-\d{4}-\d+")
 
 FINDING_STATUS = (
     ("verified", "Verified"),
@@ -1206,7 +1200,7 @@ class RiskPendingForm(forms.ModelForm):
             self.fields['accepted_by'].widget = forms.widgets.SelectMultiple(attrs={'size': 10})
             self.fields['accepted_by'].queryset = get_users_for_group('Compliance')
         else:
-            user_approvers = self.fields['accepted_by'].queryset.filter(username=owner_username) if self.fields['owner'].queryset.filter(global_role__role__name="Maintainer").exists() else self.fields['accepted_by'].queryset.filter(~Q(global_role__role__name="Maintainer"))
+            user_approvers = self.fields['accepted_by'].queryset.filter(username=owner_username) if self.fields['owner'].queryset.filter(global_role__role__name="Maintainer").exists() else self.fields['accepted_by'].queryset.filter(~Q(global_role__role__name__in=settings.ROLE_ALLOWED_TO_ACCEPT_RISKS))
             self.fields['approvers'].choices = [(user.username, user.username) for user in user_approvers]
             self.fields['approvers'].initial = [user.username for user in user_approvers] 
 
@@ -1639,41 +1633,6 @@ class AddFindingForm(forms.ModelForm):
         self.endpoints_to_add_list = endpoints_to_add_list
 
         return cleaned_data
-
-    def apply_priority(self, finding: Finding) -> Finding:
-        if (
-            GeneralSettings.get_value(
-                "ENABLE_UPDATE_PRIORITY_EPSS_KEV_ON_IMPORT_SCAN", False
-            )
-            is False
-        ):
-            return finding
-
-        vulnerability_ids = self.cleaned_data.get("vulnerability_ids", "").split()
-        cve_candidate = finding.cve or (vulnerability_ids[0] if vulnerability_ids else None)
-        if cve_candidate and not finding.cve:
-            finding.cve = cve_candidate
-
-        df_risk_score = None
-        epss_dict = None
-        kev_dict = None
-        if cve_candidate and CVE_PRIORITY_PATTERN.match(cve_candidate):
-            df_risk_score, epss_dict, kev_dict = get_risk_priority_epss_kev_data()
-
-        priority, epss_score, epss_percentile, known_exploited, ransomware_used, kev_date_added, _ = calculate_priority_epss_kev_finding(
-            finding,
-            get_severity_risk_map(),
-            df_risk_score,
-            epss_dict,
-            kev_dict,
-        )
-        finding.priority = priority
-        finding.epss_score = epss_score
-        finding.epss_percentile = epss_percentile
-        finding.known_exploited = known_exploited
-        finding.ransomware_used = ransomware_used
-        finding.kev_date_added = kev_date_added
-        return finding
 
     def clean_tags(self):
         tag_validator(self.cleaned_data.get("tags"))

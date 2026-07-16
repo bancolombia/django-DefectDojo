@@ -1003,6 +1003,9 @@ class EditFinding(View):
                 ra_helper.risk_unaccept(request.user, new_finding, perform_save=False)
             # Save and add new endpoints
             finding_helper.add_endpoints(new_finding, context["form"])
+            new_finding.severity = context["form"].cleaned_data["severity"]
+            finding_helper.apply_priority(new_finding, context["form"].cleaned_data.get("vulnerability_ids", "").split())
+
             # Remove unrelated endpoints
             endpoint_status_list = Endpoint_Status.objects.filter(finding=new_finding)
             for endpoint_status in endpoint_status_list:

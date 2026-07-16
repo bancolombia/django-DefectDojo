@@ -539,7 +539,7 @@ class AddFindingView(View):
             )
             # Save and add new endpoints
             finding_helper.add_endpoints(finding, context["form"])
-            context["form"].apply_priority(finding)
+            finding_helper.apply_priority(finding, context["form"].cleaned_data.get("vulnerability_ids", "").split())
             # Save the finding at the end and return
             finding.save()
 
@@ -727,7 +727,7 @@ def add_temp_finding(request, tid, fid):
 
             # Save and add new endpoints
             finding_helper.add_endpoints(new_finding, form)
-            form.apply_priority(new_finding)
+            finding_helper.apply_priority(new_finding, form.cleaned_data["vulnerability_ids"].split())
 
             new_finding.save()
             if "jiraform-push_to_jira" in request.POST:

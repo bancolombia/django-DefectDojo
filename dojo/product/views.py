@@ -138,10 +138,6 @@ from dojo.utils import (
     sum_by_severity_level,
     validate_group_role
 )
-from dojo.engine_tools.helpers import (
-    calculate_priority_epss_kev_finding,
-    get_severity_risk_map,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -1490,19 +1486,7 @@ class AdHocFindingView(View):
             finding.save()
             # Save and add new endpoints
             finding_helper.add_endpoints(finding, context["form"])
-            severity_risk_map = get_severity_risk_map()
-            (
-                priority,
-                _,
-                _,
-                _,
-                _,
-                _,
-                _,
-            ) = calculate_priority_epss_kev_finding(
-                finding, severity_risk_map, None, None, None
-            )
-            finding.priority = priority
+            finding_helper.apply_priority(finding, context["form"].cleaned_data["vulnerability_ids"].split())
             # Save the finding at the end and return
             finding.save()
 

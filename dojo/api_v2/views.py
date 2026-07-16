@@ -149,7 +149,6 @@ from dojo.models import (
     Product_Type_Member,
     Question,
     Regulation,
-    Risk_Acceptance,
     Role,
     SLA_Configuration,
     Sonarqube_Issue,
@@ -911,7 +910,59 @@ class FindingViewSet(
         if get_system_setting("enable_jira") and jira_project:
             push_to_jira = push_to_jira or jira_project.push_all_issues
 
+        # Save the serializer first
         serializer.save(push_to_jira=push_to_jira)
+
+        # After saving via API, recalculate priority if applicable.
+        # Extract vulnerability_ids from validated data if provided by the client.
+        try:
+            from dojo.finding import helper as finding_helper
+
+            vuln_data = serializer.validated_data.get("vulnerability_ids")
+            if vuln_data is not None:
+                # vuln_data is a list of dicts like {"vulnerability_id": "CVE-..."}
+                vulnerability_ids = [v.get("vulnerability_id") for v in vuln_data if v.get("vulnerability_id")]
+            else:
+                vulnerability_ids = None
+
+            # apply_priority updates the in-memory finding object; persist changes
+            updated_finding = finding_helper.apply_priority(serializer.instance, vulnerability_ids)
+            # save only if apply_priority modified the model
+            if updated_finding is not None:
+                updated_finding.save()
+        except Exception:
+            logger.exception("Error applying priority after API update for Finding id %s", getattr(serializer.instance, "id", None))
+
+    def perform_create(self, serializer):
+        """Handle create via API: save, then recalculate and persist priority."""
+        # Save initial instance
+        instance = serializer.save()
+
+        # After saving via API, recalculate priority if applicable.
+        try:
+            from dojo.finding import helper as finding_helper
+
+            vuln_data = serializer.validated_data.get("vulnerability_ids")
+            if vuln_data is not None:
+                vulnerability_ids = [v.get("vulnerability_id") for v in vuln_data if v.get("vulnerability_id")]
+            else:
+                vulnerability_ids = None
+
+            updated_finding = finding_helper.apply_priority(instance, vulnerability_ids)
+            if updated_finding is not None:
+                # Determine if we should push to JIRA as part of the save (respect product config)
+                try:
+                    jira_project = jira_helper.get_jira_project(updated_finding)
+                    push_to_jira_req = serializer.validated_data.get("push_to_jira")
+                    push = False
+                    if get_system_setting("enable_jira") and jira_project:
+                        push = bool(push_to_jira_req or jira_project.push_all_issues)
+                except Exception:
+                    push = False
+
+                updated_finding.save(push_to_jira=push)
+        except Exception:
+            logger.exception("Error applying priority after API create for Finding instance %s", getattr(serializer.instance, "id", None))
 
     def get_queryset(self):
         findings = get_authorized_findings(

@@ -29,6 +29,11 @@ from dojo.models import (
     Vulnerability_Id_Template,
     GeneralSettings
 )
+from dojo.engine_tools.helpers import (
+    calculate_priority_epss_kev_finding,
+    get_severity_risk_map,
+    get_risk_priority_epss_kev_data,
+)
 from dojo.api_v2.api_error import ApiError
 from dojo.notes.helper import delete_related_notes
 from dojo.utils import get_current_user, mass_model_updater, to_str_typed, get_product
@@ -57,6 +62,7 @@ EXPIRED_TRANSFERED_FINDINGS_QUERY = Q(risk_status="Transfer Expired")
 WHITELISTED_FINDINGS_QUERY = Q(risk_status="On Whitelist")
 BLACKLISTED_FINDINGS_QUERY = Q(risk_status="On Blacklist")
 ZERODAY_FINDINGS_QUERY = Q(risk_status="On ZeroDay")
+CVE_PRIORITY_PATTERN = re.compile(r"^CVE-\d{4}-\d+")
 
 
 # this signal is triggered just before a finding is getting saved
@@ -665,6 +671,41 @@ def add_endpoints(new_finding, form):
         _eps, _created = Endpoint_Status.objects.get_or_create(
             finding=new_finding,
             endpoint=endpoint, defaults={"date": form.cleaned_data["date"] or timezone.now()})
+
+
+def apply_priority(finding: Finding, vulnerability_ids) -> Finding:
+        if (
+            GeneralSettings.get_value(
+                "ENABLE_UPDATE_PRIORITY_EPSS_KEV_ON_IMPORT_SCAN", False
+            )
+            is False
+        ):
+            return finding
+
+        cve_candidate = finding.cve or (vulnerability_ids[0] if vulnerability_ids else None)
+        if cve_candidate and not finding.cve:
+            finding.cve = cve_candidate
+
+        df_risk_score = None
+        epss_dict = None
+        kev_dict = None
+        if cve_candidate and CVE_PRIORITY_PATTERN.match(cve_candidate):
+            df_risk_score, epss_dict, kev_dict = get_risk_priority_epss_kev_data()
+
+        priority, epss_score, epss_percentile, known_exploited, ransomware_used, kev_date_added, _ = calculate_priority_epss_kev_finding(
+            finding,
+            get_severity_risk_map(),
+            df_risk_score,
+            epss_dict,
+            kev_dict,
+        )
+        finding.priority = priority
+        finding.epss_score = epss_score
+        finding.epss_percentile = epss_percentile
+        finding.known_exploited = known_exploited
+        finding.ransomware_used = ransomware_used
+        finding.kev_date_added = kev_date_added
+        return finding
 
 
 def save_vulnerability_ids(finding, vulnerability_ids):
