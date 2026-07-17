@@ -27,9 +27,9 @@
         {% endif %}
           <td>
             {% if finding.title %}
-                <a rel="noopener noreferrer" title="{{ finding.title }}" href="{% url 'view_finding' finding.id %}">{{ finding.title|truncatechars_html:60 }}</a>
+                <a rel="noopener noreferrer" title="{{ finding.title }}">{{ finding.title|truncatechars_html:60 }}</a>
             {% else %}
-                <a rel="noopener noreferrer" title="{{ finding.id }}" href="{% url 'view_finding' finding.id %}">{{ finding.id }}</a>
+                <a rel="noopener noreferrer" title="{{ finding.id }}">{{ finding.id }}</a>
             {% endif %}
           </td>
           <td>

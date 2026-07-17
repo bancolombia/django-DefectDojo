@@ -468,7 +468,7 @@
                                 {% if not forloop.last %}, {% endif %}
                             {% endfor %}
                         </td>
-                        <td><a rel="noopener noreferrer" href="{% url 'view_finding' finding.id %}"
+                        <td><a rel="noopener noreferrer"
                                title="{{ finding.title }}">{{ finding.title|truncatechars_html:140 }}</a></td>
                         <td>{{ finding.date }}</td>
                         <td>{{ finding|finding_display_status}}</td>
