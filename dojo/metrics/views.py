@@ -259,7 +259,7 @@ def metrics_devsecops(request: HttpRequest) -> HttpResponse:
     page_name = _('Metrics DevSecOps')
     role = Role.objects.get(id=Roles.Maintainer)
     user = request.user.id
-    add_breadcrumb(title=page_name, top_level=not len(request.GET), request=request)
+    add_breadcrumb(title=page_name, top_level=True, request=request)
     return render(request, 'dojo/metrics_devsecops.html', {
        'name': page_name,
        'grafana_url': settings.GRAFANA_URL,
@@ -277,7 +277,7 @@ def metrics_panel_admin(request: HttpRequest) -> HttpResponse:
     cookie_csrftoken = get_token(request)
     cookie_sessionid = request.COOKIES.get('sessionid', '')
     base_params = f"?csrftoken={cookie_csrftoken}&sessionid={cookie_sessionid}"
-    add_breadcrumb(title=page_name, top_level=not len(request.GET), request=request)
+    add_breadcrumb(title=page_name, top_level=True, request=request)
     return render(request, 'dojo/generic_view.html', {
         'actions': page_name,
         'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/metrics/panel-metrics{base_params}",
@@ -290,7 +290,7 @@ def metrics_panel_tenable(request: HttpRequest) -> HttpResponse:
     cookie_csrftoken = get_token(request)
     cookie_sessionid = request.COOKIES.get('sessionid', '')
     base_params = f"?csrftoken={cookie_csrftoken}&sessionid={cookie_sessionid}"
-    add_breadcrumb(title=page_name, top_level=not len(request.GET), request=request)
+    add_breadcrumb(title=page_name, top_level=True, request=request)
     return render(request, 'dojo/generic_view.html', {
         'actions': page_name,
         'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/metrics/tenable{base_params}",
