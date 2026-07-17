@@ -59,7 +59,7 @@
                     </span>
                 </div>
             </div>
-            {% if hc_requests %}
+            {% if has_hc_requests %}
             <div class="panel panel-default table-responsive">
                 <div class="panel-heading"><strong>Postulated Requests</strong></div>
                 <table id="hc-requests" class="tablesorter-bootstrap table table-condensed table-striped">
@@ -107,6 +107,9 @@
                         {% endfor %}
                     </tbody>
                 </table>
+                <div class="clearfix">
+                    {% include "dojo/paging_snippet.html" with page=postulated_requests prefix="postulated_" page_size=True %}
+                </div>
             </div>
             <div class="panel panel-default table-responsive">
                 <div class="panel-heading"><strong>Already in Hacking Continuous - Review Requests</strong></div>
@@ -161,9 +164,9 @@
                         {% endfor %}
                     </tbody>
                 </table>
-            </div>
-            <div class="clearfix">
-                {% include "dojo/paging_snippet.html" with page=hc_requests page_size=True %}
+                <div class="clearfix">
+                    {% include "dojo/paging_snippet.html" with page=already_in_hc_requests prefix="already_" page_size=True %}
+                </div>
             </div>
             {% else %}
                 No HC participation requests found.
