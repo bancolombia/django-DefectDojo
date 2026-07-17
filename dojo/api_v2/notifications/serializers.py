@@ -1,9 +1,11 @@
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import EmailValidator
 from rest_framework import serializers
 
 
 class SerializerEmailNotificationRiskAcceptance(serializers.Serializer):
     recipients = serializers.ListField(child=serializers.CharField(), required=True)
-    copy = serializers.EmailField(required=False, allow_blank=True)
+    copy = serializers.CharField(required=False, allow_blank=True)
     subject = serializers.CharField(required=True, max_length=255)
     event = serializers.CharField(required=False, default="risk_acceptance")
     title = serializers.CharField(required=False, allow_blank=True, max_length=255)
@@ -23,6 +25,27 @@ class SerializerEmailNotificationRiskAcceptance(serializers.Serializer):
     engagement_id = serializers.IntegerField(required=False, allow_null=True)
     finding_id = serializers.IntegerField(required=False, allow_null=True)
 
+    def validate_copy(self, value):
+        if not value:
+            return value
+
+        validator = EmailValidator(message="Enter a valid email address.")
+        invalid_emails = []
+        for email in value.split(","):
+            email = email.strip()
+            if not email:
+                continue
+            try:
+                validator(email)
+            except DjangoValidationError:
+                invalid_emails.append(email)
+
+        if invalid_emails:
+            raise serializers.ValidationError(
+                f"Enter a valid email address for: {', '.join(invalid_emails)}",
+            )
+
+        return value
 
     def validate(self, attrs):
         event = attrs.get("event")
