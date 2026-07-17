@@ -2240,38 +2240,6 @@ class Test(models.Model):
                 "url": reverse("view_test", args=(self.id,))}]
         return bc
 
-    def save(self, *args, **kwargs):
-        """Override save to detect engagement changes.
-
-        If the Test's engagement is changed, propagate the new engagement
-        name to the `service` field of all Findings belonging to this Test.
-        Uses a queryset `update()` for efficiency and to avoid triggering
-        individual model save hooks.
-        """
-        # determine previous engagement id (if any)
-        previous_engagement_id = None
-        if self.pk:
-            previous_engagement_id = (
-                Test.objects.filter(pk=self.pk).values_list("engagement_id", flat=True).first()
-            )
-
-        super().save(*args, **kwargs)
-
-        # If engagement changed, update findings' service field
-        try:
-            new_engagement_id = self.engagement_id
-            if previous_engagement_id is None or previous_engagement_id != new_engagement_id:
-                # import model dynamically to avoid ordering/import issues
-                from django.apps import apps
-
-                Finding = apps.get_model("dojo", "Finding")
-                new_service_value = self.engagement.name if self.engagement else None
-                if new_service_value is not None:
-                    Finding.objects.filter(test=self).update(service=new_service_value)
-        except Exception:
-            # avoid breaking save on unexpected errors; log for debugging
-            logger.exception("Failed to propagate engagement name to findings for Test id %s", getattr(self, "id", None))
-
     def copy(self, engagement=None):
         copy = _copy_model_util(self)
         # Save the necessary ManyToMany relationships

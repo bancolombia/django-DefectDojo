@@ -2404,6 +2404,23 @@ class TestsViewSet(
             .distinct()
         )
 
+    def perform_update(self, serializer):
+        # Capture the engagement before saving; this is already in memory
+        # (no extra query) since the instance was fetched by get_object().
+        previous_engagement_id = serializer.instance.engagement_id
+
+        updated_test = serializer.save()
+
+        # If the engagement changed via this API update, propagate the new
+        # engagement name to the `service` field of all Findings on this Test.
+        if previous_engagement_id != updated_test.engagement_id:
+            try:
+                new_service_value = updated_test.engagement.name if updated_test.engagement else None
+                if new_service_value is not None:
+                    Finding.objects.filter(test=updated_test).update(service=new_service_value)
+            except Exception:
+                logger.exception("Failed to propagate engagement name to findings for Test id %s", getattr(updated_test, "id", None))
+
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
         if get_setting("ASYNC_OBJECT_DELETE"):
