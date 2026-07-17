@@ -935,7 +935,9 @@ class FindingViewSet(
 
     def perform_create(self, serializer):
         """Handle create via API: save, then recalculate and persist priority."""
-        # Save initial instance
+        # Save initial instance. Any JIRA push requested by the client (or
+        # required by the JIRA project's push_all_issues setting) is already
+        # handled inside FindingCreateSerializer.create().
         instance = serializer.save()
 
         # After saving via API, recalculate priority if applicable.
@@ -950,17 +952,10 @@ class FindingViewSet(
 
             updated_finding = finding_helper.apply_priority(instance, vulnerability_ids)
             if updated_finding is not None:
-                # Determine if we should push to JIRA as part of the save (respect product config)
-                try:
-                    jira_project = jira_helper.get_jira_project(updated_finding)
-                    push_to_jira_req = serializer.validated_data.get("push_to_jira")
-                    push = False
-                    if get_system_setting("enable_jira") and jira_project:
-                        push = bool(push_to_jira_req or jira_project.push_all_issues)
-                except Exception:
-                    push = False
-
-                updated_finding.save(push_to_jira=push)
+                # Do NOT pass push_to_jira here: the push already happened (or
+                # correctly didn't) above. Re-deriving and re-pushing here would
+                # cause a duplicate/unintended push to JIRA on every creation.
+                updated_finding.save()
         except Exception:
             logger.exception("Error applying priority after API create for Finding instance %s", getattr(serializer.instance, "id", None))
 
