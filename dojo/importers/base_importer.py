@@ -321,6 +321,19 @@ class BaseImporter(ImporterOptions):
             max_test_start_date = make_aware(max_test_start_date)
         self.test.target_end = max_test_start_date
 
+    def update_engagement_status(self):
+        """
+        Ensure the engagement associated with the test being imported/reimported
+        is marked as active and in progress. This is done because an import or
+        reimport is a clear signal that work is happening on the engagement, so
+        it should not be left in a stale/inactive state.
+        """
+        engagement = self.test.engagement
+        if engagement.status != "In Progress":
+            engagement.status = "In Progress"
+        if not engagement.active:
+            engagement.active = True
+
     def update_test_tags(self):
         """
         Update the list of tags on the test if they are supplied
@@ -874,9 +887,13 @@ class BaseImporter(ImporterOptions):
                 ),
             )
     @app.task
-    def update_priority_epss_kev(finding_ids: list[int], test) -> None:
+    def update_priority_epss_kev(finding_ids: list[int], test_id: int) -> None:
         """
         Get priority, EPSS score and KEV status update for a list of finding ids
+
+        Note: only the test id is accepted here (instead of the full Test instance) to
+        avoid pickling/serializing the Test object - and any related objects cached on
+        it (engagement, product, ...) - into the celery broker message.
         """
         df_risk_score = None
         epss_dict = None
@@ -924,7 +941,8 @@ class BaseImporter(ImporterOptions):
         findings_to_update = []
         total_processed = 0
 
-        enabled_azure_devops_sprint_sla_start_date = azure_devops_sprint_sla_start_date_enabled(test)
+        test = Test.objects.filter(id=test_id).first()
+        enabled_azure_devops_sprint_sla_start_date = bool(test) and azure_devops_sprint_sla_start_date_enabled(test)
         next_sprint_start_date = None
         if enabled_azure_devops_sprint_sla_start_date:
             logger.info("IMPORT_SCAN: Azure DevOps Sprint SLA Start Date is enabled, fetching next sprint start date from cache")

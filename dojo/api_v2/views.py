@@ -149,7 +149,6 @@ from dojo.models import (
     Product_Type_Member,
     Question,
     Regulation,
-    Risk_Acceptance,
     Role,
     SLA_Configuration,
     Sonarqube_Issue,
@@ -911,7 +910,54 @@ class FindingViewSet(
         if get_system_setting("enable_jira") and jira_project:
             push_to_jira = push_to_jira or jira_project.push_all_issues
 
+        # Save the serializer first
         serializer.save(push_to_jira=push_to_jira)
+
+        # After saving via API, recalculate priority if applicable.
+        # Extract vulnerability_ids from validated data if provided by the client.
+        try:
+            from dojo.finding import helper as finding_helper
+
+            vuln_data = serializer.validated_data.get("vulnerability_ids")
+            if vuln_data is not None:
+                # vuln_data is a list of dicts like {"vulnerability_id": "CVE-..."}
+                vulnerability_ids = [v.get("vulnerability_id") for v in vuln_data if v.get("vulnerability_id")]
+            else:
+                vulnerability_ids = None
+
+            # apply_priority updates the in-memory finding object; persist changes
+            updated_finding = finding_helper.apply_priority(serializer.instance, vulnerability_ids)
+            # save only if apply_priority modified the model
+            if updated_finding is not None:
+                updated_finding.save()
+        except Exception:
+            logger.exception("Error applying priority after API update for Finding id %s", getattr(serializer.instance, "id", None))
+
+    def perform_create(self, serializer):
+        """Handle create via API: save, then recalculate and persist priority."""
+        # Save initial instance. Any JIRA push requested by the client (or
+        # required by the JIRA project's push_all_issues setting) is already
+        # handled inside FindingCreateSerializer.create().
+        instance = serializer.save()
+
+        # After saving via API, recalculate priority if applicable.
+        try:
+            from dojo.finding import helper as finding_helper
+
+            vuln_data = serializer.validated_data.get("vulnerability_ids")
+            if vuln_data is not None:
+                vulnerability_ids = [v.get("vulnerability_id") for v in vuln_data if v.get("vulnerability_id")]
+            else:
+                vulnerability_ids = None
+
+            updated_finding = finding_helper.apply_priority(instance, vulnerability_ids)
+            if updated_finding is not None:
+                # Do NOT pass push_to_jira here: the push already happened (or
+                # correctly didn't) above. Re-deriving and re-pushing here would
+                # cause a duplicate/unintended push to JIRA on every creation.
+                updated_finding.save()
+        except Exception:
+            logger.exception("Error applying priority after API create for Finding instance %s", getattr(serializer.instance, "id", None))
 
     def get_queryset(self):
         findings = get_authorized_findings(
@@ -2357,6 +2403,23 @@ class TestsViewSet(
             .prefetch_related("notes", "files")
             .distinct()
         )
+
+    def perform_update(self, serializer):
+        # Capture the engagement before saving; this is already in memory
+        # (no extra query) since the instance was fetched by get_object().
+        previous_engagement_id = serializer.instance.engagement_id
+
+        updated_test = serializer.save()
+
+        # If the engagement changed via this API update, propagate the new
+        # engagement name to the `service` field of all Findings on this Test.
+        if previous_engagement_id != updated_test.engagement_id:
+            try:
+                new_service_value = updated_test.engagement.name if updated_test.engagement else None
+                if new_service_value is not None:
+                    Finding.objects.filter(test=updated_test).update(service=new_service_value)
+            except Exception:
+                logger.exception("Failed to propagate engagement name to findings for Test id %s", getattr(updated_test, "id", None))
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()

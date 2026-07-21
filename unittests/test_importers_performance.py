@@ -165,7 +165,7 @@ class TestDojoImporterPerformance(DojoTestCase):
     @override_settings(TAGULOUS_DISABLE_SYNC_COUNT_UPDATES=True)
     def test_import_reimport_reimport_performance(self):
         self.import_reimport_performance(
-            expected_num_queries1=672,
+            expected_num_queries1=679,
             expected_num_async_tasks1=10,
             expected_num_queries2=628,
             expected_num_async_tasks2=22,
@@ -185,7 +185,7 @@ class TestDojoImporterPerformance(DojoTestCase):
         so we patch the we_want_async decorator to always return False.
         """
         self.import_reimport_performance(
-            expected_num_queries1=672,
+            expected_num_queries1=679,
             expected_num_async_tasks1=10,
             expected_num_queries2=628,
             expected_num_async_tasks2=22,
@@ -210,7 +210,7 @@ class TestDojoImporterPerformance(DojoTestCase):
         DojoSytemSettingsMiddleware.load()
 
         self.import_reimport_performance(
-            expected_num_queries1=692,
+            expected_num_queries1=699,
             expected_num_async_tasks1=15,
             expected_num_queries2=653,
             expected_num_async_tasks2=28,

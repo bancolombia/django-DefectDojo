@@ -274,10 +274,10 @@
                                         <th>Title / Type</th>
                                         <th>Date</th>
                                         <th>Lead</th>
-                                       {% if "RENDER_OLD_VIEWS"|general_settings_get_value:"True" %} 
-                                            <th>Total Findings</th> 
-                                            <th>Active (Verified / Fixable)</th>
-                                            <th>Mitigated</th>
+                                        <th>Total Findings</th> 
+                                        <th>Active (Verified / Fixable)</th>
+                                        <th>Mitigated</th>
+                                        {% if "RENDER_OLD_VIEWS"|general_settings_get_value:"True" %} 
                                             <th>Duplicates</th>
                                         {% endif %}
                                         <th>Notes</th>
@@ -370,15 +370,15 @@
                                                     {{ test.lead }}
                                                 {% endif %}
                                             </td>
-                                             {% if "RENDER_OLD_VIEWS"|general_settings_get_value:"True" %}
-                                            <td><a rel="noopener noreferrer" href="#">{{ test.count_findings_test_all }}</a></td>
+                                            <td><a rel="noopener noreferrer">{{ test.count_findings_test_all }}</a></td>
                                             <td>
-                                                <a rel="noopener noreferrer" href="#">{{ test.count_findings_test_active }}</a>&nbsp;
-                                                (<a rel="noopener noreferrer" href="#">{{ test.count_findings_test_active_verified }}</a>
-                                                / <a rel="noopener noreferrer" href="#">{{ test.count_findings_test_active_fix_available }}</a>)
+                                                <a rel="noopener noreferrer">{{ test.count_findings_test_active }}</a>&nbsp;
+                                                (<a rel="noopener noreferrer">{{ test.count_findings_test_active_verified }}</a>
+                                                / <a rel="noopener noreferrer">{{ test.count_findings_test_active_fix_available }}</a>)
                                             </td>
-                                            <td><a rel="noopener noreferrer" href="#">{{ test.count_findings_test_mitigated }}</a></td>
-                                            <td><a rel="noopener noreferrer" href="#">{{ test.count_findings_test_dups }}</a></td>
+                                            <td><a rel="noopener noreferrer">{{ test.count_findings_test_mitigated }}</a></td>
+                                            {% if "RENDER_OLD_VIEWS"|general_settings_get_value:"True" %}
+                                            <td><a rel="noopener noreferrer">{{ test.count_findings_test_dups }}</a></td>
                                             {% endif %}
                                             <td class="nowrap">
                                                 {% if test.notes.count %}

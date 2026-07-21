@@ -1344,6 +1344,6 @@ def validate_type_file(filename, type=None):
 @register.filter()
 def render_severity_and_priority(finding):
     severity = finding.severity
-    if GeneralSettings.get_value("PRIORITIZATION_MODEL_SEVERITY", "False"):
+    if GeneralSettings.get_value("PRIORITIZATION_MODEL_PRIORITY", "False"):
         severity = priority_display_status(finding)
     return severity

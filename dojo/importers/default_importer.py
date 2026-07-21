@@ -119,6 +119,8 @@ class DefaultImporter(BaseImporter, DefaultImporterOptions):
         self.update_timestamps()
         # Update the test meta
         self.update_test_meta()
+        # Ensure the engagement is marked as active and in progress
+        self.update_engagement_status()
         # Save the test and engagement for changes to take affect
         self.test.save()
         self.test.engagement.save()
@@ -151,7 +153,7 @@ class DefaultImporter(BaseImporter, DefaultImporterOptions):
         logger.debug("IMPORT_SCAN: Updating Test progress")
         self.update_test_progress()
         finding_ids = [finding.id for finding in new_findings]
-        BaseImporter.update_priority_epss_kev.apply_async(args=(finding_ids, self.test))
+        BaseImporter.update_priority_epss_kev.apply_async(args=(finding_ids, self.test.id))
         logger.debug("IMPORT_SCAN: Done")
         return self.test, 0, len(new_findings), len(closed_findings), 0, 0, test_import_history
 
