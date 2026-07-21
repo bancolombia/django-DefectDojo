@@ -321,6 +321,19 @@ class BaseImporter(ImporterOptions):
             max_test_start_date = make_aware(max_test_start_date)
         self.test.target_end = max_test_start_date
 
+    def update_engagement_status(self):
+        """
+        Ensure the engagement associated with the test being imported/reimported
+        is marked as active and in progress. This is done because an import or
+        reimport is a clear signal that work is happening on the engagement, so
+        it should not be left in a stale/inactive state.
+        """
+        engagement = self.test.engagement
+        if engagement.status != "In Progress":
+            engagement.status = "In Progress"
+        if not engagement.active:
+            engagement.active = True
+
     def update_test_tags(self):
         """
         Update the list of tags on the test if they are supplied

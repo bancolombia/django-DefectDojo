@@ -129,6 +129,8 @@ class DefaultReImporter(BaseImporter, DefaultReImporterOptions):
         self.update_test_meta()
         # Update the test tags
         self.update_test_tags()
+        # Ensure the engagement is marked as active and in progress
+        self.update_engagement_status()
         # Save the test and engagement for changes to take affect
         self.test.save()
         self.test.engagement.save()
