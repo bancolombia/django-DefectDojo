@@ -2762,7 +2762,7 @@ class Finding(models.Model):
                                         on_delete=models.CASCADE)
     unique_id_from_tool = models.CharField(null=True,
                                            blank=True,
-                                           max_length=2000,
+                                           max_length=3000,
                                            verbose_name=_("Unique ID from tool"),
                                            help_text=_("Vulnerability technical id from the source tool. Allows to track unique vulnerabilities over time across subsequent scans."))
     vuln_id_from_tool = models.CharField(null=True,
