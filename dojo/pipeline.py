@@ -8,6 +8,7 @@ from django.conf import settings
 from social_core.backends.azuread_tenant import AzureADTenantOAuth2
 from social_core.backends.google import GoogleOAuth2
 
+from dojo.templatetags.authorization_tags import is_in_group
 from dojo.authorization.roles_permissions import Permissions, Roles
 from dojo.models import Dojo_Group, Dojo_Group_Member, Product, Product_Member, Product_Type,Product_Type_Member,Global_Role, Role, UserContactInfo
 from social_django.models import UserSocialAuth
@@ -192,7 +193,7 @@ def update_product_type_azure_devops(backend, uid, user=None, social=None, *args
 
             # Assign global role
             target_global_role = None
-            if office_location in settings.AZURE_DEVOPS_OFFICES_LOCATION.split(",")[1]:
+            if office_location in settings.AZURE_DEVOPS_OFFICES_LOCATION.split(",")[1] and is_in_group(user, settings.REVIEWER_GROUP_NAME):
                 target_global_role = Role.objects.get(id=Roles.Maintainer)
             elif office_location in settings.AZURE_DEVOPS_OFFICES_LOCATION.split(",")[2]:
                 target_global_role = Role.objects.get(id=Roles.Reader)
