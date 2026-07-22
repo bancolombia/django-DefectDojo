@@ -205,13 +205,21 @@
                         {% if hc_participation.status in "Pending,Approved,Rejected,Reviewed,Cancelled" %}
                             <span style="background-color: 
                                 {% if hc_participation.status == 'Pending' %}#1B30DE
+                                {% elif hc_participation.was_in_hacking_continuous and hc_participation.status == 'Approved' %}#d11d38
+                                {% elif hc_participation.was_in_hacking_continuous and hc_participation.status == 'Rejected' %}#096C11
                                 {% elif hc_participation.status == 'Approved' %}#096C11
                                 {% elif hc_participation.status == 'Rejected' %}#d11d38
                                 {% elif hc_participation.status == 'Cancelled' %}#6c757d
                                 {% else %}#b97a0c
                                 {% endif %}" 
                                 class="pass_fail Pass">
-                                {{ hc_participation.status }}
+                                {% if hc_participation.was_in_hacking_continuous and hc_participation.status == 'Approved' %}
+                                    Removal Approved
+                                {% elif hc_participation.was_in_hacking_continuous and hc_participation.status == 'Rejected' %}
+                                    Continues in HC
+                                {% else %}
+                                    {{ hc_participation.status }}
+                                {% endif %}
                             </span>
                         {% else %}
                             {{ hc_participation.status }}
@@ -310,13 +318,21 @@
                                 <p>
                                     {% if hc_participation.final_status %}
                                         {% if hc_participation.final_status == 'Approved' %}
-                                            <pre class="text-success"><strong>Approved</strong></pre>
+                                            {% if hc_participation.was_in_hacking_continuous %}
+                                                <pre class="text-danger"><strong>Removal Approved</strong></pre>
+                                            {% else %}
+                                                <pre class="text-success"><strong>Approved</strong></pre>
+                                            {% endif %}
                                             <br>
                                             <pre>{{ hc_participation.approved_at|date:"d M Y H:i" }}</pre>
                                             <br>
                                             <pre><strong>By:</strong> {{ hc_participation.approved_by.username }}</pre>
                                         {% else %}
-                                            <pre class="text-danger"><strong>Rejected</strong></pre>
+                                            {% if hc_participation.was_in_hacking_continuous %}
+                                                <pre class="text-success"><strong>Continues in HC</strong></pre>
+                                            {% else %}
+                                                <pre class="text-danger"><strong>Rejected</strong></pre>
+                                            {% endif %}
                                             <br>
                                             <pre>{{ hc_participation.status_updated_at|date:"d M Y H:i" }}</pre>
                                             <br>

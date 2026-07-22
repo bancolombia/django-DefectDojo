@@ -38,12 +38,11 @@ def hc_participations(request: HttpRequest) -> HttpResponse:
     ).all().order_by("-create_date")
     
     filtered = HCParticipationFilter(request.GET, queryset=hc_requests)
-    paged_requests = get_page_items(request, filtered.qs, 25)
-    postulated_requests = [
-        hc for hc in paged_requests
-        if hc.recommendation in ("postulated", "postulated_manually")
-    ]
-    already_in_hc_requests = [hc for hc in paged_requests if hc.recommendation == "already_in_hc"]
+    postulated_qs = filtered.qs.filter(recommendation__in=("postulated", "postulated_manually"))
+    already_in_hc_qs = filtered.qs.filter(recommendation="already_in_hc")
+
+    postulated_requests = get_page_items(request, postulated_qs, 25, prefix="postulated_")
+    already_in_hc_requests = get_page_items(request, already_in_hc_qs, 25, prefix="already_")
     
     add_breadcrumb(
         title="HC Participation Requests",
@@ -52,7 +51,7 @@ def hc_participations(request: HttpRequest) -> HttpResponse:
     )
     
     return render(request, "dojo/hc_participation/list.html", {
-        "hc_requests": paged_requests,
+        "has_hc_requests": filtered.qs.exists(),
         "filtered": filtered,
         "name": "Hacking Continuous - Participation Requests",
         "postulated_requests": postulated_requests,
@@ -231,7 +230,7 @@ def approve_hc_participation_request(request: HttpRequest, hcid: str) -> HttpRes
     messages.add_message(
         request,
         messages.SUCCESS,
-        "Request approved successfully.",
+        "Removal approved successfully." if hc_participation.was_in_hacking_continuous else "Request approved successfully.",
         extra_tags="alert-success"
     )
     
@@ -269,7 +268,7 @@ def reject_hc_participation_request(request: HttpRequest, hcid: str) -> HttpResp
     messages.add_message(
         request,
         messages.SUCCESS,
-        "Request rejected.",
+        "Product continues in HC." if hc_participation.was_in_hacking_continuous else "Request rejected.",
         extra_tags="alert-success"
     )
     
