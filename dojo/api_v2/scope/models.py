@@ -30,3 +30,27 @@ class InputSecret(models.Model):
     key = models.CharField(max_length=255, null=True, blank=True)
     secret = models.TextField(null=True, blank=True)
     status = models.BooleanField(default=True)
+    
+class InputFlow(models.Model):
+    flowName = models.CharField(max_length=255)
+    engagement = models.ForeignKey("Engagement", on_delete=models.CASCADE,null=True, blank=True)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+class InputURL(models.Model):
+    flow = models.ForeignKey("InputFlow",related_name="urls",on_delete=models.CASCADE)
+    url = models.URLField(max_length=500)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+    
+class InputScenario(models.Model):
+
+    
+    url = models.ForeignKey("InputURL", related_name="scenarios", on_delete=models.CASCADE)
+    estimated_time = models.IntegerField(
+        verbose_name="estimated_time",
+        help_text="Enter the time in minutes",
+    )
+    designed_by = models.ForeignKey("Dojo_User", on_delete=models.SET_NULL, null=True, blank=True)
+    description = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=30, default="untested")

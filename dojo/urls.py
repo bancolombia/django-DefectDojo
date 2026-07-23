@@ -80,7 +80,7 @@ from dojo.api_v2.views import (
 from dojo.api_v2.risk_acceptance.views import RiskAcceptanceViewSet
 from dojo.api_v2.long_risk_acceptance.views import RiskAcceptanceEngagementViewSet, RiskAcceptanceExclusionRuleViewSet
 from dojo.api_v2.ia_recommendation.views import IArecommendationApiView
-from dojo.api_v2.scope.views import ScopeViewSet, InputSecretViewSet, InputFileViewSet
+from dojo.api_v2.scope.views import ScopeViewSet, InputSecretViewSet, InputFileViewSet, InputFlowViewSet, InputURLViewSet, InputScenarioViewSet
 from dojo.api_v2.general_settings.views import GeneralSettingsViewSet
 from dojo.api_v2.manager_cache.views import ManagerCacheApiView
 from dojo.api_v2.alerts.views import AlertViewSet
@@ -220,6 +220,9 @@ v2_api.register(r"input_file", InputFileViewSet, basename="input_file")
 v2_api.register(r"alerts", AlertViewSet, basename="alerts")
 v2_api.register(r"long_risk_acceptance", RiskAcceptanceEngagementViewSet, basename="long_risk_acceptance")
 v2_api.register(r"long_risk_acceptance_rule", RiskAcceptanceExclusionRuleViewSet, basename="long_risk_acceptance_rule")
+v2_api.register(r"input_flow", InputFlowViewSet, basename="input_flow")
+v2_api.register(r"input_url", InputURLViewSet, basename="input_url")
+v2_api.register(r"input_scenario",InputScenarioViewSet,basename="input_scenario")
 ur = []
 ur += dev_env_urls
 ur += endpoint_urls
