@@ -402,30 +402,44 @@ def _get_product_class_id_from_description(product):
     return None
 
 
-def create_manual_hc_postulation(product, user):
+def get_manual_hc_postulation_eligibility_error(product) -> str | None:
+    allowed_class_ids = list(getattr(settings, "HC_PARTICIPATION_POSTULATED_CLASSID", []))
+    product_class_id = _get_product_class_id_from_description(product)
+    if allowed_class_ids and product_class_id not in allowed_class_ids:
+        return (
+            "This product class_id is not allowed for HC postulation. "
+            f"Allowed class_id values: {', '.join(allowed_class_ids)}."
+        )
+
+    if is_product_in_hacking_continuous_from_requests(product):
+        return "This product is already in Hacking Continuous."
+
+    pending_postulation_exists = HCParticipation.objects.filter(
+        product=product,
+        status="Pending",
+        recommendation__in=("postulated", "postulated_manually"),
+    ).exists()
+    if pending_postulation_exists:
+        return "A pending HC postulation already exists for this product."
+
+    return None
+
+
+def create_manual_hc_postulation(product, user, criteria=None):
+    criteria = list(criteria or [])
+    if not criteria:
+        return None, "You must select at least one criterion to submit the manual postulation."
+
     with transaction.atomic():
         locked_product = Product.objects.select_for_update().get(pk=product.pk)
 
-        allowed_class_ids = list(getattr(settings, "HC_PARTICIPATION_POSTULATED_CLASSID", []))
-        product_class_id = _get_product_class_id_from_description(locked_product)
-        if allowed_class_ids and product_class_id not in allowed_class_ids:
-            return None, (
-                "This product class_id is not allowed for HC postulation. "
-                f"Allowed class_id values: {', '.join(allowed_class_ids)}."
-            )
-
-        pending_postulation_exists = HCParticipation.objects.filter(
-            product=locked_product,
-            status="Pending",
-        ).exists()
-        if pending_postulation_exists:
-            return None, "A pending HC postulation already exists for this product."
-
-        if is_product_in_hacking_continuous_from_requests(locked_product):
-            return None, "This product is already in Hacking Continuous."
+        eligibility_error = get_manual_hc_postulation_eligibility_error(locked_product)
+        if eligibility_error:
+            return None, eligibility_error
 
         batch_id = uuid.uuid4()
         requested_by = getattr(user, "username", "System")
+        criteria_text = "; ".join(criteria)
         hc_request = HCParticipation.objects.create(
             product=locked_product,
             recommendation="postulated_manually",
@@ -433,8 +447,12 @@ def create_manual_hc_postulation(product, user):
             was_in_hacking_continuous=False,
             security_posture_data={
                 "product_risk_posture_url": _build_product_risk_posture_url(locked_product.id),
+                "manual_postulation_criteria": criteria,
             },
-            reason=f"Manual postulation created from Product view by {requested_by}.",
+            reason=(
+                f"Manual postulation created from Product view by {requested_by}. "
+                f"Criteria met: {criteria_text}."
+            ),
             status="Pending",
             created_by=user,
             batch_id=batch_id,
@@ -589,6 +607,7 @@ def get_latest_hc_evaluation_for_product(product_id: int) -> dict:
     except Exception as e:
         logger.exception(f"Error getting latest HC evaluation for product {product_id}: {e}")
         return None
+
 
 
 

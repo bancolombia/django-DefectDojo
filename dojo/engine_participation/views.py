@@ -3,9 +3,10 @@ from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.core.exceptions import PermissionDenied
-from django.views.decorators.http import require_POST
+from django.utils.translation import gettext as _
+from django.views.decorators.http import require_POST, require_http_methods
 
-from dojo.utils import get_page_items, add_breadcrumb
+from dojo.utils import get_page_items, add_breadcrumb, Product_Tab
 from dojo.templatetags.authorization_tags import is_in_group
 from dojo.models import Product
 from dojo.engine_participation.models import (
@@ -13,12 +14,13 @@ from dojo.engine_participation.models import (
     HCParticipationDiscussion,
 )
 from dojo.engine_participation.filters import HCParticipationFilter
-from dojo.engine_participation.forms import HCParticipationDiscussionForm
+from dojo.engine_participation.forms import HCManualPostulationForm, HCParticipationDiscussionForm
 from dojo.engine_participation.helpers import (
     HCConstants,
     InvalidHCParticipationTransition,
     approve_hc_participation,
     create_manual_hc_postulation,
+    get_manual_hc_postulation_eligibility_error,
     reject_hc_participation,
     has_valid_comments,
     get_hc_approvers_members,
@@ -305,31 +307,61 @@ def run_hc_evaluation(request: HttpRequest) -> HttpResponse:
     return redirect("hc_participations")
 
 
-@require_POST
+@require_http_methods(["GET", "POST"])
 def create_manual_hc_postulation_request(request: HttpRequest, pid: int) -> HttpResponse:
     can_create_manual_postulation = (
-        is_in_group(request.user, HCConstants.REVIEWERS_GROUP.value)
+        request.user.is_superuser
+        or request.user.is_staff
+        or is_in_group(request.user, HCConstants.REVIEWERS_GROUP.value)
         or is_in_group(request.user, HCConstants.APPROVERS_GROUP.value)
     )
     if not can_create_manual_postulation:
         raise PermissionDenied
 
     product = get_object_or_404(Product, pk=pid)
-    _hc_request, error_message = create_manual_hc_postulation(product, request.user)
 
-    if error_message:
-        messages.add_message(
-            request,
-            messages.INFO,
-            error_message,
-            extra_tags="alert-info"
-        )
+    if request.method == "POST":
+        form = HCManualPostulationForm(request.POST)
+        if form.is_valid():
+            _hc_request, error_message = create_manual_hc_postulation(
+                product, request.user, form.cleaned_data["criteria"]
+            )
+
+            if error_message:
+                messages.add_message(
+                    request,
+                    messages.INFO,
+                    error_message,
+                    extra_tags="alert-info"
+                )
+            else:
+                messages.add_message(
+                    request,
+                    messages.SUCCESS,
+                    "Manual HC postulation created successfully.",
+                    extra_tags="alert-success"
+                )
+
+            return redirect("view_product", pid=pid)
     else:
-        messages.add_message(
-            request,
-            messages.SUCCESS,
-            "Manual HC postulation created successfully.",
-            extra_tags="alert-success"
-        )
+        eligibility_error = get_manual_hc_postulation_eligibility_error(product)
+        if eligibility_error:
+            messages.add_message(
+                request,
+                messages.INFO,
+                eligibility_error,
+                extra_tags="alert-info"
+            )
+            return redirect("view_product", pid=pid)
 
-    return redirect("view_product", pid=pid)
+        form = HCManualPostulationForm()
+
+
+    product_tab = Product_Tab(product, title=_("Manual HC Postulation"), tab="overview")
+    add_breadcrumb(parent=product, title=_("Manual HC Postulation"), top_level=False, request=request)
+
+    return render(request, "dojo/hc_participation/manual_postulation_form.html", {
+        "product": product,
+        "product_tab": product_tab,
+        "form": form,
+    })

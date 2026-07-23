@@ -1,7 +1,7 @@
 """
 Tests for HC (Hacking Continuo) Participation module.
 """
-from django.test import TestCase, override_settings
+from django.test import TestCase, override_settings, Client
 from django.urls import reverse
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
@@ -17,9 +17,13 @@ from dojo.engine_participation.models import (
     HCParticipationDiscussion,
     HCParticipationLog,
 )
+from dojo.engine_participation.filters import HCParticipationFilter
+from dojo.engine_participation.forms import HCManualPostulationForm
 from dojo.engine_participation.helpers import (
     run_hc_participation_evaluation,
     get_latest_hc_evaluation_for_product,
+    get_manual_hc_postulation_eligibility_error,
+    create_manual_hc_postulation,
     InvalidHCParticipationTransition,
     approve_hc_participation,
     mark_hc_participation_reviewed,
@@ -593,3 +597,428 @@ class HCParticipationViewsTest(TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.data["status"], "forbidden")
+
+
+class HCManualPostulationFormTest(TestCase):
+    """Tests for HCManualPostulationForm"""
+
+    @override_settings(HC_MANUAL_POSTULATION_CRITERIA=["Criterion A", "Criterion B"])
+    def test_choices_loaded_from_settings(self):
+        """Form choices must come from settings.HC_MANUAL_POSTULATION_CRITERIA"""
+        form = HCManualPostulationForm()
+
+        self.assertEqual(
+            list(form.fields["criteria"].choices),
+            [("Criterion A", "Criterion A"), ("Criterion B", "Criterion B")],
+        )
+
+    @override_settings(HC_MANUAL_POSTULATION_CRITERIA=["Criterion A", "Criterion B"])
+    def test_requires_at_least_one_criterion(self):
+        """Submitting the form without any criteria selected must be invalid"""
+        form = HCManualPostulationForm(data={})
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("criteria", form.errors)
+
+    @override_settings(HC_MANUAL_POSTULATION_CRITERIA=["Criterion A", "Criterion B"])
+    def test_valid_with_one_criterion_selected(self):
+        """Selecting a single criterion must be enough to make the form valid"""
+        form = HCManualPostulationForm(data={"criteria": ["Criterion A"]})
+
+        self.assertTrue(form.is_valid())
+        self.assertEqual(form.cleaned_data["criteria"], ["Criterion A"])
+
+    @override_settings(HC_MANUAL_POSTULATION_CRITERIA=["Criterion A", "Criterion B"])
+    def test_valid_with_multiple_criteria_selected(self):
+        """Selecting multiple criteria must be preserved in cleaned_data"""
+        form = HCManualPostulationForm(data={"criteria": ["Criterion A", "Criterion B"]})
+
+        self.assertTrue(form.is_valid())
+        self.assertEqual(form.cleaned_data["criteria"], ["Criterion A", "Criterion B"])
+
+    @override_settings(HC_MANUAL_POSTULATION_CRITERIA=["Criterion A", "Criterion B"])
+    def test_invalid_choice_not_in_settings_is_rejected(self):
+        """A criterion that is not part of the configured choices must be rejected"""
+        form = HCManualPostulationForm(data={"criteria": ["Not a configured criterion"]})
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("criteria", form.errors)
+
+
+class ManualHCPostulationEligibilityTest(TestCase):
+    """Tests for get_manual_hc_postulation_eligibility_error"""
+    fixtures = ['dojo_testdata.json']
+
+    def setUp(self):
+        self.product = Product.objects.first()
+        self.product.description = "classid: BMC_APPLICATION"
+        self.product.save()
+        self.user = Dojo_User.objects.get(username="admin")
+        HCParticipation.objects.filter(product=self.product).delete()
+
+    @override_settings(HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"])
+    def test_eligible_product_returns_none(self):
+        """A product with no active requests and an allowed class_id is eligible"""
+        error = get_manual_hc_postulation_eligibility_error(self.product)
+
+        self.assertIsNone(error)
+
+    @override_settings(HC_PARTICIPATION_POSTULATED_CLASSID=["OTHER_CLASSID"])
+    def test_disallowed_classid_returns_error(self):
+        """A product whose class_id is not in the allowed list is not eligible"""
+        error = get_manual_hc_postulation_eligibility_error(self.product)
+
+        self.assertIsNotNone(error)
+        self.assertIn("class_id is not allowed", error)
+
+    @override_settings(HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"])
+    def test_pending_postulation_returns_error(self):
+        """A product with an existing pending postulation is not eligible"""
+        HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated_manually",
+            status="Pending",
+            created_by=self.user,
+        )
+
+        error = get_manual_hc_postulation_eligibility_error(self.product)
+
+        self.assertEqual(error, "A pending HC postulation already exists for this product.")
+
+    @override_settings(HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"])
+    def test_already_in_hc_returns_error(self):
+        """A product already in Hacking Continuous is not eligible"""
+        HCParticipation.objects.create(
+            product=self.product,
+            recommendation="already_in_hc",
+            status="Reviewed",
+            created_by=self.user,
+        )
+
+        error = get_manual_hc_postulation_eligibility_error(self.product)
+
+        self.assertEqual(error, "This product is already in Hacking Continuous.")
+
+    @override_settings(HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"])
+    def test_already_in_hc_with_pending_status_is_not_confused_with_pending_postulation(self):
+        """Regression test: an 'already_in_hc' record with status Pending must
+        be reported as 'already in HC', not as a pending postulation."""
+        HCParticipation.objects.create(
+            product=self.product,
+            recommendation="already_in_hc",
+            status="Pending",
+            created_by=self.user,
+        )
+
+        error = get_manual_hc_postulation_eligibility_error(self.product)
+
+        self.assertEqual(error, "This product is already in Hacking Continuous.")
+
+
+class CreateManualHCPostulationTest(TestCase):
+    """Tests for create_manual_hc_postulation"""
+    fixtures = ['dojo_testdata.json']
+
+    def setUp(self):
+        self.product = Product.objects.first()
+        self.product.description = "classid: BMC_APPLICATION"
+        self.product.business_criticality = "high"
+        self.product.save()
+        self.user = Dojo_User.objects.get(username="admin")
+        HCParticipation.objects.filter(product=self.product).delete()
+
+    def test_requires_at_least_one_criterion(self):
+        """No criteria provided must fail without hitting the database"""
+        hc_request, error = create_manual_hc_postulation(self.product, self.user, criteria=[])
+
+        self.assertIsNone(hc_request)
+        self.assertEqual(
+            error,
+            "You must select at least one criterion to submit the manual postulation.",
+        )
+        self.assertFalse(HCParticipation.objects.filter(product=self.product).exists())
+
+    @override_settings(HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"])
+    def test_creates_request_with_selected_criteria(self):
+        """A valid eligible product with criteria must create a Pending request
+        storing the criteria in security_posture_data and in the reason text"""
+        criteria = ["Criterion A", "Criterion B"]
+
+        hc_request, error = create_manual_hc_postulation(self.product, self.user, criteria=criteria)
+
+        self.assertIsNone(error)
+        self.assertIsNotNone(hc_request)
+        hc_request.refresh_from_db()
+        self.assertEqual(hc_request.recommendation, "postulated_manually")
+        self.assertEqual(hc_request.status, "Pending")
+        self.assertEqual(hc_request.created_by, self.user)
+        self.assertEqual(
+            hc_request.security_posture_data.get("manual_postulation_criteria"),
+            criteria,
+        )
+        self.assertIn("Criterion A", hc_request.reason)
+        self.assertIn("Criterion B", hc_request.reason)
+
+    @override_settings(HC_PARTICIPATION_POSTULATED_CLASSID=["OTHER_CLASSID"])
+    def test_does_not_create_request_when_classid_not_allowed(self):
+        """The product class_id validation must block creation of the request"""
+        hc_request, error = create_manual_hc_postulation(
+            self.product, self.user, criteria=["Criterion A"],
+        )
+
+        self.assertIsNone(hc_request)
+        self.assertIn("class_id is not allowed", error)
+        self.assertFalse(HCParticipation.objects.filter(product=self.product).exists())
+
+    @override_settings(HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"])
+    def test_does_not_create_request_when_pending_postulation_exists(self):
+        """An existing pending postulation must block creation of a new one"""
+        HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.user,
+        )
+
+        hc_request, error = create_manual_hc_postulation(
+            self.product, self.user, criteria=["Criterion A"],
+        )
+
+        self.assertIsNone(hc_request)
+        self.assertEqual(error, "A pending HC postulation already exists for this product.")
+        self.assertEqual(HCParticipation.objects.filter(product=self.product).count(), 1)
+
+    @override_settings(HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"])
+    def test_does_not_create_request_when_already_in_hc(self):
+        """A product already in Hacking Continuous must block creation of a new request"""
+        HCParticipation.objects.create(
+            product=self.product,
+            recommendation="already_in_hc",
+            status="Reviewed",
+            created_by=self.user,
+        )
+
+        hc_request, error = create_manual_hc_postulation(
+            self.product, self.user, criteria=["Criterion A"],
+        )
+
+        self.assertIsNone(hc_request)
+        self.assertEqual(error, "This product is already in Hacking Continuous.")
+        self.assertEqual(HCParticipation.objects.filter(product=self.product).count(), 1)
+
+
+class ManualHCPostulationViewTest(TestCase):
+    """Tests for the manual HC postulation view (GET criteria form / POST creation)"""
+    fixtures = ['dojo_testdata.json']
+
+    def setUp(self):
+        self.product = Product.objects.first()
+        self.product.description = "classid: BMC_APPLICATION"
+        self.product.save()
+        HCParticipation.objects.filter(product=self.product).delete()
+
+        self.admin = Dojo_User.objects.get(username="admin")
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+        self.url = reverse("create_manual_hc_postulation", args=[self.product.id])
+
+    def test_permission_denied_for_regular_user(self):
+        """A user without staff/superuser/reviewer/approver privileges cannot access the view"""
+        regular_user = Dojo_User.objects.create_user(
+            username="hc_regular_user",
+            email="hc_regular_user@test.com",
+            password="testpass123",
+        )
+        client = Client()
+        client.force_login(regular_user)
+
+        response = client.get(self.url)
+
+        self.assertEqual(response.status_code, 403)
+
+    @override_settings(HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"])
+    def test_get_renders_criteria_form_when_eligible(self):
+        """GET must render the criteria form when the product is eligible"""
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Manual HC Postulation")
+        self.assertContains(response, "Submit Manual Postulation")
+
+    @override_settings(HC_PARTICIPATION_POSTULATED_CLASSID=["OTHER_CLASSID"])
+    def test_get_redirects_when_classid_not_allowed(self):
+        """GET must redirect without showing the form when class_id is not allowed"""
+        response = self.client.get(self.url, follow=True)
+
+        self.assertRedirects(response, reverse("view_product", args=[self.product.id]))
+        page_messages = list(response.context["messages"])
+        self.assertTrue(any("class_id is not allowed" in str(m) for m in page_messages))
+
+    @override_settings(HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"])
+    def test_get_redirects_when_pending_postulation_exists(self):
+        """GET must redirect without showing the form when a pending postulation exists"""
+        HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.admin,
+        )
+
+        response = self.client.get(self.url, follow=True)
+
+        self.assertRedirects(response, reverse("view_product", args=[self.product.id]))
+        page_messages = list(response.context["messages"])
+        self.assertTrue(any("pending HC postulation already exists" in str(m) for m in page_messages))
+
+    @override_settings(HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"])
+    def test_get_redirects_when_already_in_hc(self):
+        """GET must redirect without showing the form when the product is already in HC"""
+        HCParticipation.objects.create(
+            product=self.product,
+            recommendation="already_in_hc",
+            status="Pending",
+            created_by=self.admin,
+        )
+
+        response = self.client.get(self.url, follow=True)
+
+        self.assertRedirects(response, reverse("view_product", args=[self.product.id]))
+        page_messages = list(response.context["messages"])
+        self.assertTrue(any("already in Hacking Continuous" in str(m) for m in page_messages))
+
+    @override_settings(
+        HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"],
+        HC_MANUAL_POSTULATION_CRITERIA=["Criterion A", "Criterion B"],
+    )
+    def test_post_without_criteria_shows_validation_error(self):
+        """POST without any criteria selected must re-render the form with an error"""
+        response = self.client.post(self.url, data={})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "You must select at least one criterion")
+        self.assertFalse(HCParticipation.objects.filter(product=self.product).exists())
+
+    @override_settings(
+        HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"],
+        HC_MANUAL_POSTULATION_CRITERIA=["Criterion A", "Criterion B"],
+    )
+    def test_post_with_criteria_creates_postulation_and_redirects(self):
+        """POST with at least one criterion must create the request and redirect"""
+        response = self.client.post(
+            self.url,
+            data={"criteria": ["Criterion A"]},
+            follow=True,
+        )
+
+        self.assertRedirects(response, reverse("view_product", args=[self.product.id]))
+        hc_request = HCParticipation.objects.get(product=self.product)
+        self.assertEqual(hc_request.recommendation, "postulated_manually")
+        self.assertEqual(
+            hc_request.security_posture_data.get("manual_postulation_criteria"),
+            ["Criterion A"],
+        )
+        page_messages = list(response.context["messages"])
+        self.assertTrue(any("Manual HC postulation created successfully" in str(m) for m in page_messages))
+
+    @override_settings(
+        HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"],
+        HC_MANUAL_POSTULATION_CRITERIA=["Criterion A", "Criterion B"],
+    )
+    def test_post_when_product_becomes_ineligible_between_get_and_post(self):
+        """POST must be re-validated even if it passed the initial GET check
+        (race-condition safety net implemented in create_manual_hc_postulation)"""
+        HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.admin,
+        )
+
+        response = self.client.post(
+            self.url,
+            data={"criteria": ["Criterion A"]},
+            follow=True,
+        )
+
+        self.assertRedirects(response, reverse("view_product", args=[self.product.id]))
+        self.assertEqual(HCParticipation.objects.filter(product=self.product).count(), 1)
+        page_messages = list(response.context["messages"])
+        self.assertTrue(any("pending HC postulation already exists" in str(m) for m in page_messages))
+
+
+class HCParticipationFilterTest(TestCase):
+    """Tests for HCParticipationFilter"""
+    fixtures = ['dojo_testdata.json']
+
+    def setUp(self):
+        self.product = Product.objects.first()
+        HCParticipation.objects.filter(product=self.product).delete()
+
+    def test_filters_by_product_type_name_icontains(self):
+        """product_type filter must match by product type name (case-insensitive
+        partial match), not by id"""
+        hc = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+        )
+        product_type_name = self.product.prod_type.name
+
+        filtered = HCParticipationFilter(
+            {"product_type": product_type_name.lower()},
+            queryset=HCParticipation.objects.filter(product=self.product),
+        )
+
+        self.assertIn(hc, filtered.qs)
+
+    def test_status_filter_removal_approved(self):
+        """'Removal Approved' must match already_in_hc requests approved for removal"""
+        removal_candidate = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="already_in_hc",
+            status="Approved",
+        )
+
+        filtered = HCParticipationFilter(
+            {"status": "Removal Approved"},
+            queryset=HCParticipation.objects.filter(product=self.product),
+        )
+
+        self.assertIn(removal_candidate, filtered.qs)
+
+    def test_status_filter_continues_in_hc(self):
+        """'Continues in HC' must match already_in_hc requests rejected for removal"""
+        continues_in_hc = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="already_in_hc",
+            status="Rejected",
+        )
+
+        filtered = HCParticipationFilter(
+            {"status": "Continues in HC"},
+            queryset=HCParticipation.objects.filter(product=self.product),
+        )
+
+        self.assertIn(continues_in_hc, filtered.qs)
+
+    def test_status_filter_approved_excludes_already_in_hc(self):
+        """'Approved' must only match real postulations, not already_in_hc removals"""
+        approved_postulation = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Approved",
+        )
+        removal_candidate = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="already_in_hc",
+            status="Approved",
+        )
+
+        filtered = HCParticipationFilter(
+            {"status": "Approved"},
+            queryset=HCParticipation.objects.filter(product=self.product),
+        )
+
+        self.assertIn(approved_postulation, filtered.qs)
+        self.assertNotIn(removal_candidate, filtered.qs)
