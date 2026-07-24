@@ -1,6 +1,7 @@
 """
 Tests for HC (Hacking Continuo) Participation module.
 """
+import datetime
 from django.test import TestCase, override_settings, Client
 from django.urls import reverse
 from rest_framework.authtoken.models import Token
@@ -24,6 +25,7 @@ from dojo.engine_participation.helpers import (
     get_latest_hc_evaluation_for_product,
     get_manual_hc_postulation_eligibility_error,
     create_manual_hc_postulation,
+    delete_hc_participation_records_by_date_range,
     InvalidHCParticipationTransition,
     approve_hc_participation,
     mark_hc_participation_reviewed,
@@ -1022,3 +1024,166 @@ class HCParticipationFilterTest(TestCase):
 
         self.assertIn(approved_postulation, filtered.qs)
         self.assertNotIn(removal_candidate, filtered.qs)
+
+
+class DeleteHCParticipationRecordsHelperTest(TestCase):
+    """Tests for delete_hc_participation_records_by_date_range"""
+    fixtures = ['dojo_testdata.json']
+
+    def setUp(self):
+        self.product = Product.objects.first()
+        HCParticipation.objects.filter(product=self.product).delete()
+        self.user = Dojo_User.objects.get(username="admin")
+
+    def _create_hc_with_create_date(self, create_date):
+        hc = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.user,
+        )
+        HCParticipation.objects.filter(pk=hc.pk).update(create_date=create_date)
+        return hc
+
+    def test_requires_both_dates(self):
+        with self.assertRaises(ValueError):
+            delete_hc_participation_records_by_date_range(None, datetime.date(2026, 1, 1))
+
+        with self.assertRaises(ValueError):
+            delete_hc_participation_records_by_date_range(datetime.date(2026, 1, 1), None)
+
+    def test_start_date_after_end_date_raises_error(self):
+        with self.assertRaises(ValueError):
+            delete_hc_participation_records_by_date_range(
+                datetime.date(2026, 1, 10), datetime.date(2026, 1, 1),
+            )
+
+    def test_deletes_only_records_within_range(self):
+        inside_start = self._create_hc_with_create_date(
+            datetime.datetime(2026, 1, 1, 12, 0, tzinfo=datetime.timezone.utc)
+        )
+        inside_end = self._create_hc_with_create_date(
+            datetime.datetime(2026, 1, 10, 12, 0, tzinfo=datetime.timezone.utc)
+        )
+        outside_before = self._create_hc_with_create_date(
+            datetime.datetime(2025, 12, 31, 12, 0, tzinfo=datetime.timezone.utc)
+        )
+        outside_after = self._create_hc_with_create_date(
+            datetime.datetime(2026, 1, 11, 12, 0, tzinfo=datetime.timezone.utc)
+        )
+
+        result = delete_hc_participation_records_by_date_range(
+            datetime.date(2026, 1, 1), datetime.date(2026, 1, 10),
+        )
+
+        self.assertEqual(result["matched_records"], 2)
+        self.assertFalse(HCParticipation.objects.filter(pk=inside_start.pk).exists())
+        self.assertFalse(HCParticipation.objects.filter(pk=inside_end.pk).exists())
+        self.assertTrue(HCParticipation.objects.filter(pk=outside_before.pk).exists())
+        self.assertTrue(HCParticipation.objects.filter(pk=outside_after.pk).exists())
+
+    def test_cascades_delete_of_related_logs(self):
+        hc = self._create_hc_with_create_date(
+            datetime.datetime(2026, 2, 1, 12, 0, tzinfo=datetime.timezone.utc)
+        )
+        HCParticipationLog.objects.create(
+            hc_participation=hc,
+            changed_by=self.user,
+            current_status="Pending",
+        )
+
+        delete_hc_participation_records_by_date_range(
+            datetime.date(2026, 2, 1), datetime.date(2026, 2, 1),
+        )
+
+        self.assertFalse(HCParticipationLog.objects.filter(hc_participation_id=hc.pk).exists())
+
+
+class DeleteHCParticipationRecordsAPIViewTest(TestCase):
+    """Tests for the delete-records API endpoint"""
+    fixtures = ['dojo_testdata.json']
+
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = Dojo_User.objects.get(username="admin")
+        token, _created = Token.objects.get_or_create(user=self.admin)
+        self.client.credentials(HTTP_AUTHORIZATION="Token " + token.key)
+
+        self.product = Product.objects.first()
+        HCParticipation.objects.filter(product=self.product).delete()
+
+        self.url = reverse("api_hc_delete_records")
+
+    def test_requires_authentication(self):
+        api_client = APIClient()
+
+        response = api_client.post(self.url, data={
+            "start_date": "2026-01-01",
+            "end_date": "2026-01-31",
+        }, format="json")
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_forbids_non_staff_user(self):
+        regular_user = Dojo_User.objects.create_user(
+            username="hc_delete_regular_user",
+            email="hc_delete_regular_user@test.com",
+            password="testpass123",
+            is_staff=False,
+        )
+        regular_token = Token.objects.create(user=regular_user)
+        api_client = APIClient()
+        api_client.credentials(HTTP_AUTHORIZATION="Token " + regular_token.key)
+
+        response = api_client.post(self.url, data={
+            "start_date": "2026-01-01",
+            "end_date": "2026-01-31",
+        }, format="json")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data["status"], "forbidden")
+
+    def test_missing_dates_returns_bad_request(self):
+        response = self.client.post(self.url, data={}, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["status"], "bad_request")
+
+    def test_invalid_date_format_returns_bad_request(self):
+        response = self.client.post(self.url, data={
+            "start_date": "not-a-date",
+            "end_date": "2026-01-31",
+        }, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["status"], "bad_request")
+
+    def test_start_after_end_date_returns_bad_request(self):
+        response = self.client.post(self.url, data={
+            "start_date": "2026-01-31",
+            "end_date": "2026-01-01",
+        }, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["status"], "bad_request")
+
+    def test_deletes_records_within_range(self):
+        hc_in_range = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.admin,
+        )
+        HCParticipation.objects.filter(pk=hc_in_range.pk).update(
+            create_date=datetime.datetime(2026, 1, 15, 12, 0, tzinfo=datetime.timezone.utc)
+        )
+
+        response = self.client.post(self.url, data={
+            "start_date": "2026-01-01",
+            "end_date": "2026-01-31",
+        }, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], "success")
+        self.assertEqual(response.data["data"]["matched_records"], 1)
+        self.assertFalse(HCParticipation.objects.filter(pk=hc_in_range.pk).exists())

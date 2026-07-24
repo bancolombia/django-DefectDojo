@@ -462,6 +462,48 @@ def create_manual_hc_postulation(product, user, criteria=None):
     return hc_request, None
 
 
+def delete_hc_participation_records_by_date_range(start_date, end_date):
+    """Deletes HCParticipation records (and their related discussions/logs,
+    via cascade) whose create_date falls within [start_date, end_date],
+    inclusive, by calendar date.
+
+    Args:
+        start_date: datetime.date marking the start of the range.
+        end_date: datetime.date marking the end of the range.
+
+    Returns:
+        dict summary with the date range and the number of matched/deleted records.
+
+    Raises:
+        ValueError: if either date is missing or start_date is after end_date.
+    """
+    if start_date is None or end_date is None:
+        raise ValueError("Both start_date and end_date are required.")
+
+    if start_date > end_date:
+        raise ValueError("start_date must not be after end_date.")
+
+    queryset = HCParticipation.objects.filter(
+        create_date__date__gte=start_date,
+        create_date__date__lte=end_date,
+    )
+    matched_records = queryset.count()
+    deleted_count, deleted_by_model = queryset.delete()
+
+    logger.info(
+        "Deleted %s HCParticipation record(s) created between %s and %s.",
+        matched_records, start_date, end_date,
+    )
+
+    return {
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "matched_records": matched_records,
+        "deleted_count": deleted_count,
+        "deleted_by_model": deleted_by_model,
+    }
+
+
 def mark_hc_participation_reviewed(hc_participation, user):
     with transaction.atomic():
         locked_hc_participation = HCParticipation.objects.select_for_update().get(pk=hc_participation.pk)
