@@ -7,6 +7,7 @@ from .dojo_test_case import DojoTestCase
 from django.utils import timezone
 from datetime import timedelta
 from django.urls import reverse
+from unittest.mock import patch
 
 
 class TestFindingExclusion(DojoTestCase):
@@ -35,6 +36,18 @@ class TestFindingExclusion(DojoTestCase):
         self.assertEqual(self.exclusion1.status, 'Pending')
         self.assertEqual(self.exclusion1.unique_id_from_tool, 'CVE-2023-1234')
         self.assertEqual(self.exclusion1.created_by, self.user)
+
+    def test_finding_exclusion_unique_id_helpers(self):
+        exclusion = FindingExclusion.objects.create(
+            unique_id_from_tool='CVE-2024-1111, CVE-2024-2222, CVE-2024-1111',
+            created_by=self.user,
+            status='Pending',
+            expiration_date=timezone.now() + timedelta(days=30)
+        )
+
+        self.assertEqual(exclusion.get_unique_ids(), ['CVE-2024-1111', 'CVE-2024-2222'])
+        self.assertTrue(exclusion.has_unique_id('CVE-2024-2222'))
+        self.assertEqual(exclusion.get_unique_ids_display(), 'CVE-2024-1111, CVE-2024-2222')
 
     def test_finding_exclusion_status_workflow(self):
         exclusion = self.exclusion1
@@ -123,15 +136,54 @@ class FindingExclusionViewsTestCase(DojoTestCase):
         self.client.login(username='testuser', password='12345')
         
         new_exclusion_data = {
+            'type': 'white_list',
             'unique_id_from_tool': 'CVE-2024-1111',
-            'status': 'Pending',
             'reason': 'Test exclusion',
-            'expiration_date': timezone.now() + timedelta(days=30)
+            'scope': 'all',
         }
         
         response = self.client.post(reverse('create_finding_exclusion'), data=new_exclusion_data)
         
-        self.assertContains(response, 'CVE-2024-1111')
+        self.assertRedirects(response, reverse('finding_exclusions'))
+        self.assertTrue(
+            FindingExclusion.objects.filter(unique_id_from_tool='CVE-2024-1111').exists()
+        )
+
+    @patch('dojo.engine_tools.views.create_notification')
+    def test_create_finding_exclusion_view_manual_multiple_unique_ids(self, mock_create_notification):
+        self.client.login(username='testuser', password='12345')
+
+        new_exclusion_data = {
+            'type': 'white_list',
+            'unique_id_from_tool': 'CVE-2024-1111\nCVE-2024-2222\nCVE-2024-1111',
+            'reason': 'Test exclusion',
+            'scope': 'all',
+        }
+
+        response = self.client.post(reverse('create_finding_exclusion'), data=new_exclusion_data)
+
+        self.assertRedirects(response, reverse('finding_exclusions'))
+        exclusion = FindingExclusion.objects.get(reason='Test exclusion')
+        self.assertEqual(exclusion.get_unique_ids(), ['CVE-2024-1111', 'CVE-2024-2222'])
+        self.assertEqual(exclusion.unique_id_from_tool, 'CVE-2024-1111,CVE-2024-2222')
+        self.assertEqual(FindingExclusion.objects.filter(reason='Test exclusion').count(), 1)
+        self.assertEqual(mock_create_notification.call_count, 1)
+
+    def test_create_finding_exclusion_view_auto_flow_rejects_multiple_unique_ids(self):
+        self.client.login(username='testuser', password='12345')
+
+        response = self.client.post(
+            f"{reverse('create_finding_exclusion')}?unique_id=CVE-2024-0001",
+            data={
+                'type': 'white_list',
+                'unique_id_from_tool': 'CVE-2024-0001\nCVE-2024-0002',
+                'reason': 'Test exclusion',
+                'scope': 'all',
+            }
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'This flow only accepts a single Vulnerability Id.')
 
     def test_show_finding_exclusion_view(self):
         self.client.login(username='testuser', password='12345')

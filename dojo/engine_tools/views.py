@@ -54,15 +54,35 @@ def finding_exclusions(request: HttpRequest):
     })
 
 
+def _get_first_matching_exclusion(queryset, unique_id: str):
+    for exclusion in queryset:
+        if exclusion.has_unique_id(unique_id):
+            return exclusion
+    return None
+
+
+def _get_duplicate_unique_ids(queryset, unique_ids: list[str]) -> list[str]:
+    duplicate_unique_ids = set()
+    for exclusion in queryset:
+        duplicate_unique_ids.update(set(unique_ids) & set(exclusion.get_unique_ids()))
+
+    return sorted(duplicate_unique_ids)
+
+
 def create_finding_exclusion(request: HttpRequest) -> HttpResponse:
     default_unique_id = request.GET.get('unique_id', '')
     default_practice = request.GET.get('practice', '') or request.POST.get('practice', '')
+    allow_multiple_unique_ids = not bool(default_unique_id)
     
-    duplicate_finding_exclusions = FindingExclusion.objects.filter(
-            unique_id_from_tool__in=[default_unique_id],
-            engagements__isnull=True,
-            product__isnull=True
-    ).exclude(status__in=["Rejected"]).first()
+    duplicate_finding_exclusions = None
+    if default_unique_id:
+        duplicate_finding_exclusions = _get_first_matching_exclusion(
+            FindingExclusion.objects.filter(
+                engagements__isnull=True,
+                product__isnull=True
+            ).exclude(status__in=["Rejected"]),
+            default_unique_id,
+        )
     
     if duplicate_finding_exclusions:
         if duplicate_finding_exclusions.status == "Accepted":
@@ -94,66 +114,112 @@ def create_finding_exclusion(request: HttpRequest) -> HttpResponse:
     form = CreateFindingExclusionForm(initial={
             "unique_id_from_tool": default_unique_id,
             "practice": default_practice
-        }, user=request.user)
+        }, user=request.user, allow_multiple_unique_ids=allow_multiple_unique_ids)
 
     finding_exclusion = None
 
     if request.method == "POST":
-        form = CreateFindingExclusionForm(user=request.user, data=request.POST)
+        form = CreateFindingExclusionForm(
+            user=request.user,
+            data=request.POST,
+            allow_multiple_unique_ids=allow_multiple_unique_ids,
+        )
         type_exclusion = request.POST.get(key="type")    
         
         if form.is_valid():
-            exclusion: FindingExclusion = form.save(commit=False)
-            exclusion.practice = default_practice
-            exclusion.created_by = request.user
-            if type_exclusion in ["black_list", "zero_day"]:
-                if not is_in_group(request.user, Constants.REVIEWERS_MAINTAINER_GROUP.value):
-                    raise PermissionDenied
+            unique_ids = form.get_unique_ids_from_tool()
+            product = form.cleaned_data.get("product")
+            engagements = list(form.cleaned_data.get("engagements", []))
+            duplicate_qs = FindingExclusion.objects.filter(
+                type=type_exclusion,
+            ).exclude(status__in=["Rejected"])
 
-                previous_status = exclusion.status
-                exclusion.status = "Accepted"
-                exclusion.final_status = "Accepted"
-                exclusion.accepted_at = timezone.now()
-                exclusion.accepted_by = request.user
-                exclusion.status_updated_at = timezone.now()
-                exclusion.status_updated_by = request.user
-                exclusion.save()
-                
-                FindingExclusionLog.objects.create(
-                    finding_exclusion=exclusion,
-                    changed_by=request.user,
-                    previous_status=previous_status,
-                    current_status="Accepted"
+            if product:
+                duplicate_qs = duplicate_qs.filter(product=product)
+            else:
+                duplicate_qs = duplicate_qs.filter(product__isnull=True)
+
+            if engagements:
+                duplicate_qs = duplicate_qs.filter(engagements__in=engagements).distinct()
+            else:
+                duplicate_qs = duplicate_qs.filter(engagements__isnull=True)
+
+            duplicated_unique_ids = _get_duplicate_unique_ids(duplicate_qs, unique_ids)
+
+            if duplicated_unique_ids:
+                form.add_error(
+                    "unique_id_from_tool",
+                    "These Vulnerability Ids already have an active exclusion for the selected scope and type: "
+                    + ", ".join(duplicated_unique_ids)
                 )
-                
-                relative_url = reverse("finding_exclusion", args=[str(exclusion.pk)])
-                add_findings_to_exclusion.apply_async(args=(exclusion.unique_id_from_tool, relative_url, type_exclusion))
-            else:  
-                exclusion.save()
-                form.save_m2m()
-                
-                cve = request.POST.get(key="unique_id_from_tool")
-                
-                reviewers = get_reviewers_members()
-                
-                create_notification(
-                    event="finding_exclusion_request",
-                    subject=f"🙋‍♂️New {type_exclusion} Request for the CVE: {cve} 🙏",
-                    title=f"A new request has been created to add {cve} to the {type_exclusion}.",
-                    description=f"A new request has been created to add {cve} to the {type_exclusion}.",
-                    url=reverse("finding_exclusion", args=[str(exclusion.pk)]),
-                    recipients=reviewers,
-                    icon="check-circle",
-                    color_icon="#28a745"
+            else:
+                exclusion = FindingExclusion(
+                    type=type_exclusion,
+                    reason=form.cleaned_data.get("reason"),
+                    practice=default_practice,
+                    created_by=request.user,
+                    product_type=form.cleaned_data.get("product_type"),
+                    product=product,
                 )
-            
-            messages.add_message(
-                request,
-                messages.SUCCESS,
-                "Exclusion successfully created.",
-                extra_tags="alert-success")
-            
-            return HttpResponseRedirect(reverse("finding_exclusions"))
+                exclusion.set_unique_ids(unique_ids)
+
+                if type_exclusion in ["black_list", "zero_day"]:
+                    if not is_in_group(request.user, Constants.REVIEWERS_MAINTAINER_GROUP.value):
+                        raise PermissionDenied
+
+                    previous_status = exclusion.status
+                    exclusion.status = "Accepted"
+                    exclusion.final_status = "Accepted"
+                    exclusion.accepted_at = timezone.now()
+                    exclusion.accepted_by = request.user
+                    exclusion.status_updated_at = timezone.now()
+                    exclusion.status_updated_by = request.user
+                    exclusion.save()
+                    if engagements:
+                        exclusion.engagements.set(engagements)
+
+                    FindingExclusionLog.objects.create(
+                        finding_exclusion=exclusion,
+                        changed_by=request.user,
+                        previous_status=previous_status,
+                        current_status="Accepted"
+                    )
+
+                    relative_url = reverse("finding_exclusion", args=[str(exclusion.pk)])
+                    add_findings_to_exclusion.apply_async(
+                        args=(
+                            exclusion.unique_id_from_tool,
+                            relative_url,
+                            type_exclusion,
+                            list(exclusion.engagements.values_list('id', flat=True)),
+                            [exclusion.product.id] if exclusion.product else [],
+                        )
+                    )
+                else:
+                    exclusion.save()
+                    if engagements:
+                        exclusion.engagements.set(engagements)
+
+                    reviewers = get_reviewers_members()
+
+                    create_notification(
+                        event="finding_exclusion_request",
+                        subject=f"🙋‍♂️New {type_exclusion} Request for {len(unique_ids)} Vulnerability Id(s) 🙏",
+                        title=f"A new request has been created to add {exclusion.get_unique_ids_display()} to the {type_exclusion}.",
+                        description=f"A new request has been created to add {exclusion.get_unique_ids_display()} to the {type_exclusion}.",
+                        url=reverse("finding_exclusion", args=[str(exclusion.pk)]),
+                        recipients=reviewers,
+                        icon="check-circle",
+                        color_icon="#28a745"
+                    )
+
+                messages.add_message(
+                    request,
+                    messages.SUCCESS,
+                    f"Exclusion successfully created with {len(unique_ids)} Vulnerability Id(s).",
+                    extra_tags="alert-success")
+                
+                return HttpResponseRedirect(reverse("finding_exclusions"))
 
     add_breadcrumb(title="Create Exclusion",
                    top_level=False,
@@ -181,13 +247,13 @@ def show_finding_exclusion(request: HttpRequest, fxid: str) -> HttpResponse:
     
     discussion_form = FindingExclusionDiscussionForm()
     
-    add_breadcrumb(title=finding_exclusion.unique_id_from_tool,
+    add_breadcrumb(title=finding_exclusion.get_unique_ids_summary(),
                    top_level=False,
                    request=request)
 
     return render(request, "dojo/show_finding_exclusion.html", {
         "finding_exclusion": finding_exclusion,
-        "name": f"Finding exclusion | {finding_exclusion.unique_id_from_tool}",
+        "name": f"Finding exclusion | {finding_exclusion.get_unique_ids_summary()}",
         'discussion_form': discussion_form,
     })
     
@@ -274,15 +340,15 @@ def review_finding_exclusion_request(
     )
     
     create_notification(event="finding_exclusion_request",
-                        subject=f"✅Review applied to the whitelisting request - {finding_exclusion.unique_id_from_tool}",
-                        title=f"Review applied to the whitelisting request - {finding_exclusion.unique_id_from_tool}",
-                        description=f"Review applied to the whitelisting request - {finding_exclusion.unique_id_from_tool}, You will be notified of the final result.",
+                        subject=f"✅Review applied to the whitelisting request - {finding_exclusion.get_unique_ids_summary()}",
+                        title=f"Review applied to the whitelisting request - {finding_exclusion.get_unique_ids_summary()}",
+                        description=f"Review applied to the whitelisting request - {finding_exclusion.get_unique_ids_summary()}, You will be notified of the final result.",
                         url=reverse("finding_exclusion", args=[str(finding_exclusion.pk)]),
                         recipients=[finding_exclusion.created_by.username],
                         icon="check-circle",
                         color_icon="#28a745")
     
-    message = f"Eligibility Assessment Vulnerability Whitelist - {finding_exclusion.unique_id_from_tool}"
+    message = f"Eligibility Assessment Vulnerability Whitelist - {finding_exclusion.get_unique_ids_display()}"
     
     send_mail_to_cybersecurity(finding_exclusion, message)
     
@@ -349,9 +415,9 @@ def accept_finding_exclusion_request(request: HttpRequest, fxid: str) -> HttpRes
     maintainers = get_reviewers_members()
     
     create_notification(event="finding_exclusion_approved",
-                        subject=f"✅Whitelisting request accepted - {finding_exclusion.unique_id_from_tool}",
-                        title=f"Whitelisting request accepted - {finding_exclusion.unique_id_from_tool}",
-                        description=f"Whitelisting request accepted - {finding_exclusion.unique_id_from_tool}",
+                        subject=f"✅Whitelisting request accepted - {finding_exclusion.get_unique_ids_summary()}",
+                        title=f"Whitelisting request accepted - {finding_exclusion.get_unique_ids_summary()}",
+                        description=f"Whitelisting request accepted - {finding_exclusion.get_unique_ids_display()}",
                         url=reverse("finding_exclusion", args=[str(finding_exclusion.pk)]),
                         recipients=[finding_exclusion.created_by.username] + maintainers,
                         icon="check-circle",
@@ -404,9 +470,9 @@ def reject_finding_exclusion_request(request: HttpRequest, fxid: str) -> HttpRes
     
     create_notification(
         event="finding_exclusion_rejected",
-        subject=f"❌Whitelisting request rejected - {finding_exclusion.unique_id_from_tool}",
-        title=f"Whitelisting request rejected - {finding_exclusion.unique_id_from_tool}",
-        description=f"Whitelisting request rejected - {finding_exclusion.unique_id_from_tool}.",
+        subject=f"❌Whitelisting request rejected - {finding_exclusion.get_unique_ids_summary()}",
+        title=f"Whitelisting request rejected - {finding_exclusion.get_unique_ids_summary()}",
+        description=f"Whitelisting request rejected - {finding_exclusion.get_unique_ids_display()}.",
         url=reverse("finding_exclusion", args=[str(finding_exclusion.pk)]),
         recipients=[finding_exclusion.created_by.username] + maintainers,
         icon="xmark-circle",
