@@ -167,7 +167,7 @@
                                     {% include "dojo/snippets/tags.html" with tags=e.product.tags.all %}
                                 </td>
                                 <td class="prod_name">
-                                    <a rel="noopener noreferrer" href="{% url 'product_type_metrics' e.product.prod_type.id %}">
+                                    <a rel="noopener noreferrer" href="{% url 'view_product_type' e.product.prod_type.id %}">
                                         {{ e.product.prod_type.name }}
                                     </a>
                                 </td>

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load navigation_tags %}
 {% load authorization_tags %}
+{% load display_tags %}
 {% block content %}
     {{ block.super }}
     <div class="row">
@@ -41,10 +42,17 @@
                         <tr>
                             <th>Name</th>
                             <th>Description</th>
+                            {% if "PRIORITIZATION_MODEL_PRIORITY"|general_settings_get_value:"False" and "PRIORITIZATION_MODEL_SEVERITY"|general_settings_get_value:"True" is False %}
+                            <th>Very Critical Finding SLA Days</th>
+                            <th>Critical Finding SLA Days</th>
+                            <th>High Finding SLA Days</th>
+                            <th>Medium-Low Finding SLA Days</th>                            
+                            {% else %}
                             <th>Critical Finding SLA Days</th>
                             <th>High Finding SLA Days</th>
                             <th>Medium Finding SLA Days</th>
                             <th>Low Finding SLA Days</th>
+                            {% endif %}
                         </tr>
                         </thead>
                         <tbody>

@@ -24,6 +24,7 @@ from dojo.models import (
     SEVERITIES,
     BurpRawRequestResponse,
     Endpoint,
+    Engagement,
     FileUpload,
     Finding,
     Test,
@@ -327,12 +328,39 @@ class BaseImporter(ImporterOptions):
         is marked as active and in progress. This is done because an import or
         reimport is a clear signal that work is happening on the engagement, so
         it should not be left in a stale/inactive state.
+
+        This behavior is controlled by the `ENABLE_ENGAGEMENT_STATUS_UPDATE_ON_IMPORT_SCAN`
+        GeneralSettings flag (enabled by default) so it can be turned off if needed.
+
+        The change is persisted with a direct queryset `update()` call (instead
+        of setting the fields and relying on the later `engagement.save()` to
+        persist them). This avoids triggering the Engagement `pre_save`/
+        `post_save` signals on every single import/reimport. Those signals
+        dispatch notifications (email notifications are sent synchronously),
+        and firing them on every automated import - very common for scan types
+        such as image/container scans that get imported repeatedly from CI/CD -
+        was causing long blocking calls during the request that resulted in
+        `django.db.utils.OperationalError: the connection is closed` errors on
+        other requests sharing the database connection pool.
         """
+        if GeneralSettings.get_value(
+            "ENABLE_ENGAGEMENT_STATUS_UPDATE_ON_IMPORT_SCAN", True
+        ) is False:
+            logger.debug(
+                "IMPORT_SCAN: ENABLE_ENGAGEMENT_STATUS_UPDATE_ON_IMPORT_SCAN is disabled"
+            )
+            return
         engagement = self.test.engagement
+        updated_fields = {}
         if engagement.status != "In Progress":
-            engagement.status = "In Progress"
+            updated_fields["status"] = "In Progress"
         if not engagement.active:
-            engagement.active = True
+            updated_fields["active"] = True
+        if not updated_fields:
+            return
+        Engagement.objects.filter(pk=engagement.pk).update(**updated_fields)
+        for field_name, value in updated_fields.items():
+            setattr(engagement, field_name, value)
 
     def update_test_tags(self):
         """
