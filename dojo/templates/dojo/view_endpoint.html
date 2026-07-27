@@ -41,9 +41,11 @@
 
                 <div class="dropdown pull-right">
                     <div class="btn-group">
+                        {% if "RENDER_OLD_VIEWS"|general_settings_get_value:"True" %}
                         <button class="btn btn-primary clickable panel-collapsed">
                             <span><i class="fa-solid fa-chart-column"></i></span>
                         </button>
+                        {% endif %}
                             <button class="btn btn-primary dropdown-toggle" type="button" id="dropdownMenu1"
                                     data-toggle="dropdown" aria-expanded="true" aria-label="Endpoint options">
                                 <span class="fa-solid fa-bars"></span>
@@ -69,11 +71,13 @@
                                         </a>
                                     </li>
                                     <li role="separator" class="divider"></li>
-                                    <li role="presentation">
-                                        <a rel="noopener noreferrer" href="{% url 'endpoint_report' endpoint.id %}?active=1">
-                                            <i class="fa-solid fa-file-lines"></i> Report
-                                        </a>
-                                    </li>
+                                    {% if "RENDER_OLD_VIEWS"|general_settings_get_value:"True" %}
+                                        <li role="presentation">
+                                            <a rel="noopener noreferrer" href="{% url 'endpoint_report' endpoint.id %}?active=1">
+                                                <i class="fa-solid fa-file-lines"></i> Report
+                                            </a>
+                                        </li>
+                                    {% endif %}
                                 {% if endpoint|has_object_permission:"Endpoint_Delete" %}
                                     <li role="separator" class="divider"></li>
                                     <li role="presentation" class="text-danger">
@@ -83,11 +87,13 @@
                                     </li>
                                 {% endif %}
                               {% else %}
-                                <li role="presentation">
-                                    <a rel="noopener noreferrer" href="{% url 'endpoint_host_report' endpoint.id %}?&active=1">
-                                        <i class="fa-solid fa-file-lines"></i> Report
-                                    </a>
-                                </li>
+                                {% if "RENDER_OLD_VIEWS"|general_settings_get_value:"True" %}
+                                    <li role="presentation">
+                                        <a rel="noopener noreferrer" href="{% url 'endpoint_host_report' endpoint.id %}?&active=1">
+                                            <i class="fa-solid fa-file-lines"></i> Report
+                                        </a>
+                                    </li>
+                                {% endif %}
                               {% endif %}
                             </ul>
                     </div>
@@ -262,6 +268,7 @@
         <table id="findings" class="tablesorter-bootstrap table table-striped">
                 <thead>
                 <tr>
+                    <th>ID</th>
                     <th>Title</th>
                     {% if "PRIORITIZATION_MODEL_PRIORITY"|general_settings_get_value:"False" %}
                     <th class="text-center">Priority</th>
@@ -269,6 +276,7 @@
                     {% if "PRIORITIZATION_MODEL_SEVERITY"|general_settings_get_value:"True" %}
                     <th class="text-center">Severity</th>
                     {% endif %}
+                    <th class="text-center">Vulnerability Id</th>
                     <th class="text-center">EPSS Score / Percentile</th>
                     <th class="text-center">Date</th>
                     <th class="text-center">Age</th>
@@ -278,8 +286,9 @@
                 <tbody>
                 {% for finding in findings %}
                     <tr>
-                        <td> 
-                            <a rel="noopener noreferrer" href="{% url 'view_finding' finding.id %}">{{ finding.title }}</a>
+                        <td>{{ finding.id }}</td>
+                        <td>
+                            <a rel="noopener noreferrer">{{ finding.title }}</a>
                         </td>
                         {% if "PRIORITIZATION_MODEL_PRIORITY"|general_settings_get_value:"False" %}
                         <td class="centered severity-sort" data-severity="{{ finding|priority_display_status }}">
@@ -297,6 +306,19 @@
                             </span>
                         </td>
                         {% endif %}
+                        <td class="nowrap">
+                            {% with finding|first_vulnerability_id as first_vulnerability_id %}
+                                {% if first_vulnerability_id %}
+                                    {% if first_vulnerability_id|has_vulnerability_url %}
+                                        <a rel="noopener noreferrer" target="_blank" href="{{ first_vulnerability_id|vulnerability_url }}">
+                                            <i class="fa-solid fa-arrow-up-right-from-square"></i> {{ first_vulnerability_id }}
+                                    </a>
+                                    {% else %}
+                                        {{ first_vulnerability_id }}
+                                    {% endif %}
+                                {% endif %}
+                            {% endwith %}
+                        </td>
                         <td class="text-center">
                             {{ finding.epss_score|format_epss }}
                             /
