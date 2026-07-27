@@ -761,6 +761,8 @@ def calculate_priority_epss_kev_finding(
 
             if priority == 0:
                 priority = severity_risk_map.get(finding.severity, 0)
+                if Constants.TAG_HACKING.value in finding.tags:
+                    cve_greater = finding.vulnerability_ids[-1] if finding.vulnerability_ids else finding.cve
         else:
             loc_res = df_risk_score.loc[
                 df_risk_score["cve"] == finding.cve, "prediction"
@@ -967,7 +969,8 @@ def check_priorization():
         .filter(tags__name__icontains=Constants.TAG_HACKING.value)
         .exclude(
             tags__name__icontains=settings.CELERY_CRON_PRIORITY_EXCLUDED_TAGS_FILTER
-        )
+        ).order_by("vulnerability_id__vulnerability_id", "test__scan_type", "severity")
+        .distinct("vulnerability_id__vulnerability_id", "test__scan_type", "severity")
     )
     logger.info(
         f"Identified {hacking_vulnerabilities.count()} vulnerabilities with hacking tags for prioritization."
