@@ -1,5 +1,54 @@
 {% extends "base.html" %}
 {% load authorization_tags %}
+{% block add_styles %}
+{{ block.super }}
+<style>
+    .multi-unique-id-wrapper {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .multi-unique-id-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: center;
+        width: 100%;
+    }
+
+    .multi-unique-id-row .form-control {
+        width: 100% !important;
+        max-width: 100%;
+        min-width: 0;
+    }
+
+    .multi-unique-id-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 8px;
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .multi-unique-id-actions .btn,
+    .multi-unique-id-row .btn {
+        min-width: 42px;
+    }
+
+    .multi-unique-id-helper {
+        margin-top: 8px;
+        color: #6c757d;
+        font-style: italic;
+    }
+    
+    .multi-unique-id-hidden {
+        display: none;
+    }
+</style>
+{% endblock %}
 {% block content %}
 {{ block.super }}
 <h3>Create New Exclusion</h3>
@@ -26,6 +75,98 @@
 
         let engagementSearchTimeout = null;
 
+        function syncUniqueIdTextarea() {
+            const values = [];
+
+            $('.js-unique-id-input').each(function () {
+                const value = $(this).val().trim();
+                if (value) {
+                    values.push(value);
+                }
+            });
+
+            $('#id_unique_id_from_tool').val(values.join('\n'));
+        }
+
+        function updateUniqueIdRemoveButtons() {
+            const rows = $('.multi-unique-id-row');
+            rows.find('.js-remove-unique-id').prop('disabled', rows.length === 1);
+        }
+
+        function createUniqueIdRow(value) {
+            return $('<div class="multi-unique-id-row"></div>')
+                .append(
+                    $('<input>', {
+                        type: 'text',
+                        class: 'form-control js-unique-id-input',
+                        placeholder: 'Vulnerability Id',
+                        value: value || ''
+                    })
+                )
+                .append(
+                    $('<button>', {
+                        type: 'button',
+                        class: 'btn btn-danger js-remove-unique-id',
+                        text: '-'
+                    })
+                );
+        }
+
+        function syncUniqueIdLayoutWidth() {
+            const uniqueIdField = $('#id_unique_id_from_tool');
+            const wrapper = $('#multi-unique-id-wrapper');
+            const actions = $('.multi-unique-id-actions');
+
+            if (!uniqueIdField.length || !wrapper.length) {
+                return;
+            }
+
+            const renderedWidth = uniqueIdField.outerWidth();
+
+            if (renderedWidth) {
+                wrapper.css('max-width', renderedWidth + 'px');
+                actions.css('max-width', renderedWidth + 'px');
+            }
+        }
+
+        function initializeMultiUniqueIdInputs() {
+            const uniqueIdField = $('#id_unique_id_from_tool');
+
+            if (!uniqueIdField.length || !uniqueIdField.is('textarea')) {
+                return;
+            }
+
+            const fieldContainer = uniqueIdField.closest('.col-sm-10');
+            const existingValues = (uniqueIdField.val() || '')
+                .split('\n')
+                .map(function (value) {
+                    return value.trim();
+                })
+                .filter(function (value) {
+                    return value.length > 0;
+                });
+
+            uniqueIdField.addClass('multi-unique-id-hidden');
+
+            fieldContainer.append(
+                '<div class="multi-unique-id-wrapper" id="multi-unique-id-wrapper"></div>' +
+                '<div class="multi-unique-id-actions">' +
+                    '<button type="button" class="btn btn-default" id="add-unique-id-row">+</button>' +
+                '</div>'
+            );
+
+            const wrapper = $('#multi-unique-id-wrapper');
+            const valuesToRender = existingValues.length ? existingValues : [''];
+
+            $.each(valuesToRender, function (_, value) {
+                wrapper.append(createUniqueIdRow(value));
+            });
+
+            syncUniqueIdLayoutWidth();
+            updateUniqueIdRemoveButtons();
+            syncUniqueIdTextarea();
+        }
+
         function toggleHierarchicalFields() {
             var scope = $('input[name="scope"]:checked').val();
             if (scope === 'specific') {
@@ -40,9 +181,42 @@
         }
 
         toggleHierarchicalFields();
+        initializeMultiUniqueIdInputs();
 
         $('input[name="scope"]').change(function () {
             toggleHierarchicalFields();
+        });
+
+        $(document).on('input', '.js-unique-id-input', function () {
+            syncUniqueIdTextarea();
+        });
+
+        $(document).on('click', '#add-unique-id-row', function () {
+            $('#multi-unique-id-wrapper').append(createUniqueIdRow(''));
+            syncUniqueIdLayoutWidth();
+            updateUniqueIdRemoveButtons();
+            syncUniqueIdTextarea();
+            $('#multi-unique-id-wrapper .js-unique-id-input').last().focus();
+        });
+
+        $(document).on('click', '.js-remove-unique-id', function () {
+            const rows = $('.multi-unique-id-row');
+            if (rows.length === 1) {
+                rows.find('.js-unique-id-input').val('');
+            } else {
+                $(this).closest('.multi-unique-id-row').remove();
+            }
+
+            updateUniqueIdRemoveButtons();
+            syncUniqueIdTextarea();
+        });
+
+        $('form').on('submit', function () {
+            syncUniqueIdTextarea();
+        });
+
+        $(window).on('resize', function () {
+            syncUniqueIdLayoutWidth();
         });
 
         $('#id_product_type').change(function () {

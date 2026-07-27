@@ -67,7 +67,7 @@
                         {% for exclusion in exclusions %}
                             <tr>
                                 <td><a href="{% url 'finding_exclusion' exclusion.uuid %}">{{ exclusion.uuid }}</a></td>
-                                <td>{{exclusion.unique_id_from_tool}}</td>
+                                <td>{{ exclusion.get_unique_ids_display }}</td>
                                 <td>{{exclusion.type}}</td>
                                 <td>{{exclusion.create_date}}</td>
                                 <td>{{exclusion.expiration_date}}</td>
