@@ -5,11 +5,9 @@ using the official azure-devops Python SDK.
 """
 
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
-import pytz
-from django.conf import settings
 from azure.devops.connection import Connection
 from azure.devops.v7_1.work.models import TeamContext
 from msrest.authentication import BasicAuthentication
@@ -36,14 +34,14 @@ class AzureDevOpsSprintHelper:
         connection = Connection(base_url=organization_url.rstrip("/"), creds=credentials)
         self._work_client = connection.clients.get_work_client()
 
-    def get_next_sprint_start_date(self) -> Optional[datetime]:
+    def get_next_sprint_start_date(self) -> Optional[date]:
         """
         Fetch the start date of the next sprint from Azure DevOps.
 
         The "next sprint" is the first future iteration after the current one.
 
         Returns:
-            datetime object with the start date of the next sprint, or None if not found.
+            date object with the start date of the next sprint, or None if not found.
 
         Raises:
             Exception: If the SDK call fails.
@@ -94,9 +92,15 @@ class AzureDevOpsSprintHelper:
             start_date = next_sprint.attributes.start_date
             if start_date:
                 if isinstance(start_date, str):
-                    utc_date = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
-                    tz = pytz.timezone(settings.TIME_ZONE)
-                    start_date = utc_date.astimezone(tz)
+                    start_date = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+                # Azure DevOps iteration dates are always midnight UTC and represent a
+                # calendar date, not a specific instant in time. We extract just the date
+                # component here (instead of returning an aware datetime) because Django
+                # would otherwise re-localize an aware datetime to settings.TIME_ZONE when
+                # it's saved into a DateField, shifting the date back a day for any
+                # timezone behind UTC (e.g. midnight UTC becomes the previous day locally).
+                if isinstance(start_date, datetime):
+                    start_date = start_date.date()
                 logger.info(f"Next sprint start date: {start_date}")
                 return start_date
 

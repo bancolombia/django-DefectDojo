@@ -23,7 +23,7 @@ def update_sla_expiration_dates_product_async(product, sla_config, *args, **kwar
 def update_sla_expiration_dates_sla_config_sync(sla_config, products, severities=None):
     logger.info(f"Updating finding SLA expiration dates within the {sla_config} SLA configuration")
     # update each finding that is within the SLA configuration that was saved
-    findings = Finding.objects.filter(test__engagement__product__sla_configuration_id=sla_config.id)
+    findings = Finding.objects.filter(test__engagement__product__sla_configuration_id=sla_config.id, active=True)
     if products:
         findings = findings.filter(test__engagement__product__in=products)
     if severities:
