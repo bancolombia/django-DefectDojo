@@ -2,13 +2,16 @@ import logging
 from django.db import transaction
 from rest_framework import serializers
 from dojo.models import Engagement, Product, Dojo_User
-from dojo.api_v2.scope.models import InputSecret, InputFile, Input, InputEngagement
+from dojo.api_v2.scope.models import InputSecret, InputFile, Input, InputEngagement, InputFlow, InputScenario, InputURL
 from dojo.utils import dojo_crypto_encrypt, prepare_for_view
 from drf_spectacular.utils import extend_schema_field
 import dojo.authorization.helper as authorization_helper
-
+import re
 
 logger = logging.getLogger(__name__)
+CONTROL_CHARS_RE = re.compile(r"[\x00-\x1F\x7F]")
+HTML_TAG_RE = re.compile(r"<[^>]+>")
+SAFE_FLOW_NAME_RE = re.compile(r"^[\w\s\-\.\(\)#áéíóúÁÉÍÓÚñÑ]+$")
 
 
 # ...existing code...
@@ -209,3 +212,186 @@ class InputSerializer(serializers.Serializer):
     @extend_schema_field(serializers.ListField())
     def get_permissions(self, obj):
         return authorization_helper.get_permissions(obj)
+    
+class InputScenarioSerializer(serializers.ModelSerializer):
+    STATUS_CHOICES = [
+        ("untested", "Sin probar"),
+        ("not_possible", "No fue posible probar"),
+        ("tested_not_vulnerable", "Probado no vulnerable"),
+        ("tested_vulnerable", "Probado vulnerable"),
+    ]
+
+    designed_by = serializers.SlugRelatedField(
+        slug_field="username",
+        queryset=Dojo_User.objects.all(),
+        required=False,
+        allow_null=True
+    )
+    description = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    status = serializers.ChoiceField(choices=STATUS_CHOICES)
+
+    class Meta:
+        model = InputScenario
+        fields = [
+            "id",
+            "estimated_time",
+            "designed_by",
+            "description",
+            "status",
+        ]
+        read_only_fields = ["id"]
+
+    def validate_estimated_time(self, value):
+        if value is None:
+            raise serializers.ValidationError("estimated_time is required.")
+        if value <= 0:
+            raise serializers.ValidationError("estimated_time must be greater than 0.")
+        if value > 10080:
+            raise serializers.ValidationError("estimated_time is too large.")
+        return value
+
+    def validate_description(self, value):
+        return validate_safe_text(
+            value,
+            field_name="description",
+            max_length=5000,
+            allow_blank=True
+        )
+
+    def validate(self, attrs):
+        designed_by = attrs.get("designed_by")
+        if designed_by and not getattr(designed_by, "is_active", True):
+            raise serializers.ValidationError({
+                "designed_by": "The selected user is inactive."
+            })
+        return attrs
+
+class InputURLSerializer(serializers.ModelSerializer):
+    scenarios = InputScenarioSerializer(many=True, required=False)
+
+    class Meta:
+        model = InputURL
+        fields = [
+            "id",
+            "url",
+            "created",
+            "updated",
+            "scenarios",
+        ]
+        read_only_fields = ["id", "created", "updated"]
+
+    def validate_url(self, value):
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError("url cannot be empty.")
+
+        if len(value) > 500:
+            raise serializers.ValidationError("url is too long.")
+
+        return value
+
+    def create(self, validated_data):
+        scenarios_data = validated_data.pop("scenarios", [])
+
+        with transaction.atomic():
+            url = InputURL.objects.create(**validated_data)
+
+            for scenario_data in scenarios_data:
+                InputScenario.objects.create(url=url, **scenario_data)
+
+        return url
+
+class InputFlowSerializer(serializers.ModelSerializer):
+    urls = InputURLSerializer(many=True, required=False)
+
+    class Meta:
+        model = InputFlow
+        fields = [
+            "id",
+            "flowName",
+            "engagement",
+            "created",
+            "updated",
+            "urls",
+        ]
+        read_only_fields = ["id", "created", "updated"]
+
+    def validate_flowName(self, value):
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError("flowName cannot be empty.")
+
+        if len(value) > 255:
+            raise serializers.ValidationError("flowName is too long.")
+
+        return value
+
+    def validate(self, attrs):
+        engagement = attrs.get("engagement")
+        if engagement is None:
+            raise serializers.ValidationError({
+                "engagement": "engagement is required."
+            })
+        return attrs
+
+    def create(self, validated_data):
+        urls_data = validated_data.pop("urls", [])
+
+        with transaction.atomic():
+            flow = InputFlow.objects.create(**validated_data)
+
+            for url_data in urls_data:
+                scenarios_data = url_data.pop("scenarios", [])
+                url = InputURL.objects.create(flow=flow, **url_data)
+
+                for scenario_data in scenarios_data:
+                    InputScenario.objects.create(url=url, **scenario_data)
+
+        return flow
+    
+def validate_safe_text(value, field_name="value", max_length=None, allow_blank=True):
+    if value is None:
+        return None
+
+    value = value.strip()
+    value = CONTROL_CHARS_RE.sub("", value)
+
+    if not value:
+        if allow_blank:
+            return None
+        raise serializers.ValidationError(f"{field_name} cannot be empty.")
+
+    if max_length and len(value) > max_length:
+        raise serializers.ValidationError(f"{field_name} is too long.")
+
+    if HTML_TAG_RE.search(value):
+        raise serializers.ValidationError(
+            f"{field_name} must not contain HTML or script tags."
+        )
+
+    return value
+
+
+def validate_safe_url(value):
+    if value is None:
+        raise serializers.ValidationError("url is required.")
+
+    value = value.strip()
+
+    if not value:
+        raise serializers.ValidationError("url cannot be empty.")
+
+    if len(value) > 500:
+        raise serializers.ValidationError("url is too long.")
+
+    parsed = urlparse(value)
+
+    if parsed.scheme not in ("http", "https"):
+        raise serializers.ValidationError("Only http and https URLs are allowed.")
+
+    if not parsed.netloc:
+        raise serializers.ValidationError("Invalid URL.")
+
+    return value

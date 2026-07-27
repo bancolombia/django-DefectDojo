@@ -7,7 +7,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction, IntegrityError
 from dojo.api_v2.scope.filter import InputFilter
-from dojo.api_v2.scope.models import InputSecret, InputFile, Input 
+from dojo.api_v2.scope.models import InputSecret, InputFile, Input , InputFlow,InputScenario,InputURL
 from dojo.api_v2.scope.serializers import *
 from dojo.api_v2.views import DojoModelViewSet
 from dojo.api_v2.utils import http_response
@@ -214,3 +214,166 @@ class InputFileViewSet(prefetch.PrefetchListMixin,
             logger.error(f"Validation error on PATCH InputFile: {e}")
             return http_response.error(
                 message="Validation error occurred.", data=serializer.errors, status_code=status.HTTP_400_BAD_REQUEST)
+@extend_schema(tags=["scope"])
+class InputFlowViewSet(
+    prefetch.PrefetchListMixin,
+    prefetch.PrefetchRetrieveMixin,
+    DojoModelViewSet
+):
+    queryset = InputFlow.objects.select_related(
+        "engagement"
+    ).prefetch_related(
+        "urls__scenarios"
+    ).order_by("id")
+
+    serializer_class = InputFlowSerializer
+    filter_backends = (DjangoFilterBackend,)
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
+
+    permission_classes = (
+        IsAuthenticated,
+        permissions.UserHasEngagementPermission,
+    )
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        instance = serializer.save()
+
+        return http_response.ok(
+            message=f"Se creó el flujo {instance.flowName} correctamente.",
+            data=self.get_serializer(instance).data
+        )
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        instance = serializer.save()
+
+        return http_response.ok(
+            message=f"Se actualizó el flujo {instance.flowName} correctamente.",
+            data=self.get_serializer(instance).data
+        )
+
+    def partial_update(self, request, *args, **kwargs):
+        kwargs["partial"] = True
+        return self.update(request, *args, **kwargs)
+
+    @action(detail=True, methods=["post"], url_path="add_url")
+    def add_url(self, request, pk=None):
+        flow = self.get_queryset().filter(pk=pk).first()
+
+        if not flow:
+            return http_response.error(
+                message="No es posible agregar la URL porque el flujo indicado no existe.",
+                data={"flow": ["The specified flow does not exist."]}
+            )
+
+        self.check_object_permissions(request, flow)
+
+        serializer = InputURLSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        instance = serializer.save(flow=flow)
+
+        return http_response.ok(
+            message=f"Se creó la URL {instance.url} correctamente.",
+            data=InputURLSerializer(instance).data
+        )
+
+
+
+@extend_schema(tags=["scope"])
+class InputURLViewSet(
+    prefetch.PrefetchListMixin,
+    prefetch.PrefetchRetrieveMixin,
+    DojoModelViewSet
+):
+    queryset = InputURL.objects.select_related(
+        "flow",
+        "flow__engagement",
+    ).prefetch_related(
+        "scenarios"
+    ).order_by("id")
+
+    serializer_class = InputURLSerializer
+    filter_backends = (DjangoFilterBackend,)
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
+
+    permission_classes = (
+        IsAuthenticated,
+        permissions.UserHasEngagementPermission,
+    )
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return http_response.ok(
+            message="Consulta de URL realizada correctamente.",
+            data=serializer.data
+        )
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        instance = serializer.save()
+
+        return http_response.ok(
+            message=f"Se actualizó la URL {instance.url} correctamente.",
+            data=self.get_serializer(instance).data
+        )
+
+    def partial_update(self, request, *args, **kwargs):
+        kwargs["partial"] = True
+        return self.update(request, *args, **kwargs)
+
+    @action(detail=True, methods=["post"], url_path="add_scenario")
+    def add_scenario(self, request, pk=None):
+        url_instance = self.get_object()
+
+        serializer = InputScenarioSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        instance = serializer.save(url=url_instance)
+
+        return http_response.ok(
+            message=f"Se agregó un escenario a la URL {url_instance.url} correctamente.",
+            data=InputScenarioSerializer(instance).data
+        )
+
+@extend_schema(tags=["scope"])
+class InputScenarioViewSet(
+    prefetch.PrefetchListMixin,
+    prefetch.PrefetchRetrieveMixin,
+    DojoModelViewSet
+):
+    queryset = InputScenario.objects.select_related(
+        "url",
+        "url__flow",
+        "url__flow__engagement",
+    ).order_by("id")
+
+    serializer_class = InputScenarioSerializer
+
+    filter_backends = (DjangoFilterBackend,)
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
+
+    permission_classes = (
+        IsAuthenticated,
+        permissions.UserHasEngagementPermission,
+    )
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        instance = serializer.save()
+
+        return http_response.ok(
+            message=f"Se actualizó el escenario {instance.id} correctamente.",
+            data=self.get_serializer(instance).data
+        )
