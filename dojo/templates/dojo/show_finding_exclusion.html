@@ -118,7 +118,7 @@
         <div class="panel-heading">
             <div class="clearfix">
                 <h3 class="pull-left finding-title">
-                    {{ finding_exclusion.unique_id_from_tool }}
+                    {{ finding_exclusion.get_unique_ids_summary }}
                     {% include "dojo/snippets/tags.html" with tags=finding.tags.all %}
                     <small>Last Status Update: {{ finding_exclusion.last_status_update | naturalday }}, </small>
                     <small>Created:
@@ -215,7 +215,7 @@
                 <tr>
                     {% block header_body %}
                         <td>{{ finding_exclusion.uuid }}</td>
-                        <td>{{ finding_exclusion.unique_id_from_tool }}</td>
+                        <td>{{ finding_exclusion.get_unique_ids_display }}</td>
                         <td>{{ finding_exclusion.type }}</td>
                         <td>
                             {% if finding_exclusion.status in "Pending,Accepted,Rejected,Reviewed,Expired" %}

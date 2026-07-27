@@ -50,12 +50,47 @@ class CreateFindingExclusionForm(forms.ModelForm):
     class Meta:
         model = FindingExclusion
         fields = ["type", "unique_id_from_tool", "reason", "practice", "scope", "product_type", "product", "engagements"]
+
+    def _split_unique_ids(self, value):
+        return [unique_id.strip() for unique_id in value.splitlines() if unique_id.strip()]
+
+    def _clean_unique_ids(self, value):
+        unique_ids = self._split_unique_ids(value)
+
+        if not unique_ids:
+            raise forms.ValidationError("This field is required.")
+
+        if not self.allow_multiple_unique_ids and len(unique_ids) > 1:
+            raise forms.ValidationError(
+                "This flow only accepts a single Vulnerability Id."
+            )
+
+        deduplicated_unique_ids = []
+        seen_unique_ids = set()
+        for unique_id in unique_ids:
+            if "," in unique_id:
+                raise forms.ValidationError(
+                    "Commas are not allowed inside a Vulnerability Id."
+                )
+
+            valid_chars_validator(unique_id)
+            if unique_id not in seen_unique_ids:
+                deduplicated_unique_ids.append(unique_id)
+                seen_unique_ids.add(unique_id)
+
+        normalized_unique_ids = FindingExclusion.normalize_unique_ids(deduplicated_unique_ids)
+        if len(normalized_unique_ids) > self.fields["unique_id_from_tool"].max_length:
+            raise forms.ValidationError(
+                "The combined Vulnerability Ids exceed the maximum allowed length."
+            )
+
+        self.cleaned_unique_ids = deduplicated_unique_ids
+        return normalized_unique_ids
     
     
     def clean_unique_id_from_tool(self):
-        value = self.cleaned_data.get("unique_id_from_tool")
-        valid_chars_validator(value)
-        return value
+        value = (self.cleaned_data.get("unique_id_from_tool") or "").strip()
+        return self._clean_unique_ids(value)
 
     def clean_reason(self):
         value = self.cleaned_data.get("reason")
@@ -69,8 +104,15 @@ class CreateFindingExclusionForm(forms.ModelForm):
 
         
     def __init__(self, user, *args, **kwargs):
+        self.allow_multiple_unique_ids = kwargs.pop("allow_multiple_unique_ids", False)
         self.user = user
         super().__init__(*args, **kwargs)
+
+        if self.allow_multiple_unique_ids:
+            self.fields["unique_id_from_tool"].widget = forms.Textarea(attrs={"rows": 6})
+            self.fields["unique_id_from_tool"].help_text = (
+                "Enter one Vulnerability Id per line. All values will be stored in the same exclusion."
+            )
         
         if not is_in_reviewer_group(self.user):
             self.fields.pop("scope")
@@ -109,6 +151,9 @@ class CreateFindingExclusionForm(forms.ModelForm):
                 self.add_error('product', "This field is required when 'Specific Engagements' is selected.")
         
         return cleaned_data
+
+    def get_unique_ids_from_tool(self):
+        return getattr(self, "cleaned_unique_ids", [])
 
 
 class EditFindingExclusionForm(forms.ModelForm):
@@ -178,6 +223,36 @@ class EditFindingExclusionForm(forms.ModelForm):
             )
         else:
             self.fields['engagements'].queryset = Engagement.objects.none()
+
+        self.fields["unique_id_from_tool"].widget = forms.Textarea(attrs={"rows": 6})
+        self.fields["unique_id_from_tool"].help_text = (
+            "Use one Vulnerability Id per line. They will be stored as a comma-separated list in the same exclusion."
+        )
+
+        if self.instance.pk and self.instance.unique_id_from_tool:
+            self.initial["unique_id_from_tool"] = "\n".join(self.instance.get_unique_ids())
+
+    def clean_unique_id_from_tool(self):
+        value = (self.cleaned_data.get("unique_id_from_tool") or "").strip()
+        unique_ids = [unique_id.strip() for unique_id in value.splitlines() if unique_id.strip()]
+
+        if not unique_ids:
+            raise forms.ValidationError("This field is required.")
+
+        for unique_id in unique_ids:
+            if "," in unique_id:
+                raise forms.ValidationError(
+                    "Commas are not allowed inside a Vulnerability Id."
+                )
+            valid_chars_validator(unique_id)
+
+        normalized_unique_ids = FindingExclusion.normalize_unique_ids(unique_ids)
+        if len(normalized_unique_ids) > self.fields["unique_id_from_tool"].max_length:
+            raise forms.ValidationError(
+                "The combined Vulnerability Ids exceed the maximum allowed length."
+            )
+
+        return normalized_unique_ids
  
     
 class FindingExclusionDiscussionForm(forms.ModelForm):
