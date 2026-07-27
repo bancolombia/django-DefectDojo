@@ -160,7 +160,7 @@ jsonschema-specifications==2025.9.1
 googleapis-common-protos==1.75.0
 grpcio==1.83.0
 zipp==4.1.0
-prompt_toolkit==3.0.52
+prompt_toolkit==3.0.53
 prometheus_client==0.25.0
 typing_extensions==4.16.0
 propcache==0.5.2
