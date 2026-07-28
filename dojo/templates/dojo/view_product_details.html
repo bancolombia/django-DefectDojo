@@ -102,12 +102,9 @@
                 {% if can_create_manual_hc_postulation %}
                   <li role="separator" class="divider"></li>
                   <li role="presentation">
-                    <form method="post" action="{% url 'create_manual_hc_postulation' prod.id %}" style="margin: 0;">
-                      {% csrf_token %}
-                      <button type="submit" class="dropdown-item btn btn-link" style="width: 100%; text-align: left;">
+                    <a rel="noopener noreferrer" href="{% url 'create_manual_hc_postulation' prod.id %}">
                         <i class="fa-solid fa-bullseye"></i> {% trans "Create Manual HC Postulation" %}
-                      </button>
-                    </form>
+                    </a>
                   </li>
                 {% endif %}
                 {% if prod|has_object_permission:"Product_Delete" %}

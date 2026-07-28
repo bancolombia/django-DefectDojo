@@ -243,6 +243,21 @@
             </div>
         </div>
 
+        {% if security_posture_data.manual_postulation_criteria %}
+        <div class="panel panel-default">
+            <div class="panel-heading">
+                <h4>Manual Postulation Criteria</h4>
+            </div>
+            <div class="panel-body finding-description">
+                <ul>
+                    {% for criterion in security_posture_data.manual_postulation_criteria %}
+                        <li>{{ criterion }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+
         <div class="panel panel-default">
             <div class="panel-heading">
                 <h4>Risk Posture (on demand) <span class="pull-right"><a rel="noopener noreferrer" data-toggle="collapse" href="#vuln_posture"><i

@@ -133,7 +133,6 @@ def _fetch_microservice(user, endpoint_url: str) -> list:
             json=request_body,
             headers=_build_hc_auth_headers(token_key),
             timeout=timeout_seconds,
-            verify=False,
         )
         response.raise_for_status()
         payload = response.json()
@@ -402,30 +401,44 @@ def _get_product_class_id_from_description(product):
     return None
 
 
-def create_manual_hc_postulation(product, user):
+def get_manual_hc_postulation_eligibility_error(product) -> str | None:
+    allowed_class_ids = list(getattr(settings, "HC_PARTICIPATION_POSTULATED_CLASSID", []))
+    product_class_id = _get_product_class_id_from_description(product)
+    if allowed_class_ids and product_class_id not in allowed_class_ids:
+        return (
+            "This product class_id is not allowed for HC postulation. "
+            f"Allowed class_id values: {', '.join(allowed_class_ids)}."
+        )
+
+    if is_product_in_hacking_continuous_from_requests(product):
+        return "This product is already in Hacking Continuous."
+
+    pending_postulation_exists = HCParticipation.objects.filter(
+        product=product,
+        status="Pending",
+        recommendation__in=("postulated", "postulated_manually"),
+    ).exists()
+    if pending_postulation_exists:
+        return "A pending HC postulation already exists for this product."
+
+    return None
+
+
+def create_manual_hc_postulation(product, user, criteria=None):
+    criteria = list(criteria or [])
+    if not criteria:
+        return None, "You must select at least one criterion to submit the manual postulation."
+
     with transaction.atomic():
         locked_product = Product.objects.select_for_update().get(pk=product.pk)
 
-        allowed_class_ids = list(getattr(settings, "HC_PARTICIPATION_POSTULATED_CLASSID", []))
-        product_class_id = _get_product_class_id_from_description(locked_product)
-        if allowed_class_ids and product_class_id not in allowed_class_ids:
-            return None, (
-                "This product class_id is not allowed for HC postulation. "
-                f"Allowed class_id values: {', '.join(allowed_class_ids)}."
-            )
-
-        pending_postulation_exists = HCParticipation.objects.filter(
-            product=locked_product,
-            status="Pending",
-        ).exists()
-        if pending_postulation_exists:
-            return None, "A pending HC postulation already exists for this product."
-
-        if is_product_in_hacking_continuous_from_requests(locked_product):
-            return None, "This product is already in Hacking Continuous."
+        eligibility_error = get_manual_hc_postulation_eligibility_error(locked_product)
+        if eligibility_error:
+            return None, eligibility_error
 
         batch_id = uuid.uuid4()
         requested_by = getattr(user, "username", "System")
+        criteria_text = "; ".join(criteria)
         hc_request = HCParticipation.objects.create(
             product=locked_product,
             recommendation="postulated_manually",
@@ -433,8 +446,12 @@ def create_manual_hc_postulation(product, user):
             was_in_hacking_continuous=False,
             security_posture_data={
                 "product_risk_posture_url": _build_product_risk_posture_url(locked_product.id),
+                "manual_postulation_criteria": criteria,
             },
-            reason=f"Manual postulation created from Product view by {requested_by}.",
+            reason=(
+                f"Manual postulation created from Product view by {requested_by}. "
+                f"Criteria met: {criteria_text}."
+            ),
             status="Pending",
             created_by=user,
             batch_id=batch_id,
@@ -442,6 +459,48 @@ def create_manual_hc_postulation(product, user):
 
     _notify_reviewers_of_new_requests([hc_request], batch_id)
     return hc_request, None
+
+
+def delete_hc_participation_records_by_date_range(start_date, end_date):
+    """Deletes HCParticipation records (and their related discussions/logs,
+    via cascade) whose create_date falls within [start_date, end_date],
+    inclusive, by calendar date.
+
+    Args:
+        start_date: datetime.date marking the start of the range.
+        end_date: datetime.date marking the end of the range.
+
+    Returns:
+        dict summary with the date range and the number of matched/deleted records.
+
+    Raises:
+        ValueError: if either date is missing or start_date is after end_date.
+    """
+    if start_date is None or end_date is None:
+        raise ValueError("Both start_date and end_date are required.")
+
+    if start_date > end_date:
+        raise ValueError("start_date must not be after end_date.")
+
+    queryset = HCParticipation.objects.filter(
+        create_date__date__gte=start_date,
+        create_date__date__lte=end_date,
+    )
+    matched_records = queryset.count()
+    deleted_count, deleted_by_model = queryset.delete()
+
+    logger.info(
+        "Deleted %s HCParticipation record(s) created between %s and %s.",
+        matched_records, start_date, end_date,
+    )
+
+    return {
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "matched_records": matched_records,
+        "deleted_count": deleted_count,
+        "deleted_by_model": deleted_by_model,
+    }
 
 
 def mark_hc_participation_reviewed(hc_participation, user):
@@ -589,6 +648,7 @@ def get_latest_hc_evaluation_for_product(product_id: int) -> dict:
     except Exception as e:
         logger.exception(f"Error getting latest HC evaluation for product {product_id}: {e}")
         return None
+
 
 
 
