@@ -311,15 +311,18 @@ class InputFlowSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created", "updated"]
 
     def validate_flowName(self, value):
-        value = value.strip()
+        value = validate_safe_text(
+            value,
+            field_name="flowName",
+            max_length=255,
+            allow_blank=False
+        )
 
-        if not value:
-            raise serializers.ValidationError("flowName cannot be empty.")
-
-        if len(value) > 255:
-            raise serializers.ValidationError("flowName is too long.")
+        if not SAFE_FLOW_NAME_RE.match(value):
+            raise serializers.ValidationError("flowName contains invalid characters.")
 
         return value
+
 
     def validate(self, attrs):
         engagement = attrs.get("engagement")
