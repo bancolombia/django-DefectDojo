@@ -66,6 +66,59 @@ class FindingExclusion(models.Model):
                                 on_delete=models.CASCADE)
     engagements = models.ManyToManyField("Engagement",
                                    blank=True)
+
+    @staticmethod
+    def split_unique_ids(value):
+        if not value:
+            return []
+
+        unique_ids = []
+        seen_unique_ids = set()
+
+        for unique_id in value.split(","):
+            normalized_unique_id = unique_id.strip()
+            if normalized_unique_id and normalized_unique_id not in seen_unique_ids:
+                unique_ids.append(normalized_unique_id)
+                seen_unique_ids.add(normalized_unique_id)
+
+        return unique_ids
+
+    @classmethod
+    def normalize_unique_ids(cls, unique_ids):
+        normalized_unique_ids = []
+        seen_unique_ids = set()
+
+        for unique_id in unique_ids:
+            normalized_unique_id = str(unique_id).strip()
+            if normalized_unique_id and normalized_unique_id not in seen_unique_ids:
+                normalized_unique_ids.append(normalized_unique_id)
+                seen_unique_ids.add(normalized_unique_id)
+
+        return ",".join(normalized_unique_ids)
+
+    def get_unique_ids(self):
+        return self.split_unique_ids(self.unique_id_from_tool)
+
+    def set_unique_ids(self, unique_ids):
+        self.unique_id_from_tool = self.normalize_unique_ids(unique_ids)
+
+    def has_unique_id(self, unique_id):
+        return unique_id in self.get_unique_ids()
+
+    def intersects_unique_ids(self, unique_ids):
+        return bool(set(self.get_unique_ids()) & set(unique_ids))
+
+    def get_unique_ids_display(self):
+        return ", ".join(self.get_unique_ids())
+
+    def get_unique_ids_summary(self):
+        unique_ids = self.get_unique_ids()
+        if not unique_ids:
+            return ""
+        if len(unique_ids) == 1:
+            return unique_ids[0]
+
+        return f"{unique_ids[0]} (+{len(unique_ids) - 1} more)"
     
     class Meta:
         db_table = "dojo_finding_exlusion"

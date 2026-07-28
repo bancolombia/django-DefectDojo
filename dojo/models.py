@@ -1032,6 +1032,17 @@ class DojoMeta(models.Model):
 
 
 class SLA_Configuration(models.Model):
+    if settings.SHOW_SLA_DISPLAY_PRIORITY:
+        display_critical = "Very Critical"
+        display_high = "Critical"
+        display_medium = "High"
+        display_low = "Medium Low"
+    else:
+        display_critical = "Critical"
+        display_high = "High"
+        display_medium = "Medium"
+        display_low = "Low"
+
     name = models.CharField(max_length=128, unique=True, blank=False, verbose_name=_("Custom SLA Name"),
         help_text=_("A unique name for the set of SLAs."))
     description = models.CharField(
@@ -1040,40 +1051,40 @@ class SLA_Configuration(models.Model):
         blank=True)
     critical = models.IntegerField(
         default=7,
-        verbose_name=_("Critical Finding SLA Days"),
-        help_text=_("The number of days to remediate a critical finding."))
+        verbose_name=_(f"{display_critical} Finding SLA Days"),
+        help_text=_(f"The number of days to remediate a {display_critical} finding."))
     enforce_critical = models.BooleanField(
         default=True,
-        verbose_name=_("Enforce Critical Finding SLA Days"),
-        help_text=_("When enabled, critical findings will be assigned an SLA expiration date based on the critical finding SLA days within this SLA configuration."))
+        verbose_name=_(f"Enforce {display_critical} Finding SLA Days"),
+        help_text=_(f"When enabled, {display_critical} findings will be assigned an SLA expiration date based on the {display_critical} finding SLA days within this SLA configuration."))
     high = models.IntegerField(
         default=30,
-        verbose_name=_("High Finding SLA Days"),
-        help_text=_("The number of days to remediate a high finding."))
+        verbose_name=_(f"{display_high} Finding SLA Days"),
+        help_text=_(f"The number of days to remediate a {display_high} finding."))
     enforce_high = models.BooleanField(
         default=True,
-        verbose_name=_("Enforce High Finding SLA Days"),
-        help_text=_("When enabled, high findings will be assigned an SLA expiration date based on the high finding SLA days within this SLA configuration."))
+        verbose_name=_(f"Enforce {display_high} Finding SLA Days"),
+        help_text=_(f"When enabled, {display_high} findings will be assigned an SLA expiration date based on the {display_high} finding SLA days within this SLA configuration."))
     medium = models.IntegerField(
         default=90,
-        verbose_name=_("Medium Finding SLA Days"),
-        help_text=_("The number of days to remediate a medium finding."))
+        verbose_name=_(f"{display_medium} Finding SLA Days"),
+        help_text=_(f"The number of days to remediate a {display_medium} finding."))
     enforce_medium = models.BooleanField(
         default=True,
-        verbose_name=_("Enforce Medium Finding SLA Days"),
-        help_text=_("When enabled, medium findings will be assigned an SLA expiration date based on the medium finding SLA days within this SLA configuration."))
+        verbose_name=_(f"Enforce {display_medium} Finding SLA Days"),
+        help_text=_(f"When enabled, {display_medium} findings will be assigned an SLA expiration date based on the {display_medium} finding SLA days within this SLA configuration."))
     low = models.IntegerField(
         default=120,
-        verbose_name=_("Low Finding SLA Days"),
-        help_text=_("The number of days to remediate a low finding."))
+        verbose_name=_(f"{display_low} Finding SLA Days"),
+        help_text=_(f"The number of days to remediate a {display_low} finding."))
     enforce_low = models.BooleanField(
         default=True,
-        verbose_name=_("Enforce Low Finding SLA Days"),
-        help_text=_("When enabled, low findings will be assigned an SLA expiration date based on the low finding SLA days within this SLA configuration."))
+        verbose_name=_(f"Enforce {display_low} Finding SLA Days"),
+        help_text=_(f"When enabled, {display_low} findings will be assigned an SLA expiration date based on the {display_low} finding SLA days within this SLA configuration."))
     restart_sla_on_reactivation = models.BooleanField(
         default=False,
         verbose_name=_("Restart SLA when findings are reactivated"),
-        help_text=_("When enabled, findings that were previously mitigated but are reactivated durign reimport will have their SLA period restarted."))
+        help_text=_("When enabled, findings that were previously mitigated but are reactivated during reimport will have their SLA period restarted."))
     async_updating = models.BooleanField(
         default=False,
         help_text=_("Findings under this SLA configuration are asynchronously being updated"))
@@ -3354,6 +3365,12 @@ class Finding(models.Model):
     @property
     def priority_classification(self):
         return self._calculate_severity_priority(self.tags, self.priority)
+
+    @property
+    def sla_period(self):
+        sla_period, _ = self.get_sla_period()
+        return sla_period
+        
     
     def get_severity_related_to_priority(self):
         """Get severity related to priority the finding"""
