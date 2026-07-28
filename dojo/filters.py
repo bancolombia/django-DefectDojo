@@ -1405,6 +1405,7 @@ class ApiEngagementFilter(DojoFilter):
     name = CharFilter(lookup_expr="icontains", label="Engagement name")
     product__prod_type = NumberInFilter(field_name="product__prod_type", lookup_expr="in")
     product = NumberInFilter(field_name="product", lookup_expr="in")
+    description = CharFilter(lookup_expr="icontains")
     tag = CharFilter(field_name="tags__name", lookup_expr="icontains", help_text="Tag name contains")
     tags = CharFieldInFilter(
         field_name="tags__name",
@@ -1417,6 +1418,10 @@ class ApiEngagementFilter(DojoFilter):
         field_name="product__tags__name",
         lookup_expr="in",
         help_text="Comma separated list of exact tags present on product (uses OR for multiple values)")
+    test__tags = CharFieldInFilter(
+        field_name="test__tags__name",
+        lookup_expr="in",
+        help_text="Comma separated list of exact tags present on test (uses OR for multiple values)")
     product__tags__and = CharFieldFilterANDExpression(
         field_name="product__tags__name",
         help_text="Comma separated list of exact tags to match with an AND expression present on product")
