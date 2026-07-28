@@ -7,6 +7,7 @@ from dojo.utils import dojo_crypto_encrypt, prepare_for_view
 from drf_spectacular.utils import extend_schema_field
 import dojo.authorization.helper as authorization_helper
 import re
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 CONTROL_CHARS_RE = re.compile(r"[\x00-\x1F\x7F]")
@@ -281,15 +282,7 @@ class InputURLSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created", "updated"]
 
     def validate_url(self, value):
-        value = value.strip()
-
-        if not value:
-            raise serializers.ValidationError("url cannot be empty.")
-
-        if len(value) > 500:
-            raise serializers.ValidationError("url is too long.")
-
-        return value
+        return validate_safe_url(value)
 
     def create(self, validated_data):
         scenarios_data = validated_data.pop("scenarios", [])

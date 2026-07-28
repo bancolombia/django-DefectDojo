@@ -31,6 +31,7 @@ from dojo.api_v2 import (
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from dojo.api_v2.scope.queries import get_authorized_scope
 from dojo.finding import serializer
+from dojo.models import Engagement
 
 logger = logging.getLogger(__name__)
 
@@ -236,6 +237,17 @@ class InputFlowViewSet(
     )
 
     def create(self, request, *args, **kwargs):
+        engagement_id = request.data.get("engagement")
+        if not engagement_id:
+            return http_response.error(
+                message="El campo engagement es obligatorio.",
+                data={"engagement": ["This field is required."]},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+        engagement = get_object_or_404(Engagement, pk=engagement_id)
+        self.check_object_permissions(request, engagement)
+
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         instance = serializer.save()
@@ -271,7 +283,13 @@ class InputFlowViewSet(
                 data={"flow": ["The specified flow does not exist."]}
             )
 
-        self.check_object_permissions(request, flow)
+        if flow.engagement is None:
+            return http_response.error(
+                message="El flujo no tiene un engagement asociado.",
+                data={"engagement": ["Flow has no engagement associated."]}
+            )
+
+        self.check_object_permissions(request, flow.engagement)
 
         serializer = InputURLSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
