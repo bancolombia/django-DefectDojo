@@ -141,7 +141,7 @@ pyOpenSSL==26.2.0
 pypdf==6.14.2
 pysaml2==7.5.0
 python-dateutil==2.9.0.post0
-python-gitlab==8.4.0
+python-gitlab==8.5.0
 python3-openid==3.2.0
 pytz==2026.3.post1
 PyYAML==6.0.3
