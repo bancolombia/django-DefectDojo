@@ -24,25 +24,47 @@ PRIORITY_CLASSIFICATION_TO_FILTER_VALUE = {
     "Unknown": 0,
 }
 
+# Optional global setting: if this variable contains tags, only findings with
+# those tags are included in SLA expiration date recalculation.
+SLA_FINDINGS_TAGS_FILTER_SETTING = "SLA_FINDINGS_TAGS_FILTER"
+
+
+def _normalize_tags_filter_value(tags_value):
+    if not tags_value:
+        return []
+
+    if isinstance(tags_value, str):
+        raw_tags = tags_value.split(",")
+    elif isinstance(tags_value, (list, tuple, set)):
+        raw_tags = list(tags_value)
+    else:
+        return []
+
+    return [str(tag).strip().lower() for tag in raw_tags if str(tag).strip()]
+
 
 @dojo_async_task
 @app.task
-def update_sla_expiration_dates_sla_config_async(sla_config, products, severities, *args, **kwargs):
-    update_sla_expiration_dates_sla_config_sync(sla_config, products, severities)
+def update_sla_expiration_dates_sla_config_async(sla_config, product_ids, severities, *args, **kwargs):
+    update_sla_expiration_dates_sla_config_sync(sla_config, product_ids=product_ids, severities=severities)
 
 
 @dojo_async_task
 @app.task
 def update_sla_expiration_dates_product_async(product, sla_config, *args, **kwargs):
-    update_sla_expiration_dates_sla_config_sync(sla_config, [product])
+    update_sla_expiration_dates_sla_config_sync(sla_config, product_ids=[product.id])
 
 
-def update_sla_expiration_dates_sla_config_sync(sla_config, products, severities=None):
+def update_sla_expiration_dates_sla_config_sync(sla_config, product_ids=None, severities=None):
     logger.info(f"Updating finding SLA expiration dates within the {sla_config} SLA configuration")
+    target_products = Product.objects.filter(sla_configuration_id=sla_config.id)
+    if product_ids:
+        target_products = target_products.filter(id__in=product_ids)
+
     # update each finding that is within the SLA configuration that was saved
     findings = Finding.objects.filter(test__engagement__product__sla_configuration_id=sla_config.id, active=True)
-    if products:
-        findings = findings.filter(test__engagement__product__in=products)
+    if product_ids:
+        findings = findings.filter(test__engagement__product_id__in=product_ids)
     if severities:
         if (
             GeneralSettings.get_value(name_key="PRIORITIZATION_MODEL_SEVERITY", default=True) is False and
@@ -62,6 +84,19 @@ def update_sla_expiration_dates_sla_config_sync(sla_config, products, severities
         else:
             findings = findings.filter(severity__in=severities)
 
+    configured_tags_filter = []
+    if GeneralSettings.objects.filter(name_key=SLA_FINDINGS_TAGS_FILTER_SETTING).exists():
+        configured_tags_filter = _normalize_tags_filter_value(
+            GeneralSettings.get_value(name_key=SLA_FINDINGS_TAGS_FILTER_SETTING, default=[]),
+        )
+    if configured_tags_filter:
+        findings = findings.filter(tags__name__in=configured_tags_filter).distinct()
+        logger.info(
+            "Applying tag filter from GeneralSettings %s=%s",
+            SLA_FINDINGS_TAGS_FILTER_SETTING,
+            configured_tags_filter,
+        )
+
     findings = findings.prefetch_related(
             "test",
             "test__engagement",
@@ -73,11 +108,14 @@ def update_sla_expiration_dates_sla_config_sync(sla_config, products, severities
 
     mass_model_updater(Finding, findings, lambda f: f.set_sla_expiration_date(), fields=["sla_expiration_date"])
 
-    # reset the async updating flag to false for all products using this sla config
-    for product in products:
-        product.async_updating = False
-        super(Product, product).save()
-        calculate_grade(product)
+    # reset async flag in bulk for all affected products
+    impacted_products = list(target_products.only("id", "name"))
+    if impacted_products:
+        impacted_product_ids = [product.id for product in impacted_products]
+        Product.objects.filter(id__in=impacted_product_ids).update(async_updating=False)
+
+        for product in impacted_products:
+            calculate_grade(product)
 
     # reset the async updating flag to false for this sla config
     sla_config.async_updating = False

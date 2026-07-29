@@ -23,22 +23,6 @@ from dojo.validators import clean_tags, resolve_persisted_tags
 logger = logging.getLogger(__name__)
 deduplicationLogger = logging.getLogger("dojo.specific-loggers.deduplication")
 
-# Large TextFields on the Finding model (can hold long code snippets, request/response
-# payloads, etc). These are always overwritten with data coming from the freshly parsed
-# report before a matched finding is saved, so they are not needed while a finding is only
-# being held in memory to be matched/diffed against the reimported report. Deferring them
-# drastically reduces the memory footprint of `original_items`, `reactivated_items` and
-# `unchanged_items`, which can otherwise hold every existing Finding of a Test (potentially
-# tens of thousands of rows) for the full duration of the reimport request.
-FINDING_HEAVY_DEFERRED_FIELDS = (
-    "description",
-    "mitigation",
-    "impact",
-    "steps_to_reproduce",
-    "severity_justification",
-    "references",
-)
-
 
 class DefaultReImporterOptions(ImporterOptions):
     def validate_test(
@@ -166,7 +150,7 @@ class DefaultReImporter(BaseImporter, DefaultReImporterOptions):
             untouched_findings,
         )
         finding_ids = [finding.id for finding in findings_for_priority_update]
-        BaseImporter.update_priority_epss_kev.apply_async(args=(finding_ids, self.test.id))
+        BaseImporter.update_priority_epss_kev.apply_async(args=(finding_ids, self.test))
         logger.debug("REIMPORT_SCAN: Done")
         return (
             self.test,
@@ -199,7 +183,6 @@ class DefaultReImporter(BaseImporter, DefaultReImporterOptions):
         original_findings = (
             self.test.finding_set.all()
             .filter(service=self.service)
-            .defer(*FINDING_HEAVY_DEFERRED_FIELDS)
         )
         logger.debug(f"original_findings_qyer: {original_findings.query}")
         self.original_items = list(original_findings)

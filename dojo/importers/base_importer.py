@@ -915,13 +915,9 @@ class BaseImporter(ImporterOptions):
                 ),
             )
     @app.task
-    def update_priority_epss_kev(finding_ids: list[int], test_id: int) -> None:
+    def update_priority_epss_kev(finding_ids: list[int], test) -> None:
         """
         Get priority, EPSS score and KEV status update for a list of finding ids
-
-        Note: only the test id is accepted here (instead of the full Test instance) to
-        avoid pickling/serializing the Test object - and any related objects cached on
-        it (engagement, product, ...) - into the celery broker message.
         """
         df_risk_score = None
         epss_dict = None
@@ -969,8 +965,7 @@ class BaseImporter(ImporterOptions):
         findings_to_update = []
         total_processed = 0
 
-        test = Test.objects.filter(id=test_id).first()
-        enabled_azure_devops_sprint_sla_start_date = bool(test) and azure_devops_sprint_sla_start_date_enabled(test)
+        enabled_azure_devops_sprint_sla_start_date = azure_devops_sprint_sla_start_date_enabled(test)
         next_sprint_start_date = None
         if enabled_azure_devops_sprint_sla_start_date:
             logger.info("IMPORT_SCAN: Azure DevOps Sprint SLA Start Date is enabled, fetching next sprint start date from cache")

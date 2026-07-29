@@ -1132,12 +1132,12 @@ class SLA_Configuration(models.Model):
                 super().save(*args, **kwargs)
                 # set the async updating flag to true for all products using this sla config
                 products = Product.objects.filter(sla_configuration=self)
-                for product in products:
-                    product.async_updating = True
-                    super(Product, product).save()
+                product_ids = list(products.values_list("id", flat=True))
+                if product_ids:
+                    Product.objects.filter(id__in=product_ids).update(async_updating=True)
                 # launch the async task to update all finding sla expiration dates
                 from dojo.sla_config.helpers import update_sla_expiration_dates_sla_config_async
-                update_sla_expiration_dates_sla_config_async(self, products, tuple(severities))
+                update_sla_expiration_dates_sla_config_async(self, product_ids, tuple(severities))
 
     def clean(self):
         sla_days = [self.critical, self.high, self.medium, self.low]
