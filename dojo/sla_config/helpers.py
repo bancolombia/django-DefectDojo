@@ -84,9 +84,11 @@ def update_sla_expiration_dates_sla_config_sync(sla_config, product_ids=None, se
         else:
             findings = findings.filter(severity__in=severities)
 
-    configured_tags_filter = _normalize_tags_filter_value(
-        GeneralSettings.get_value(name_key=SLA_FINDINGS_TAGS_FILTER_SETTING, default=[]),
-    )
+    configured_tags_filter = []
+    if GeneralSettings.objects.filter(name_key=SLA_FINDINGS_TAGS_FILTER_SETTING).exists():
+        configured_tags_filter = _normalize_tags_filter_value(
+            GeneralSettings.get_value(name_key=SLA_FINDINGS_TAGS_FILTER_SETTING, default=[]),
+        )
     if configured_tags_filter:
         findings = findings.filter(tags__name__in=configured_tags_filter).distinct()
         logger.info(
@@ -107,13 +109,13 @@ def update_sla_expiration_dates_sla_config_sync(sla_config, product_ids=None, se
     mass_model_updater(Finding, findings, lambda f: f.set_sla_expiration_date(), fields=["sla_expiration_date"])
 
     # reset async flag in bulk for all affected products
-    impacted_product_ids = list(target_products.values_list("id", flat=True))
-    if impacted_product_ids:
+    impacted_products = list(target_products.only("id", "name"))
+    if impacted_products:
+        impacted_product_ids = [product.id for product in impacted_products]
         Product.objects.filter(id__in=impacted_product_ids).update(async_updating=False)
 
-        # keep grade recalculation behavior, but avoid loading full Product objects here
-        for product_id in impacted_product_ids:
-            calculate_grade(product_id)
+        for product in impacted_products:
+            calculate_grade(product)
 
     # reset the async updating flag to false for this sla config
     sla_config.async_updating = False
