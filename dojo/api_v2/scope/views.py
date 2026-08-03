@@ -53,7 +53,6 @@ class ScopeViewSet(prefetch.PrefetchListMixin,
         return inputs
         
     def destroy(self, request, *args, **kwargs):
-        """Override destroy para evitar get_queryset()"""
         input_id = kwargs.get("pk")
         input_instance = get_object_or_404(Input, id=input_id)
         
