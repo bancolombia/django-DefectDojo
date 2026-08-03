@@ -51,6 +51,15 @@ class ScopeViewSet(prefetch.PrefetchListMixin,
         product = get_object_or_404(Product, id=pid)
         inputs = get_authorized_scope(Permissions.Input_View, product)
         return inputs
+        
+    def destroy(self, request, *args, **kwargs):
+        input_id = kwargs.get("pk")
+        input_instance = get_object_or_404(Input, id=input_id)
+        
+        self.check_object_permissions(request, input_instance)
+        
+        input_instance.delete()
+        return http_response.ok(message="Input deleted successfully.", data=None)
 
     def update(self, request, *args, **kwargs):
         input_id = kwargs.get("pk")
