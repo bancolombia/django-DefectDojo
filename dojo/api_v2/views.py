@@ -52,7 +52,8 @@ from dojo.transfer_findings.serializers import (
     TransferFindingCreateSerializer,
     TransferFindingSerializer,
     TransferFindingBasicSerializer,
-    TransferFindingFindingCreateSerializer,)
+    TransferFindingFindingCreateSerializer,
+    TransferFindingChangeStatusRequest)
 from dojo.finding.serializer import IARecommendationSerializer, FindingBulkUpdateSLAStartDateSerializer
 from dojo.risk_acceptance.serializers import RiskAcceptanceEmailSerializer
 from dojo.authorization.roles_permissions import Permissions
@@ -3703,7 +3704,32 @@ class TransferFindingViewSet(prefetch.PrefetchListMixin,
             {"engagement_id": transfer_finding, "notes": notes},
         )
         return Response(serialized_notes.data, status=status.HTTP_200_OK)
-
+    
+    @extend_schema(
+        methods=["POST"],
+        request=TransferFindingChangeStatusRequest(many=True),
+        responses={status.HTTP_200_OK: TransferFindingSerializer},
+    )
+    @action(detail=False, methods=["post"])
+    def actions(self, request):
+        serializer = TransferFindingChangeStatusRequest(data=request.data, many=True)
+        if serializer.is_valid():
+            for actions in serializer.validated_data["actions"]:
+                serializer = serializers.TransferFindingFindingsUpdateSerializer(data=request.data)
+                data = {
+                    "engagement_id": actions["engagement_id"],
+                    "findings": 
+                        {
+                            "risk_status": serializers.CharField(),
+                            "related_finding": serializers.IntegerField(required=False)
+                        }
+                    }
+                transfer_finding_findings_qr = TransferFindingFinding.objects.filter(transfer_findings=actions["transfer_findings"])
+                for transfer_finding_findings in transfer_finding_findings_qr:
+                    helper_tf.transfer_findings(transfer_finding_findings, actions)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class TransferFindingFindingsViewSet(prefetch.PrefetchListMixin,
                              prefetch.PrefetchRetrieveMixin,

@@ -210,6 +210,17 @@ class TransferFindingCreateSerializer(serializers.ModelSerializer):
             validated_data["owner"] = user
         return super().create(validated_data)
 
+class TransferFindingChangeStatusRequest(serializers.Serializer):
+    engagement = serializers.IntegerField(required=True)
+    transfer_findings = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=True
+    ) 
+    action = serializers.ChoiceField(
+        choices=["accept", "reject"],
+        required=True
+    )
+
 class TransferFindingSerializer(serializers.ModelSerializer):
 
     transfer_findings = TransferFindingFindingSerializer(many=True)

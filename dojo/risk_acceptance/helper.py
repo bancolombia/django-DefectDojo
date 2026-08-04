@@ -535,8 +535,11 @@ def get_matching_value(list_a, list_b):
 
 def enable_flow_accept_risk(**kwargs):
     # add rule custom if necessary
-    if (kwargs["finding"].risk_status in ["Risk Active", "Risk Expired", "Transfer Rejected"] and  kwargs["finding"].severity != "Info"
-    and kwargs["finding"].active is True and not kwargs["finding"].tags.filter(name__in=settings.DD_CUSTOM_TAG_PARSER.get("disable_ra", "").split("-")).exists()):
+    if (
+        kwargs["finding"].risk_status in ["Risk Active", "Risk Expired", "Transfer Rejected"] and  kwargs["finding"].severity != "Info"
+        and kwargs["finding"].active is True 
+        and kwargs["finding"].risk_acceptance
+        and not kwargs["finding"].tags.filter(name__in=settings.DD_CUSTOM_TAG_PARSER.get("disable_ra", "").split("-")).exists()):
         return True
     return False
 
