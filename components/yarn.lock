@@ -168,10 +168,15 @@ datatables.net-colreorder@^3.0.0:
   dependencies:
     datatables.net "^3"
 
-datatables.net@3.0.0, datatables.net@^3, datatables.net@^3.0.0:
+datatables.net@3.0.0:
   version "3.0.0"
   resolved "https://registry.yarnpkg.com/datatables.net/-/datatables.net-3.0.0.tgz#39ad1c72738826a4467b9f55b742a876059113ac"
   integrity sha512-6p19AYaAZEghnlTI3fLNrGFrJ8aioC47E0BQmLT3YnNcL1cZHfIlc2EsN5OL0bljIZRDIXJYoaIr7nB2AZQy1Q==
+
+datatables.net@^3, datatables.net@^3.0.1:
+  version "3.0.1"
+  resolved "https://registry.yarnpkg.com/datatables.net/-/datatables.net-3.0.1.tgz#f520f45a382ffa5e2b54f08a93f5dcbc929d9572"
+  integrity sha512-cV/2DJr42PFMnK9sAoK/QbcuE7g9HYF0x0vOND7WRsG2RWMkiyOY8TOJFbi+uDkBH4I7ggmkBvO+j4gNoh+u3g==
 
 delegate@^3.1.2:
   version "3.2.0"
