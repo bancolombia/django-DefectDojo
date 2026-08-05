@@ -37,3 +37,24 @@ class HCManualPostulationForm(forms.Form):
         super().__init__(*args, **kwargs)
         criteria_choices = list(getattr(settings, "HC_MANUAL_POSTULATION_CRITERIA", []))
         self.fields["criteria"].choices = [(criterion, criterion) for criterion in criteria_choices]
+
+
+class HCConfirmIngressPostulationForm(forms.Form):
+    """Checklist required for reviewers before moving a postulated
+    request to Reviewed."""
+
+    criteria = forms.MultipleChoiceField(
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        label="Checklist to confirm ingress postulation",
+        error_messages={
+            "required": "You must confirm at least one ingress checklist criterion to mark as reviewed."
+        }
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        criteria_choices = list(getattr(settings, "HC_CONFIRM_INGRESS_POSTULATION_CRITERIA", []))
+        self.fields["criteria"].choices = [(criterion, criterion) for criterion in criteria_choices]
+        self.requires_selection = bool(criteria_choices)
+        self.fields["criteria"].required = self.requires_selection

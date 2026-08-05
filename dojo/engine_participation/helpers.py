@@ -6,13 +6,14 @@ import requests
 
 from django.db import transaction
 from django.conf import settings
+from django.core.cache import cache
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
 
 from celery.utils.log import get_task_logger
 
-from dojo.models import Product, Dojo_Group, Dojo_User
+from dojo.models import GeneralSettings, Product, Dojo_Group, Dojo_User
 from dojo.group.queries import get_group_members_for_group
 from dojo.notifications.helper import create_notification
 from dojo.engine_participation.models import HCParticipation, HCParticipationLog
@@ -25,6 +26,10 @@ HC_STATUS_TRANSITIONS = {
     "Approved": {"Reviewed"},
     "Rejected": {"Pending", "Reviewed"},
 }
+HC_APPROVAL_BAG_SIZE_KEY = "HACKING_CONTINUOUS_APPROVAL_BAG_SIZE"
+HC_APPROVAL_BAG_DEFAULT_SIZE = 0
+HC_PRESELECTED_FLAG_KEY = "is_preselected_for_hc"
+HC_INGRESS_CONFIRMATION_CRITERIA_KEY = "ingress_confirmation_criteria_checked"
 
 
 class HCConstants(Enum):
@@ -34,6 +39,181 @@ class HCConstants(Enum):
 
 class InvalidHCParticipationTransition(Exception):
     """Raised when a workflow action is attempted from an invalid state."""
+
+
+def _normalize_int(raw_value, default=0) -> int:
+    try:
+        return int(raw_value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _clear_general_setting_cache(name_key: str) -> None:
+    if getattr(settings, "USE_CACHE_REDIS", False):
+        cache.delete(f"GENERAL_SETTINGS:{name_key}")
+
+
+def get_hc_approval_bag_size() -> int:
+    configured_value = GeneralSettings.get_value(
+        HC_APPROVAL_BAG_SIZE_KEY,
+        HC_APPROVAL_BAG_DEFAULT_SIZE,
+    )
+    return _normalize_int(configured_value, default=HC_APPROVAL_BAG_DEFAULT_SIZE)
+
+
+def _update_hc_approval_bag_size(delta: int) -> int:
+    with transaction.atomic():
+        setting_row = GeneralSettings.objects.select_for_update().filter(
+            name_key=HC_APPROVAL_BAG_SIZE_KEY,
+        ).first()
+
+        if setting_row is None:
+            current_value = HC_APPROVAL_BAG_DEFAULT_SIZE
+            setting_row = GeneralSettings(
+                name_key=HC_APPROVAL_BAG_SIZE_KEY,
+                value=str(current_value),
+                category="engine_participation",
+                data_type="INT",
+                description="Products available to approve into Hacking Continuous",
+                status=True,
+            )
+        else:
+            current_value = _normalize_int(
+                setting_row.value,
+                default=HC_APPROVAL_BAG_DEFAULT_SIZE,
+            )
+
+        next_value = current_value + delta
+        setting_row.value = str(next_value)
+        if not setting_row.data_type:
+            setting_row.data_type = "INT"
+        if setting_row.status is None:
+            setting_row.status = True
+        setting_row.save()
+
+    _clear_general_setting_cache(HC_APPROVAL_BAG_SIZE_KEY)
+    return next_value
+
+
+def _consume_hc_approval_bag_slot() -> int:
+    with transaction.atomic():
+        setting_row = GeneralSettings.objects.select_for_update().filter(
+            name_key=HC_APPROVAL_BAG_SIZE_KEY,
+        ).first()
+        if setting_row is None:
+            current_value = HC_APPROVAL_BAG_DEFAULT_SIZE
+            setting_row = GeneralSettings(
+                name_key=HC_APPROVAL_BAG_SIZE_KEY,
+                value=str(current_value),
+                category="engine_participation",
+                data_type="INT",
+                description="Products available to approve into Hacking Continuous",
+                status=True,
+            )
+        else:
+            current_value = _normalize_int(
+                setting_row.value,
+                default=HC_APPROVAL_BAG_DEFAULT_SIZE,
+            )
+
+        if current_value <= 0:
+            raise InvalidHCParticipationTransition(
+                "No approval bag slots available. Review removal requests already_in_hc to increase the bag size."
+            )
+
+        next_value = current_value - 1
+        setting_row.value = str(next_value)
+        if not setting_row.data_type:
+            setting_row.data_type = "INT"
+        if setting_row.status is None:
+            setting_row.status = True
+        setting_row.save()
+
+    _clear_general_setting_cache(HC_APPROVAL_BAG_SIZE_KEY)
+    return next_value
+
+
+def get_hc_participation_summary() -> dict:
+    postulated_products = HCParticipation.objects.filter(
+        recommendation__in=("postulated", "postulated_manually"),
+        status__in=ACTIVE_HC_REQUEST_STATUSES,
+    ).values("product_id").distinct().count()
+
+    preselected_products = 0
+    preselected_requests = HCParticipation.objects.filter(
+        recommendation__in=("postulated", "postulated_manually"),
+        status="Pending",
+    ).only("security_posture_data")
+    for request in preselected_requests:
+        if is_hc_request_preselected(request):
+            preselected_products += 1
+
+    latest_by_product = {}
+    for request in HCParticipation.objects.only(
+        "product_id",
+        "recommendation",
+        "status",
+        "create_date",
+    ).order_by("product_id", "-create_date"):
+        if request.product_id not in latest_by_product:
+            latest_by_product[request.product_id] = request
+
+    products_in_hc = 0
+    for latest in latest_by_product.values():
+        if latest.recommendation in ("postulated", "postulated_manually"):
+            if latest.status == "Approved":
+                products_in_hc += 1
+        elif latest.recommendation == "already_in_hc":
+            if latest.status in ("Pending", "Reviewed", "Rejected"):
+                products_in_hc += 1
+
+    return {
+        "bag_size": get_hc_approval_bag_size(),
+        "postulated_products": postulated_products,
+        "preselected_products": preselected_products,
+        "products_in_hc": products_in_hc,
+    }
+
+
+def is_hc_request_preselected(hc_participation) -> bool:
+    security_posture_data = hc_participation.security_posture_data
+    if not isinstance(security_posture_data, dict):
+        return False
+    return bool(security_posture_data.get(HC_PRESELECTED_FLAG_KEY, False))
+
+
+def set_hc_request_preselection(hc_participation, is_preselected: bool):
+    with transaction.atomic():
+        locked_hc_participation = HCParticipation.objects.select_for_update().get(pk=hc_participation.pk)
+
+        if locked_hc_participation.recommendation not in ("postulated", "postulated_manually"):
+            raise InvalidHCParticipationTransition(
+                "Only postulated requests can be pre-selected."
+            )
+
+        if locked_hc_participation.status != "Pending":
+            raise InvalidHCParticipationTransition(
+                "Only pending postulated requests can be pre-selected."
+            )
+
+        security_posture_data = locked_hc_participation.security_posture_data
+        if not isinstance(security_posture_data, dict):
+            security_posture_data = {}
+
+        currently_preselected = bool(security_posture_data.get(HC_PRESELECTED_FLAG_KEY, False))
+        if currently_preselected == is_preselected:
+            return locked_hc_participation
+
+        if is_preselected:
+            _update_hc_approval_bag_size(-1)
+        else:
+            _update_hc_approval_bag_size(1)
+
+        security_posture_data[HC_PRESELECTED_FLAG_KEY] = is_preselected
+        locked_hc_participation.security_posture_data = security_posture_data
+        locked_hc_participation.save()
+
+    return locked_hc_participation
 
 
 def _get_hc_postulated_endpoint_url() -> str:
@@ -133,6 +313,7 @@ def _fetch_microservice(user, endpoint_url: str) -> list:
             json=request_body,
             headers=_build_hc_auth_headers(token_key),
             timeout=timeout_seconds,
+            verify=False,
         )
         response.raise_for_status()
         payload = response.json()
@@ -503,10 +684,40 @@ def delete_hc_participation_records_by_date_range(start_date, end_date):
     }
 
 
-def mark_hc_participation_reviewed(hc_participation, user):
+def mark_hc_participation_reviewed(hc_participation, user, confirmation_criteria=None):
     with transaction.atomic():
         locked_hc_participation = HCParticipation.objects.select_for_update().get(pk=hc_participation.pk)
         _validate_hc_status_transition(locked_hc_participation.status, "Reviewed")
+
+        is_postulation_request = locked_hc_participation.recommendation in (
+            "postulated",
+            "postulated_manually",
+        )
+        is_already_in_hc_request = locked_hc_participation.recommendation == "already_in_hc"
+        was_preselected = is_hc_request_preselected(locked_hc_participation)
+
+        current_bag_size = get_hc_approval_bag_size()
+        if is_postulation_request and current_bag_size < 0:
+            raise InvalidHCParticipationTransition(
+                "Bag size is negative. Remove pre-selections or review already_in_hc removals before reviewing more postulated requests."
+            )
+
+        if is_postulation_request and not was_preselected:
+            _consume_hc_approval_bag_slot()
+
+        if is_postulation_request and was_preselected:
+            security_posture_data = locked_hc_participation.security_posture_data
+            if not isinstance(security_posture_data, dict):
+                security_posture_data = {}
+            security_posture_data[HC_PRESELECTED_FLAG_KEY] = False
+            locked_hc_participation.security_posture_data = security_posture_data
+
+        if is_postulation_request and confirmation_criteria:
+            security_posture_data = locked_hc_participation.security_posture_data
+            if not isinstance(security_posture_data, dict):
+                security_posture_data = {}
+            security_posture_data[HC_INGRESS_CONFIRMATION_CRITERIA_KEY] = list(confirmation_criteria)
+            locked_hc_participation.security_posture_data = security_posture_data
 
         previous_status = locked_hc_participation.status
         current_time = timezone.now()
@@ -530,11 +741,13 @@ def mark_hc_participation_reviewed(hc_participation, user):
             notes=review_note,
         )
 
+        if is_already_in_hc_request:
+            _update_hc_approval_bag_size(1)
+
     return locked_hc_participation
 
 
 def approve_hc_participation(hc_participation, user):
- 
     with transaction.atomic():
         hc_participation = HCParticipation.objects.select_for_update().get(pk=hc_participation.pk)
         _validate_hc_status_transition(hc_participation.status, "Approved")
@@ -581,6 +794,13 @@ def reject_hc_participation(hc_participation, user):
     with transaction.atomic():
         hc_participation = HCParticipation.objects.select_for_update().get(pk=hc_participation.pk)
         _validate_hc_status_transition(hc_participation.status, "Rejected")
+
+        security_posture_data = hc_participation.security_posture_data
+        if not isinstance(security_posture_data, dict):
+            security_posture_data = {}
+        if security_posture_data.pop(HC_PRESELECTED_FLAG_KEY, False):
+            _update_hc_approval_bag_size(1)
+            hc_participation.security_posture_data = security_posture_data
 
         previous_status = hc_participation.status
         current_time = timezone.now()

@@ -59,6 +59,34 @@
                     </span>
                 </div>
             </div>
+            <div class="panel panel-default">
+                <div class="panel-heading"><strong>HC Participation Summary</strong></div>
+                <div class="panel-body">
+                    {% if hc_summary.bag_size < 0 %}
+                        <div class="alert alert-danger" role="alert" style="margin-bottom: 15px;">
+                            Bag size is negative. Remove pre-selections or review already_in_hc removals before reviewing more postulated requests.
+                        </div>
+                    {% endif %}
+                    <div class="row text-center">
+                        <div class="col-sm-3">
+                            <h4 {% if hc_summary.bag_size < 0 %}style="color: #d11d38;"{% endif %}>{{ hc_summary.bag_size|default:0 }}</h4>
+                            <p class="text-muted">Bag size (available approvals)</p>
+                        </div>
+                        <div class="col-sm-3">
+                            <h4>{{ hc_summary.postulated_products|default:0 }}</h4>
+                            <p class="text-muted">Postulated products</p>
+                        </div>
+                        <div class="col-sm-3">
+                            <h4>{{ hc_summary.preselected_products|default:0 }}</h4>
+                            <p class="text-muted">Pre-selected products</p>
+                        </div>
+                        <div class="col-sm-3">
+                            <h4>{{ hc_summary.products_in_hc|default:0 }}</h4>
+                            <p class="text-muted">Products in Hacking Continuous</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
             {% if has_hc_requests %}
             <div class="panel panel-default table-responsive">
                 <div class="panel-heading"><strong>Postulated Requests</strong></div>
@@ -71,6 +99,7 @@
                             <th>Recommendation</th>
                             <th>Created Date</th>
                             <th>Status</th>
+                            <th>Pre-selection</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -99,10 +128,31 @@
                                         {{ hc.status }}
                                     {% endif %}
                                 </td>
+                                <td>
+                                    {% if can_preselect_hc and hc.status == 'Pending' %}
+                                        {% if hc.is_preselected_for_hc %}
+                                            <form method="post" action="{% url 'remove_hc_preselection' hc.uuid %}" style="display:inline;">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="next" value="{{ request.get_full_path }}" />
+                                                <button type="submit" class="btn btn-xs btn-warning">Remove pre-selection</button>
+                                            </form>
+                                        {% else %}
+                                            <form method="post" action="{% url 'preselect_hc_participation' hc.uuid %}" style="display:inline;">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="next" value="{{ request.get_full_path }}" />
+                                                <button type="submit" class="btn btn-xs btn-secondary">Pre-select</button>
+                                            </form>
+                                        {% endif %}
+                                    {% elif hc.is_preselected_for_hc %}
+                                        <span class="label label-warning">Pre-selected</span>
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
                             </tr>
                         {% empty %}
                             <tr>
-                                <td colspan="6" class="text-center text-muted">No postulated requests in this page.</td>
+                                <td colspan="7" class="text-center text-muted">No postulated requests in this page.</td>
                             </tr>
                         {% endfor %}
                     </tbody>

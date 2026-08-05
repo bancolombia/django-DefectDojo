@@ -30,6 +30,7 @@ from dojo.engine_participation.helpers import (
     approve_hc_participation,
     mark_hc_participation_reviewed,
     reject_hc_participation,
+    set_hc_request_preselection,
 )
 
 
@@ -329,6 +330,14 @@ class ApproveRejectHCTest(TestCase):
     def setUp(self):
         self.product = Product.objects.first()
         self.user = Dojo_User.objects.get(username="admin")
+        GeneralSettings.objects.update_or_create(
+            name_key="HACKING_CONTINUOUS_APPROVAL_BAG_SIZE",
+            defaults={
+                "value": "2",
+                "data_type": "INT",
+                "status": True,
+            },
+        )
         self.hc = HCParticipation.objects.create(
             product=self.product,
             recommendation="postulated",
@@ -349,6 +358,9 @@ class ApproveRejectHCTest(TestCase):
         log = HCParticipationLog.objects.filter(hc_participation=self.hc).first()
         self.assertIsNotNone(log)
         self.assertEqual(log.current_status, "Approved")
+
+        bag_size = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(bag_size), 2)
     
     def test_reject_hc_participation(self):
         """Test rejecting HC participation"""
@@ -362,6 +374,23 @@ class ApproveRejectHCTest(TestCase):
         log = HCParticipationLog.objects.filter(hc_participation=self.hc).first()
         self.assertIsNotNone(log)
         self.assertEqual(log.current_status, "Rejected")
+
+    def test_reject_preselected_clears_flag_and_restores_bag(self):
+        """Rejecting a preselected request removes the flag and increments the bag."""
+        GeneralSettings.objects.update_or_create(
+            name_key="HACKING_CONTINUOUS_APPROVAL_BAG_SIZE",
+            defaults={"value": "3", "data_type": "INT", "status": True},
+        )
+        self.hc.security_posture_data = {"is_preselected_for_hc": True}
+        self.hc.save()
+
+        reject_hc_participation(self.hc, self.user)
+
+        self.hc.refresh_from_db()
+        self.assertEqual(self.hc.status, "Rejected")
+        self.assertFalse(self.hc.security_posture_data.get("is_preselected_for_hc", False))
+        bag_size = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(bag_size), 4)
 
     def test_review_hc_participation_requires_pending_status(self):
         """Test reviewing only works from Pending status"""
@@ -388,6 +417,158 @@ class ApproveRejectHCTest(TestCase):
 
         with self.assertRaises(InvalidHCParticipationTransition):
             reject_hc_participation(self.hc, self.user)
+
+    def test_approve_hc_participation_does_not_require_bag_slots(self):
+        """Approver action does not consume or validate bag slots"""
+        GeneralSettings.objects.update_or_create(
+            name_key="HACKING_CONTINUOUS_APPROVAL_BAG_SIZE",
+            defaults={
+                "value": "0",
+                "data_type": "INT",
+                "status": True,
+            },
+        )
+
+        approve_hc_participation(self.hc, self.user)
+
+        self.hc.refresh_from_db()
+        self.assertEqual(self.hc.status, "Approved")
+
+        bag_size = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(bag_size), 0)
+
+    def test_review_postulated_consumes_bag_slot(self):
+        """Reviewing a postulated request consumes one bag slot"""
+        pending_postulation = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.user,
+        )
+
+        mark_hc_participation_reviewed(pending_postulation, self.user)
+
+        pending_postulation.refresh_from_db()
+        self.assertEqual(pending_postulation.status, "Reviewed")
+        bag_size = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(bag_size), 1)
+
+    def test_review_postulated_fails_when_bag_has_no_slots(self):
+        """Reviewer cannot mark postulated as reviewed when bag is empty"""
+        GeneralSettings.objects.update_or_create(
+            name_key="HACKING_CONTINUOUS_APPROVAL_BAG_SIZE",
+            defaults={
+                "value": "0",
+                "data_type": "INT",
+                "status": True,
+            },
+        )
+        pending_postulation = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.user,
+        )
+
+        with self.assertRaises(InvalidHCParticipationTransition):
+            mark_hc_participation_reviewed(pending_postulation, self.user)
+
+        pending_postulation.refresh_from_db()
+        self.assertEqual(pending_postulation.status, "Pending")
+
+    def test_review_postulated_preselected_does_not_consume_bag_twice(self):
+        """If request was already pre-selected, review should not consume an extra slot"""
+        pending_postulation = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.user,
+        )
+
+        set_hc_request_preselection(pending_postulation, True)
+        bag_after_preselection = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(bag_after_preselection), 1)
+
+        mark_hc_participation_reviewed(pending_postulation, self.user)
+
+        bag_after_review = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(bag_after_review), 1)
+
+    def test_review_postulated_preselected_fails_when_bag_is_negative(self):
+        """When bag is negative, postulated requests cannot be marked as reviewed."""
+        pending_postulation = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.user,
+        )
+
+        set_hc_request_preselection(pending_postulation, True)
+
+        second_postulation = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.user,
+        )
+        set_hc_request_preselection(second_postulation, True)
+
+        third_postulation = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.user,
+        )
+        set_hc_request_preselection(third_postulation, True)
+
+        bag_size = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertLess(int(bag_size), 0)
+
+        with self.assertRaises(InvalidHCParticipationTransition):
+            mark_hc_participation_reviewed(pending_postulation, self.user)
+
+        pending_postulation.refresh_from_db()
+        self.assertEqual(pending_postulation.status, "Pending")
+
+    def test_preselect_and_remove_preselection_adjust_bag(self):
+        """Pre-select decreases bag and removing pre-selection increases it"""
+        pending_postulation = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.user,
+        )
+
+        set_hc_request_preselection(pending_postulation, True)
+        bag_after_preselection = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(bag_after_preselection), 1)
+
+        set_hc_request_preselection(pending_postulation, False)
+        bag_after_removal = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(bag_after_removal), 2)
+
+    def test_review_already_in_hc_increments_bag_size(self):
+        """Reviewing an already_in_hc removal request increases bag size by 1"""
+        GeneralSettings.objects.update_or_create(
+            name_key="HACKING_CONTINUOUS_APPROVAL_BAG_SIZE",
+            defaults={
+                "value": "0",
+                "data_type": "INT",
+                "status": True,
+            },
+        )
+        removal_request = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="already_in_hc",
+            status="Pending",
+            was_in_hacking_continuous=True,
+            created_by=self.user,
+        )
+
+        mark_hc_participation_reviewed(removal_request, self.user)
+
+        bag_size = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(bag_size), 1)
 
 
 class GetLatestEvaluationTest(TestCase):
@@ -448,6 +629,14 @@ class HCParticipationViewsTest(TestCase):
             status="Pending",
             created_by=self.user,
         )
+        GeneralSettings.objects.update_or_create(
+            name_key="HACKING_CONTINUOUS_APPROVAL_BAG_SIZE",
+            defaults={
+                "value": "3",
+                "data_type": "INT",
+                "status": True,
+            },
+        )
     
     def test_list_view(self):
         """Test HC participation list view"""
@@ -459,6 +648,51 @@ class HCParticipationViewsTest(TestCase):
         
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.product.name)
+
+    def test_list_view_includes_hc_summary(self):
+        """List view shows summary panel with bag size and counters"""
+        from django.test import Client
+
+        HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Approved",
+            created_by=self.user,
+        )
+
+        client = Client()
+        client.force_login(self.user)
+        response = client.get(reverse("hc_participations"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "HC Participation Summary")
+        self.assertContains(response, "Bag size (available approvals)")
+        self.assertContains(response, "Postulated products")
+        self.assertContains(response, "Pre-selected products")
+        self.assertContains(response, "Products in Hacking Continuous")
+
+    def test_list_view_shows_bag_in_red_when_negative(self):
+        """When bag size is negative, summary value should be rendered in red"""
+        GeneralSettings.objects.update_or_create(
+            name_key="HACKING_CONTINUOUS_APPROVAL_BAG_SIZE",
+            defaults={
+                "value": "-1",
+                "data_type": "INT",
+                "status": True,
+            },
+        )
+
+        from django.test import Client
+        client = Client()
+        client.force_login(self.user)
+        response = client.get(reverse("hc_participations"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'style="color: #d11d38;"')
+        self.assertContains(
+            response,
+            "Bag size is negative. Remove pre-selections or review already_in_hc removals before reviewing more postulated requests.",
+        )
     
     def test_show_view(self):
         """Test HC participation detail view"""
@@ -513,6 +747,91 @@ class HCParticipationViewsTest(TestCase):
         response = client.get(reverse('review_hc_participation', args=[str(self.hc.uuid)]))
 
         self.assertEqual(response.status_code, 405)
+
+    @override_settings(HC_CONFIRM_INGRESS_POSTULATION_CRITERIA=["Criterion A", "Criterion B"])
+    @patch("dojo.engine_participation.views.is_in_group", return_value=True)
+    @patch("dojo.engine_participation.views.has_valid_comments", return_value=True)
+    @patch("dojo.engine_participation.views.mark_hc_participation_reviewed")
+    def test_review_requires_checklist_for_postulated_requests(
+        self,
+        mock_mark_reviewed,
+        _mock_has_comments,
+        _mock_is_in_group,
+    ):
+        """Reviewing postulated requests requires full checklist when configured."""
+        from django.test import Client
+
+        client = Client()
+        client.force_login(self.user)
+
+        response = client.post(
+            reverse("review_hc_participation", args=[str(self.hc.uuid)]),
+            data={},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "You must confirm all ingress checklist criteria to mark as reviewed.")
+        mock_mark_reviewed.assert_not_called()
+
+    @override_settings(HC_CONFIRM_INGRESS_POSTULATION_CRITERIA=["Criterion A", "Criterion B"])
+    @patch("dojo.engine_participation.views.is_in_group", return_value=True)
+    @patch("dojo.engine_participation.views.has_valid_comments", return_value=True)
+    @patch("dojo.engine_participation.views.mark_hc_participation_reviewed")
+    def test_review_rejects_partial_checklist_for_postulated_requests(
+        self,
+        mock_mark_reviewed,
+        _mock_has_comments,
+        _mock_is_in_group,
+    ):
+        """Reviewing postulated requests with partial checklist must be rejected."""
+        from django.test import Client
+
+        client = Client()
+        client.force_login(self.user)
+
+        response = client.post(
+            reverse("review_hc_participation", args=[str(self.hc.uuid)]),
+            data={"criteria": ["Criterion A"]},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "You must confirm all ingress checklist criteria to mark as reviewed.")
+        mock_mark_reviewed.assert_not_called()
+
+    @override_settings(HC_CONFIRM_INGRESS_POSTULATION_CRITERIA=["Criterion A", "Criterion B"])
+    @patch("dojo.engine_participation.views.is_in_group", return_value=True)
+    @patch("dojo.engine_participation.views.has_valid_comments", return_value=True)
+    @patch("dojo.engine_participation.views.get_hc_approvers_members", return_value=[])
+    @patch("dojo.engine_participation.views.create_notification")
+    @patch("dojo.engine_participation.views.mark_hc_participation_reviewed")
+    def test_review_accepts_checklist_for_postulated_requests(
+        self,
+        mock_mark_reviewed,
+        _mock_create_notification,
+        _mock_approvers,
+        _mock_has_comments,
+        _mock_is_in_group,
+    ):
+        """Review action forwards checklist criteria when all configured are selected."""
+        from django.test import Client
+
+        mock_mark_reviewed.return_value = self.hc
+
+        client = Client()
+        client.force_login(self.user)
+
+        response = client.post(
+            reverse("review_hc_participation", args=[str(self.hc.uuid)]),
+            data={"criteria": ["Criterion A", "Criterion B"]},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], reverse("hc_participation", args=[str(self.hc.uuid)]))
+        mock_mark_reviewed.assert_called_once()
+        _, kwargs = mock_mark_reviewed.call_args
+        self.assertEqual(kwargs.get("confirmation_criteria"), ["Criterion A", "Criterion B"])
 
     def test_approve_requires_post(self):
         """Test approve action rejects GET requests"""
@@ -600,6 +919,44 @@ class HCParticipationViewsTest(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.data["status"], "forbidden")
 
+    @patch("dojo.engine_participation.views.is_in_group", return_value=True)
+    def test_preselect_redirects_to_next_path(self, _mock_is_in_group):
+        """Preselect action should redirect back to the provided next path."""
+        from django.test import Client
+
+        client = Client()
+        client.force_login(self.user)
+
+        response = client.post(
+            reverse("preselect_hc_participation", args=[str(self.hc.uuid)]),
+            data={"next": "/engine_participation/hc_participations?status=Pending&postulated_page=2"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response["Location"],
+            "/engine_participation/hc_participations?status=Pending&postulated_page=2",
+        )
+
+    @patch("dojo.engine_participation.views.is_in_group", return_value=True)
+    def test_remove_preselection_rejects_external_next(self, _mock_is_in_group):
+        """External next URLs are rejected; fallback goes to hc_participations."""
+        from django.test import Client
+
+        self.hc.security_posture_data = {"is_preselected_for_hc": True}
+        self.hc.save()
+
+        client = Client()
+        client.force_login(self.user)
+
+        response = client.post(
+            reverse("remove_hc_preselection", args=[str(self.hc.uuid)]),
+            data={"next": "https://evil.example/path"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], reverse("hc_participations"))
+
 
 class HCManualPostulationFormTest(TestCase):
     """Tests for HCManualPostulationForm"""
@@ -645,6 +1002,27 @@ class HCManualPostulationFormTest(TestCase):
 
         self.assertFalse(form.is_valid())
         self.assertIn("criteria", form.errors)
+
+
+class HCConfirmIngressPostulationFormTest(TestCase):
+    """Tests for HCConfirmIngressPostulationForm behavior"""
+
+    @override_settings(HC_CONFIRM_INGRESS_POSTULATION_CRITERIA=["Criterion A", "Criterion B"])
+    def test_requires_at_least_one_criterion_when_configured(self):
+        from dojo.engine_participation.forms import HCConfirmIngressPostulationForm
+
+        form = HCConfirmIngressPostulationForm(data={})
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("criteria", form.errors)
+
+    @override_settings(HC_CONFIRM_INGRESS_POSTULATION_CRITERIA=[])
+    def test_allows_empty_selection_when_not_configured(self):
+        from dojo.engine_participation.forms import HCConfirmIngressPostulationForm
+
+        form = HCConfirmIngressPostulationForm(data={})
+
+        self.assertTrue(form.is_valid())
 
 
 class ManualHCPostulationEligibilityTest(TestCase):

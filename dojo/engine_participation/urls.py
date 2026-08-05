@@ -28,6 +28,16 @@ urlpatterns = [
         name="review_hc_participation"
     ),
     re_path(
+        r"^engine_participation/(?P<hcid>[\w-]+)/preselect/$",
+        views.preselect_hc_participation_request,
+        name="preselect_hc_participation"
+    ),
+    re_path(
+        r"^engine_participation/(?P<hcid>[\w-]+)/remove-preselection/$",
+        views.remove_hc_preselection_request,
+        name="remove_hc_preselection"
+    ),
+    re_path(
         r"^engine_participation/(?P<hcid>[\w-]+)/approve/$",
         views.approve_hc_participation_request,
         name="approve_hc_participation"

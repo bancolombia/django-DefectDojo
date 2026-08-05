@@ -1,8 +1,10 @@
 from django.contrib import messages
+from django.conf import settings
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.core.exceptions import PermissionDenied
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_POST, require_http_methods
 
@@ -14,20 +16,38 @@ from dojo.engine_participation.models import (
     HCParticipationDiscussion,
 )
 from dojo.engine_participation.filters import HCParticipationFilter
-from dojo.engine_participation.forms import HCManualPostulationForm, HCParticipationDiscussionForm
+from dojo.engine_participation.forms import (
+    HCConfirmIngressPostulationForm,
+    HCManualPostulationForm,
+    HCParticipationDiscussionForm,
+)
 from dojo.engine_participation.helpers import (
     HCConstants,
     InvalidHCParticipationTransition,
     approve_hc_participation,
     create_manual_hc_postulation,
+    get_hc_participation_summary,
     get_manual_hc_postulation_eligibility_error,
     reject_hc_participation,
     has_valid_comments,
     get_hc_approvers_members,
+    is_hc_request_preselected,
     mark_hc_participation_reviewed,
     run_hc_participation_evaluation,
+    set_hc_request_preselection,
 )
 from dojo.notifications.helper import create_notification
+
+
+def _redirect_to_next_or_hc_list(request: HttpRequest) -> HttpResponse:
+    next_url = (request.POST.get("next") or "").strip()
+    if next_url and url_has_allowed_host_and_scheme(
+        url=next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(next_url)
+    return redirect("hc_participations")
 
 
 def hc_participations(request: HttpRequest) -> HttpResponse:
@@ -45,12 +65,17 @@ def hc_participations(request: HttpRequest) -> HttpResponse:
 
     postulated_requests = get_page_items(request, postulated_qs, 25, prefix="postulated_")
     already_in_hc_requests = get_page_items(request, already_in_hc_qs, 25, prefix="already_")
+
+    for hc_request in postulated_requests.object_list:
+        hc_request.is_preselected_for_hc = is_hc_request_preselected(hc_request)
     
     add_breadcrumb(
         title="HC Participation Requests",
         top_level=True,
         request=request
     )
+
+    summary = get_hc_participation_summary()
     
     return render(request, "dojo/hc_participation/list.html", {
         "has_hc_requests": filtered.qs.exists(),
@@ -59,7 +84,59 @@ def hc_participations(request: HttpRequest) -> HttpResponse:
         "postulated_requests": postulated_requests,
         "already_in_hc_requests": already_in_hc_requests,
         "can_run_hc_evaluation": request.user.is_staff or request.user.is_superuser,
+        "can_preselect_hc": is_in_group(request.user, HCConstants.REVIEWERS_GROUP.value),
+        "hc_summary": summary,
     })
+
+
+@require_POST
+def preselect_hc_participation_request(request: HttpRequest, hcid: str) -> HttpResponse:
+    if not is_in_group(request.user, HCConstants.REVIEWERS_GROUP.value):
+        raise PermissionDenied
+
+    hc_participation = get_object_or_404(HCParticipation, pk=hcid)
+    try:
+        set_hc_request_preselection(hc_participation, True)
+        messages.add_message(
+            request,
+            messages.SUCCESS,
+            "Request pre-selected successfully.",
+            extra_tags="alert-success"
+        )
+    except InvalidHCParticipationTransition as exc:
+        messages.add_message(
+            request,
+            messages.ERROR,
+            str(exc),
+            extra_tags="alert-danger"
+        )
+
+    return _redirect_to_next_or_hc_list(request)
+
+
+@require_POST
+def remove_hc_preselection_request(request: HttpRequest, hcid: str) -> HttpResponse:
+    if not is_in_group(request.user, HCConstants.REVIEWERS_GROUP.value):
+        raise PermissionDenied
+
+    hc_participation = get_object_or_404(HCParticipation, pk=hcid)
+    try:
+        set_hc_request_preselection(hc_participation, False)
+        messages.add_message(
+            request,
+            messages.SUCCESS,
+            "Pre-selection removed successfully.",
+            extra_tags="alert-success"
+        )
+    except InvalidHCParticipationTransition as exc:
+        messages.add_message(
+            request,
+            messages.ERROR,
+            str(exc),
+            extra_tags="alert-danger"
+        )
+
+    return _redirect_to_next_or_hc_list(request)
 
 
 def show_hc_participation(request: HttpRequest, hcid: str) -> HttpResponse:
@@ -77,6 +154,11 @@ def show_hc_participation(request: HttpRequest, hcid: str) -> HttpResponse:
     )
     
     discussion_form = HCParticipationDiscussionForm()
+    review_checklist_form = HCConfirmIngressPostulationForm()
+    requires_review_checklist = (
+        hc_participation.recommendation in ("postulated", "postulated_manually")
+        and review_checklist_form.requires_selection
+    )
     logs = hc_participation.logs.select_related("changed_by").all()
     discussions = hc_participation.discussions.select_related("author").all()
     security_posture_data = hc_participation.security_posture_data if isinstance(hc_participation.security_posture_data, dict) else {}
@@ -92,6 +174,8 @@ def show_hc_participation(request: HttpRequest, hcid: str) -> HttpResponse:
     return render(request, "dojo/hc_participation/show.html", {
         "hc_participation": hc_participation,
         "discussion_form": discussion_form,
+        "review_checklist_form": review_checklist_form,
+        "requires_review_checklist": requires_review_checklist,
         "logs": logs,
         "discussions": discussions,
         "security_posture_data": security_posture_data,
@@ -157,6 +241,47 @@ def review_hc_participation(request: HttpRequest, hcid: str) -> HttpResponse:
         raise PermissionDenied
     
     hc_participation = get_object_or_404(HCParticipation, pk=hcid)
+    confirmation_criteria = []
+
+    if hc_participation.recommendation in ("postulated", "postulated_manually"):
+        configured_criteria = list(getattr(settings, "HC_CONFIRM_INGRESS_POSTULATION_CRITERIA", []))
+        raw_selected_criteria = [criterion.strip() for criterion in request.POST.getlist("criteria") if criterion.strip()]
+
+        if configured_criteria and not raw_selected_criteria:
+            messages.add_message(
+                request,
+                messages.ERROR,
+                "You must confirm all ingress checklist criteria to mark as reviewed.",
+                extra_tags="alert-danger"
+            )
+            return redirect("hc_participation", hcid=hcid)
+
+        if configured_criteria:
+            # Accept submitted values that match configured criteria after trim normalization.
+            normalized_allowed = {criterion.strip(): criterion for criterion in configured_criteria}
+            confirmation_criteria = [
+                normalized_allowed[selected]
+                for selected in raw_selected_criteria
+                if selected in normalized_allowed
+            ]
+
+            if not confirmation_criteria:
+                messages.add_message(
+                    request,
+                    messages.ERROR,
+                    "Selected checklist criteria are not valid.",
+                    extra_tags="alert-danger"
+                )
+                return redirect("hc_participation", hcid=hcid)
+
+            if len(set(confirmation_criteria)) != len(set(configured_criteria)):
+                messages.add_message(
+                    request,
+                    messages.ERROR,
+                    "You must confirm all ingress checklist criteria to mark as reviewed.",
+                    extra_tags="alert-danger"
+                )
+                return redirect("hc_participation", hcid=hcid)
     
     if not has_valid_comments(hc_participation, request.user):
         messages.add_message(
@@ -168,7 +293,11 @@ def review_hc_participation(request: HttpRequest, hcid: str) -> HttpResponse:
         return redirect("hc_participation", hcid=hcid)
 
     try:
-        hc_participation = mark_hc_participation_reviewed(hc_participation, request.user)
+        hc_participation = mark_hc_participation_reviewed(
+            hc_participation,
+            request.user,
+            confirmation_criteria=confirmation_criteria,
+        )
     except InvalidHCParticipationTransition as exc:
         messages.add_message(
             request,

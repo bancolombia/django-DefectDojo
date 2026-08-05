@@ -129,7 +129,7 @@
                         {% if can_review_hc_participation %}
                             {% if hc_participation.status == 'Pending' %}
                             <li>
-                                <form method="post" action="{% url 'review_hc_participation' hc_participation.uuid %}" style="margin: 0;">
+                                <form method="post" action="{% url 'review_hc_participation' hc_participation.uuid %}" id="review-dropdown-form" style="margin: 0;">
                                     {% csrf_token %}
                                     <button type="submit" class="dropdown-item btn btn-link" style="width: 100%; text-align: left;">
                                         <i class="fa-solid fa-circle-check"></i> Mark as Reviewed
@@ -254,6 +254,25 @@
                         <li>{{ criterion }}</li>
                     {% endfor %}
                 </ul>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if can_review_hc_participation and hc_participation.status == 'Pending' and requires_review_checklist %}
+        <div class="panel panel-default" id="review-checklist-panel">
+            <div class="panel-heading">
+                <h4>Reviewer Ingress Checklist</h4>
+            </div>
+            <div class="panel-body">
+                <p class="text-muted">Confirm all criteria before marking this request as reviewed.</p>
+                <div id="review-checklist-warning" class="alert alert-warning" style="display: none;">
+                    <i class="fa-solid fa-triangle-exclamation"></i> You must confirm all ingress checklist criteria before marking as reviewed.
+                </div>
+                {% for choice in review_checklist_form.criteria %}
+                    <div class="checkbox">
+                        <label>{{ choice.tag }} {{ choice.choice_label }}</label>
+                    </div>
+                {% endfor %}
             </div>
         </div>
         {% endif %}
@@ -457,6 +476,33 @@
 </div>
 
 <script>
+    (function () {
+        var reviewDropdownForm = document.getElementById('review-dropdown-form');
+        if (reviewDropdownForm) {
+            reviewDropdownForm.addEventListener('submit', function (e) {
+                var checkboxes = document.querySelectorAll('#review-checklist-panel input[name="criteria"]');
+                if (checkboxes.length === 0) return;
+                var allChecked = Array.from(checkboxes).every(function (cb) { return cb.checked; });
+                if (!allChecked) {
+                    e.preventDefault();
+                    var warning = document.getElementById('review-checklist-warning');
+                    if (warning) {
+                        warning.style.display = 'block';
+                        warning.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                    return false;
+                }
+                checkboxes.forEach(function (cb) {
+                    var hidden = document.createElement('input');
+                    hidden.type = 'hidden';
+                    hidden.name = 'criteria';
+                    hidden.value = cb.value;
+                    reviewDropdownForm.appendChild(hidden);
+                });
+            });
+        }
+    })();
+
     (function () {
         const apiUrl = "{{ risk_posture_api_url }}";
         const activeEl = document.getElementById("hc-posture-active-findings");
