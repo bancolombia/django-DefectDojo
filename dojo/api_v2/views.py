@@ -2410,10 +2410,13 @@ class TestsViewSet(
         previous_engagement_id = serializer.instance.engagement_id
 
         updated_test = serializer.save()
+        enable_service_propagation = GeneralSettings.get_value(
+            "ENABLE_PROPAGATE_TEST_ENGAGEMENT_TO_FINDING_SERVICE", True,
+        )
 
         # If the engagement changed via this API update, propagate the new
         # engagement name to the `service` field of all Findings on this Test.
-        if previous_engagement_id != updated_test.engagement_id:
+        if enable_service_propagation and previous_engagement_id != updated_test.engagement_id:
             try:
                 new_service_value = updated_test.engagement.name if updated_test.engagement else None
                 if new_service_value is not None:
