@@ -31,7 +31,17 @@ from dojo.engine_participation.helpers import (
     mark_hc_participation_reviewed,
     reject_hc_participation,
     set_hc_request_preselection,
+    _clear_general_setting_cache,
 )
+
+
+def _set_bag_for_test(value: int) -> None:
+    """Set bag size in DB and purge Redis cache to avoid stale values between tests."""
+    GeneralSettings.objects.update_or_create(
+        name_key="HACKING_CONTINUOUS_APPROVAL_BAG_SIZE",
+        defaults={"value": str(value), "data_type": "INT", "status": True},
+    )
+    _clear_general_setting_cache("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE")
 
 
 class HCParticipationModelTest(TestCase):
@@ -330,14 +340,7 @@ class ApproveRejectHCTest(TestCase):
     def setUp(self):
         self.product = Product.objects.first()
         self.user = Dojo_User.objects.get(username="admin")
-        GeneralSettings.objects.update_or_create(
-            name_key="HACKING_CONTINUOUS_APPROVAL_BAG_SIZE",
-            defaults={
-                "value": "2",
-                "data_type": "INT",
-                "status": True,
-            },
-        )
+        _set_bag_for_test(2)
         self.hc = HCParticipation.objects.create(
             product=self.product,
             recommendation="postulated",
@@ -377,10 +380,7 @@ class ApproveRejectHCTest(TestCase):
 
     def test_reject_preselected_clears_flag_and_restores_bag(self):
         """Rejecting a preselected request removes the flag and increments the bag."""
-        GeneralSettings.objects.update_or_create(
-            name_key="HACKING_CONTINUOUS_APPROVAL_BAG_SIZE",
-            defaults={"value": "3", "data_type": "INT", "status": True},
-        )
+        _set_bag_for_test(3)
         self.hc.security_posture_data = {"is_preselected_for_hc": True}
         self.hc.save()
 
@@ -420,14 +420,7 @@ class ApproveRejectHCTest(TestCase):
 
     def test_approve_hc_participation_does_not_require_bag_slots(self):
         """Approver action does not consume or validate bag slots"""
-        GeneralSettings.objects.update_or_create(
-            name_key="HACKING_CONTINUOUS_APPROVAL_BAG_SIZE",
-            defaults={
-                "value": "0",
-                "data_type": "INT",
-                "status": True,
-            },
-        )
+        _set_bag_for_test(0)
 
         approve_hc_participation(self.hc, self.user)
 
@@ -455,14 +448,7 @@ class ApproveRejectHCTest(TestCase):
 
     def test_review_postulated_fails_when_bag_has_no_slots(self):
         """Reviewer cannot mark postulated as reviewed when bag is empty"""
-        GeneralSettings.objects.update_or_create(
-            name_key="HACKING_CONTINUOUS_APPROVAL_BAG_SIZE",
-            defaults={
-                "value": "0",
-                "data_type": "INT",
-                "status": True,
-            },
-        )
+        _set_bag_for_test(0)
         pending_postulation = HCParticipation.objects.create(
             product=self.product,
             recommendation="postulated",
@@ -549,14 +535,7 @@ class ApproveRejectHCTest(TestCase):
 
     def test_review_already_in_hc_increments_bag_size(self):
         """Reviewing an already_in_hc removal request increases bag size by 1"""
-        GeneralSettings.objects.update_or_create(
-            name_key="HACKING_CONTINUOUS_APPROVAL_BAG_SIZE",
-            defaults={
-                "value": "0",
-                "data_type": "INT",
-                "status": True,
-            },
-        )
+        _set_bag_for_test(0)
         removal_request = HCParticipation.objects.create(
             product=self.product,
             recommendation="already_in_hc",
@@ -629,14 +608,7 @@ class HCParticipationViewsTest(TestCase):
             status="Pending",
             created_by=self.user,
         )
-        GeneralSettings.objects.update_or_create(
-            name_key="HACKING_CONTINUOUS_APPROVAL_BAG_SIZE",
-            defaults={
-                "value": "3",
-                "data_type": "INT",
-                "status": True,
-            },
-        )
+        _set_bag_for_test(3)
     
     def test_list_view(self):
         """Test HC participation list view"""
@@ -673,14 +645,7 @@ class HCParticipationViewsTest(TestCase):
 
     def test_list_view_shows_bag_in_red_when_negative(self):
         """When bag size is negative, summary value should be rendered in red"""
-        GeneralSettings.objects.update_or_create(
-            name_key="HACKING_CONTINUOUS_APPROVAL_BAG_SIZE",
-            defaults={
-                "value": "-1",
-                "data_type": "INT",
-                "status": True,
-            },
-        )
+        _set_bag_for_test(-1)
 
         from django.test import Client
         client = Client()
