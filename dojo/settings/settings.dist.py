@@ -22,6 +22,7 @@ import warnings
 from datetime import timedelta
 from email.utils import getaddresses
 from pathlib import Path
+from urllib.parse import quote
 
 import environ
 from celery.schedules import crontab
@@ -584,13 +585,15 @@ env = environ.FileAwareEnv(
 
 
 def generate_url(scheme, double_slashes, user, password, host, port, path, params):
+    encoded_user = quote(user, safe="%")
+    encoded_password = quote(password, safe="%")
     result_list = []
     result_list.extend((scheme, ":"))
     if double_slashes:
         result_list.append("//")
-    result_list.append(user)
+    result_list.append(encoded_user)
     if len(password) > 0:
-        result_list.extend((":", password))
+        result_list.extend((":", encoded_password))
     if len(user) > 0 or len(password) > 0:
         result_list.append("@")
     result_list.append(host)

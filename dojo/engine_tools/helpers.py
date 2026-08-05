@@ -1036,7 +1036,7 @@ def check_priorization():
         return tags_filter
 
     use_sprint_start_date_for_gated_tags = GeneralSettings.get_value(
-        "USE_SPRINT_START_DATE_FOR_GATED_PRIORITY_TAGS", True
+        "USE_SPRINT_START_DATE_FOR_GATED_PRIORITY_TAGS", False
     )
 
     if not use_sprint_start_date_for_gated_tags:

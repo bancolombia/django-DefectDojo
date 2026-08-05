@@ -2411,7 +2411,7 @@ class TestsViewSet(
 
         updated_test = serializer.save()
         enable_service_propagation = GeneralSettings.get_value(
-            "ENABLE_PROPAGATE_TEST_ENGAGEMENT_TO_FINDING_SERVICE", True,
+            "ENABLE_PROPAGATE_TEST_ENGAGEMENT_TO_FINDING_SERVICE", False,
         )
 
         # If the engagement changed via this API update, propagate the new
