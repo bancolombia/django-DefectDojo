@@ -569,6 +569,7 @@ env = environ.FileAwareEnv(
     DD_MAX_CONNS=(int, 50),
     DD_TIMEOUT_CONNS=(int, 10),
     DD_USE_DB_POOL=(bool, False),
+    DD_DB_CONN_HEALTH_CHECKS=(bool, True),
     DD_STATEMENT_TIMEOUT=(str, "10000"),
     DD_STATEMENT_TIMEOUT_REPLICA=(str, "10000"),
 
@@ -742,8 +743,13 @@ MIN_CONNS = env("DD_MIN_CONNS")
 MAX_CONNS = env("DD_MAX_CONNS")
 TIMEOUT_CONNS = env("DD_TIMEOUT_CONNS")
 USE_DB_POOL = env("DD_USE_DB_POOL")
+DB_CONN_HEALTH_CHECKS = env("DD_DB_CONN_HEALTH_CHECKS")
 STATEMENT_TIMEOUT = env("DD_STATEMENT_TIMEOUT")
 STATEMENT_TIMEOUT_REPLICA = env("DD_STATEMENT_TIMEOUT_REPLICA")
+
+DATABASES["default"]["CONN_HEALTH_CHECKS"] = DB_CONN_HEALTH_CHECKS
+if "replica" in DATABASES:
+    DATABASES["replica"]["CONN_HEALTH_CHECKS"] = DB_CONN_HEALTH_CHECKS
 
 # Risk score
 BUCKET_NAME_RISK_SCORE = env("DD_BUCKET_NAME_RISK_SCORE")
@@ -781,6 +787,12 @@ if USE_DB_POOL:
     DATABASES["default"]["OPTIONS"]["pool"]["min_size"] = MIN_CONNS
     DATABASES["default"]["OPTIONS"]["pool"]["max_size"] = MAX_CONNS
     DATABASES["default"]["OPTIONS"]["pool"]["timeout"] = TIMEOUT_CONNS
+    try:
+        from psycopg_pool import ConnectionPool
+        # Validate pooled connections before handing them to Django.
+        DATABASES["default"]["OPTIONS"]["pool"]["check"] = ConnectionPool.check_connection
+    except Exception:
+        logger.exception("Failed to configure psycopg pool health check callback")
 
 # ------------------------------------------------------------------------------
 # ENGINE BACKEND
