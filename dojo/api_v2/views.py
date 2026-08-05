@@ -2796,7 +2796,9 @@ class UserProfileView(GenericAPIView):
         global_role = (
             user.global_role if hasattr(user, "global_role") else None
         )
-        dojo_group_member = Dojo_Group_Member.objects.filter(user=user)
+        dojo_group_member = Dojo_Group_Member.objects.filter(user=user).select_related(
+            "group__global_role__role",
+        )
         product_type_member = Product_Type_Member.objects.filter(user=user)
         product_member = Product_Member.objects.filter(user=user)
         serializer = serializers.UserProfileSerializer(
