@@ -33,7 +33,7 @@ class FindingRenderRuleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Finding
-        fields = ["id", "priority", "cve", "risk_status"]
+        fields = ["id", "priority_classification", "cve", "risk_status"]
 
 
 class RiskAcceptanceExclusionRuleSerializers(serializers.ModelSerializer):

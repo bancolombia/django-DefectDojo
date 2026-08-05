@@ -534,12 +534,13 @@ def get_matching_value(list_a, list_b):
     return matches[0] if matches else None
 
 def enable_flow_accept_risk(**kwargs):
-    # add rule custom if necessary
-    if (kwargs["finding"].risk_status in ["Risk Active", "Risk Expired", "Transfer Rejected"] and  kwargs["finding"].severity != "Info"
-    and kwargs["finding"].active is True and not kwargs["finding"].tags.filter(name__in=settings.DD_CUSTOM_TAG_PARSER.get("disable_ra", "").split("-")).exists()):
+    if (
+        kwargs["finding"].risk_status in ["Risk Active", "Risk Expired", "Transfer Rejected"] and  kwargs["finding"].severity != "Info"
+        and kwargs["finding"].active is True 
+        and not kwargs["finding"].risk_acceptance
+        and not kwargs["finding"].tags.filter(name__in=settings.DD_CUSTOM_TAG_PARSER.get("disable_ra", "").split("-")).exists()):
         return True
     return False
-
 
 def update_expiration_date_permission_key(risk_pending: Risk_Acceptance):
     permission_keys = risk_pending.permissionkey_set.all()

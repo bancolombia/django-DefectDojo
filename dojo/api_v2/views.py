@@ -3555,9 +3555,10 @@ class TransferFindingViewSet(prefetch.PrefetchListMixin,
     serializer_class = TransferFindingSerializer
     filter_backends = (DjangoFilterBackend,)
     filterset_fields = ["id",
+                        "destination_product_type",
                         "destination_engagement",
-                        "origin_product_type",
                         "destination_product",
+                        "origin_product_type",
                         "origin_product",
                         "origin_engagement",
                         "owner"]
