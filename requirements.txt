@@ -48,7 +48,7 @@ django-fieldsignals==0.8.0
 django-filter==25.1
 django-imagekit==6.1.0
 django-multiselectfield==1.0.1
-django-polymorphic==4.11.5
+django-polymorphic==4.11.7
 django-prometheus==2.5.0
 django-ratelimit==4.1.0
 django-redis==6.0.0
