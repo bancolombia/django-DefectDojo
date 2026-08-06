@@ -1,15 +1,23 @@
 import logging
 
+from django.conf import settings
+from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from dojo.api_v2.engine_participation.serializers import DeleteHCParticipationRecordsRequestSerializer
+from dojo.api_v2.engine_participation.serializers import (
+    DeleteHCParticipationRecordsRequestSerializer,
+    ReturnHCParticipationToPendingRequestSerializer,
+)
 from dojo.api_v2.utils import http_response
+from dojo.engine_participation.models import HCParticipation
 from dojo.engine_participation.helpers import (
     delete_hc_participation_records_by_date_range,
+    return_hc_participation_to_pending,
     run_hc_participation_evaluation,
+    InvalidHCParticipationTransition,
 )
 
 logger = logging.getLogger(__name__)
@@ -81,6 +89,55 @@ class DeleteHCParticipationRecordsAPIView(APIView):
             logger.exception("HC participation records deletion failed: %s", exc)
             return http_response.error(
                 message=f"HC participation records deletion failed: {str(exc)}",
+                data={},
+            )
+
+
+class ReturnHCParticipationToPendingAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = ReturnHCParticipationToPendingRequestSerializer
+
+    @extend_schema(
+        request=ReturnHCParticipationToPendingRequestSerializer,
+        responses={status.HTTP_200_OK: dict},
+    )
+    def post(self, request, hc_id):
+        operative_user = (getattr(settings, "OPERATIVE_USER", "") or "").strip()
+        is_operative = bool(operative_user) and request.user.username == operative_user
+        if not request.user.is_superuser and not is_operative:
+            return http_response.custom_response(
+                code=status.HTTP_403_FORBIDDEN,
+                status="forbidden",
+                message="Only superuser or OPERATIVE_USER can return HC requests to Pending.",
+                data={},
+            )
+
+        serializer = ReturnHCParticipationToPendingRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return http_response.bad_request(
+                message="Invalid request payload.",
+                data=serializer.errors,
+            )
+
+        hc_request = get_object_or_404(HCParticipation, pk=hc_id)
+        reason = serializer.validated_data.get("reason", "")
+
+        try:
+            updated_request = return_hc_participation_to_pending(hc_request, request.user, reason=reason)
+            return http_response.ok(
+                message="HC participation request returned to Pending successfully.",
+                data={
+                    "hc_id": str(updated_request.uuid),
+                    "status": updated_request.status,
+                    "final_status": updated_request.final_status,
+                },
+            )
+        except InvalidHCParticipationTransition as exc:
+            return http_response.bad_request(message=str(exc), data={})
+        except Exception as exc:
+            logger.exception("Return HC request to pending failed: %s", exc)
+            return http_response.error(
+                message=f"Return HC request to pending failed: {str(exc)}",
                 data={},
             )
 

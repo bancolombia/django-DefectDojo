@@ -884,6 +884,52 @@ def reject_hc_participation(hc_participation, user):
     return hc_participation
 
 
+def return_hc_participation_to_pending(hc_participation, user, reason: str = ""):
+    with transaction.atomic():
+        hc_participation = HCParticipation.objects.select_for_update().get(pk=hc_participation.pk)
+
+        previous_status = hc_participation.status
+        if previous_status == "Pending":
+            return hc_participation
+
+        allowed_statuses = {"Reviewed", "Approved", "Rejected"}
+        if previous_status not in allowed_statuses:
+            raise InvalidHCParticipationTransition(
+                f"Cannot return HC request from {previous_status} to Pending. "
+                f"Allowed previous statuses: {', '.join(sorted(allowed_statuses))}."
+            )
+
+        is_postulation_request = hc_participation.recommendation in ("postulated", "postulated_manually")
+        is_already_in_hc_request = hc_participation.recommendation == "already_in_hc"
+
+        if is_postulation_request and previous_status in {"Reviewed", "Approved"}:
+            _update_hc_approval_bag_size(1)
+
+        if is_already_in_hc_request and previous_status in {"Reviewed", "Approved"}:
+            _update_hc_approval_bag_size(-1)
+
+        current_time = timezone.now()
+        hc_participation.status = "Pending"
+        hc_participation.final_status = None
+        hc_participation.status_updated_at = current_time
+        hc_participation.status_updated_by = user
+        hc_participation.save()
+
+        log_note = "Request returned to Pending for reevaluation"
+        if reason:
+            log_note = f"{log_note}. Reason: {reason.strip()}"
+
+        HCParticipationLog.objects.create(
+            hc_participation=hc_participation,
+            changed_by=user,
+            previous_status=previous_status,
+            current_status="Pending",
+            notes=log_note,
+        )
+
+    return hc_participation
+
+
 def get_latest_hc_evaluation_for_product(product_id: int) -> dict:
     try:
         evaluation = HCParticipation.objects.filter(

@@ -26,6 +26,7 @@ from dojo.engine_participation.helpers import (
     get_manual_hc_postulation_eligibility_error,
     create_manual_hc_postulation,
     delete_hc_participation_records_by_date_range,
+    return_hc_participation_to_pending,
     InvalidHCParticipationTransition,
     approve_hc_participation,
     mark_hc_participation_reviewed,
@@ -607,6 +608,38 @@ class ApproveRejectHCTest(TestCase):
         self.assertEqual(removal_request.status, "Rejected")
         bag_after_reject = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
         self.assertEqual(int(bag_after_reject), 0)
+
+    def test_return_to_pending_preserves_history_and_discussions(self):
+        """Returning to Pending must keep prior logs/discussions and append a new log entry."""
+        _set_bag_for_test(2)
+        HCParticipationLog.objects.create(
+            hc_participation=self.hc,
+            changed_by=self.user,
+            previous_status="Pending",
+            current_status="Reviewed",
+            notes="Request marked as reviewed",
+        )
+        HCParticipationDiscussion.objects.create(
+            hc_participation=self.hc,
+            author=self.user,
+            content="Keep this discussion",
+        )
+
+        return_hc_participation_to_pending(self.hc, self.user, reason="Sent back for reevaluation")
+
+        self.hc.refresh_from_db()
+        self.assertEqual(self.hc.status, "Pending")
+        self.assertIsNone(self.hc.final_status)
+        self.assertEqual(self.hc.discussions.count(), 1)
+        self.assertEqual(self.hc.logs.count(), 2)
+
+        last_log = self.hc.logs.order_by("-changed_at").first()
+        self.assertEqual(last_log.previous_status, "Reviewed")
+        self.assertEqual(last_log.current_status, "Pending")
+        self.assertIn("Sent back for reevaluation", last_log.notes)
+
+        bag_size = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(bag_size), 3)
 
 
 class GetLatestEvaluationTest(TestCase):
@@ -1583,3 +1616,65 @@ class DeleteHCParticipationRecordsAPIViewTest(TestCase):
         self.assertEqual(response.data["status"], "success")
         self.assertEqual(response.data["data"]["matched_records"], 1)
         self.assertFalse(HCParticipation.objects.filter(pk=hc_in_range.pk).exists())
+
+
+class ReturnHCParticipationToPendingAPIViewTest(TestCase):
+    """Tests for the return-to-pending API endpoint"""
+    fixtures = ['dojo_testdata.json']
+
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = Dojo_User.objects.get(username="admin")
+        token, _created = Token.objects.get_or_create(user=self.admin)
+        self.client.credentials(HTTP_AUTHORIZATION="Token " + token.key)
+
+        self.product = Product.objects.first()
+        self.hc_request = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Reviewed",
+            created_by=self.admin,
+        )
+        self.url = reverse("api_hc_return_to_pending", args=[str(self.hc_request.uuid)])
+
+    def test_requires_authentication(self):
+        api_client = APIClient()
+        response = api_client.post(self.url, data={"reason": "test"}, format="json")
+        self.assertEqual(response.status_code, 403)
+
+    def test_forbids_non_admin_and_non_operative_user(self):
+        regular_user = Dojo_User.objects.create_user(
+            username="hc_return_regular_user",
+            email="hc_return_regular_user@test.com",
+            password="testpass123",
+            is_staff=False,
+            is_superuser=False,
+        )
+        regular_token = Token.objects.create(user=regular_user)
+        api_client = APIClient()
+        api_client.credentials(HTTP_AUTHORIZATION="Token " + regular_token.key)
+
+        response = api_client.post(self.url, data={"reason": "test"}, format="json")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data["status"], "forbidden")
+
+    @override_settings(OPERATIVE_USER="hc_oper_user")
+    def test_allows_operative_user(self):
+        operative_user = Dojo_User.objects.create_user(
+            username="hc_oper_user",
+            email="hc_oper_user@test.com",
+            password="testpass123",
+            is_staff=False,
+            is_superuser=False,
+        )
+        operative_token = Token.objects.create(user=operative_user)
+        api_client = APIClient()
+        api_client.credentials(HTTP_AUTHORIZATION="Token " + operative_token.key)
+
+        response = api_client.post(self.url, data={"reason": "operator reset"}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], "success")
+        self.hc_request.refresh_from_db()
+        self.assertEqual(self.hc_request.status, "Pending")
