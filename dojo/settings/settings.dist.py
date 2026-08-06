@@ -22,6 +22,7 @@ import warnings
 from datetime import timedelta
 from email.utils import getaddresses
 from pathlib import Path
+from urllib.parse import quote
 
 import environ
 from celery.schedules import crontab
@@ -569,6 +570,7 @@ env = environ.FileAwareEnv(
     DD_MAX_CONNS=(int, 50),
     DD_TIMEOUT_CONNS=(int, 10),
     DD_USE_DB_POOL=(bool, False),
+    DD_DB_CONN_HEALTH_CHECKS=(bool, True),
     DD_STATEMENT_TIMEOUT=(str, "10000"),
     DD_STATEMENT_TIMEOUT_REPLICA=(str, "10000"),
 
@@ -583,13 +585,15 @@ env = environ.FileAwareEnv(
 
 
 def generate_url(scheme, double_slashes, user, password, host, port, path, params):
+    encoded_user = quote(user, safe="%")
+    encoded_password = quote(password, safe="%")
     result_list = []
     result_list.extend((scheme, ":"))
     if double_slashes:
         result_list.append("//")
-    result_list.append(user)
+    result_list.append(encoded_user)
     if len(password) > 0:
-        result_list.extend((":", password))
+        result_list.extend((":", encoded_password))
     if len(user) > 0 or len(password) > 0:
         result_list.append("@")
     result_list.append(host)
@@ -742,8 +746,13 @@ MIN_CONNS = env("DD_MIN_CONNS")
 MAX_CONNS = env("DD_MAX_CONNS")
 TIMEOUT_CONNS = env("DD_TIMEOUT_CONNS")
 USE_DB_POOL = env("DD_USE_DB_POOL")
+DB_CONN_HEALTH_CHECKS = env("DD_DB_CONN_HEALTH_CHECKS")
 STATEMENT_TIMEOUT = env("DD_STATEMENT_TIMEOUT")
 STATEMENT_TIMEOUT_REPLICA = env("DD_STATEMENT_TIMEOUT_REPLICA")
+
+DATABASES["default"]["CONN_HEALTH_CHECKS"] = DB_CONN_HEALTH_CHECKS
+if "replica" in DATABASES:
+    DATABASES["replica"]["CONN_HEALTH_CHECKS"] = DB_CONN_HEALTH_CHECKS
 
 # Risk score
 BUCKET_NAME_RISK_SCORE = env("DD_BUCKET_NAME_RISK_SCORE")
@@ -781,6 +790,12 @@ if USE_DB_POOL:
     DATABASES["default"]["OPTIONS"]["pool"]["min_size"] = MIN_CONNS
     DATABASES["default"]["OPTIONS"]["pool"]["max_size"] = MAX_CONNS
     DATABASES["default"]["OPTIONS"]["pool"]["timeout"] = TIMEOUT_CONNS
+    try:
+        from psycopg_pool import ConnectionPool
+        # Validate pooled connections before handing them to Django.
+        DATABASES["default"]["OPTIONS"]["pool"]["check"] = ConnectionPool.check_connection
+    except Exception:
+        logger.exception("Failed to configure psycopg pool health check callback")
 
 # ------------------------------------------------------------------------------
 # ENGINE BACKEND

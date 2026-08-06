@@ -18,14 +18,14 @@ import io
 import requests
 
 # Dojo
-from dojo.models import Finding, Dojo_Group, Notes, Vulnerability_Id
+from dojo.models import Finding, Dojo_Group, GeneralSettings, Notes, Vulnerability_Id
 from dojo.group.queries import get_group_members_for_group
 from dojo.engine_tools.models import (
     FindingExclusion,
     FindingExclusionDiscussion,
     FindingExclusionLog,
 )
-from dojo.engine_tools.queries import tag_filter, priority_tag_filter
+from dojo.engine_tools.queries import tag_filter
 from dojo.celery import app
 from dojo.user.queries import get_user
 from dojo.notifications.helper import create_notification, EmailNotificationManger
@@ -546,6 +546,28 @@ def update_finding_prioritization_per_cve(
         priority_cve_severity_filter, test__scan_type=scan_type
     )
 
+    configured_priority_tags = [
+        tag.strip()
+        for tag in settings.CELERY_CRON_PRIORITY_TAGS_FILTER.split(",")
+        if tag.strip()
+    ]
+    scope_tags = [tag for tag in configured_priority_tags if tag in finding.tags]
+    if Constants.TAG_HACKING.value in finding.tags:
+        scope_tags.append(Constants.TAG_HACKING.value)
+    scope_tags = list(dict.fromkeys(scope_tags))
+
+    if scope_tags:
+        tag_scope_filter = Q()
+        for tag in scope_tags:
+            tag_scope_filter |= Q(tags__name__icontains=tag)
+        findings = findings.filter(tag_scope_filter)
+        logger.info(
+            "Applying tag scope %s for prioritization update (CVE %s, scan_type %s).",
+            scope_tags,
+            vulnerability_id,
+            scan_type,
+        )
+
     if priority_zero:
         findings = findings.filter(priority=0)
     else:
@@ -999,18 +1021,89 @@ def check_priorization():
         vulnerability_id__vulnerability_id__iregex=vulnerability_identifier_regex
     )
 
-    all_vulnerabilities = (
-        Finding.objects.filter(active=settings.CELERY_CRON_STATUS_FINDINGS_PRIORIZATION)
-        .filter(vulnerability_identifier_filter)
-        .filter(priority_tag_filter)
-        .order_by("cve", "test__scan_type", "severity")
-        .distinct("cve", "test__scan_type", "severity")
+    priority_tags = [
+        tag.strip()
+        for tag in settings.CELERY_CRON_PRIORITY_TAGS_FILTER.split(",")
+        if tag.strip()
+    ]
+    gated_priority_tags = priority_tags[:2]
+    regular_priority_tags = priority_tags[2:]
+
+    def build_priority_filter(tags: list[str]) -> Q:
+        tags_filter = Q()
+        for tag in tags:
+            tags_filter |= Q(tags__name__icontains=tag)
+        return tags_filter
+
+    use_sprint_start_date_for_gated_tags = GeneralSettings.get_value(
+        "USE_SPRINT_START_DATE_FOR_GATED_PRIORITY_TAGS", False
     )
 
-    logger.info(
-        f"Identified {all_vulnerabilities.count()} vulnerabilities for prioritization."
-    )
-    identify_priority_vulnerabilities(all_vulnerabilities, False)
+    if not use_sprint_start_date_for_gated_tags:
+        regular_priority_tags = priority_tags
+        gated_priority_tags = []
+
+    next_sprint_start_date = None
+    should_run_gated_tags = True
+    if use_sprint_start_date_for_gated_tags:
+        next_sprint_start_date = cache.get("azure_devops_next_sprint_start_date")
+        if isinstance(next_sprint_start_date, datetime.datetime):
+            next_sprint_start_date = next_sprint_start_date.date()
+        elif isinstance(next_sprint_start_date, str):
+            try:
+                next_sprint_start_date = datetime.date.fromisoformat(
+                    next_sprint_start_date[:10]
+                )
+            except ValueError:
+                logger.warning(
+                    "Invalid cached azure_devops_next_sprint_start_date value: %s",
+                    next_sprint_start_date,
+                )
+                next_sprint_start_date = None
+
+        should_run_gated_tags = next_sprint_start_date == timezone.localdate()
+
+    if regular_priority_tags:
+        regular_vulnerabilities = (
+            Finding.objects.filter(
+                active=settings.CELERY_CRON_STATUS_FINDINGS_PRIORIZATION
+            )
+            .filter(vulnerability_identifier_filter)
+            .filter(build_priority_filter(regular_priority_tags))
+            .order_by("cve", "test__scan_type", "severity")
+            .distinct("cve", "test__scan_type", "severity")
+        )
+
+        logger.info(
+            f"Identified {regular_vulnerabilities.count()} vulnerabilities for regular prioritization."
+        )
+        identify_priority_vulnerabilities(regular_vulnerabilities, False)
+    else:
+        logger.info("No regular priority tags configured to process.")
+
+    if gated_priority_tags:
+        if should_run_gated_tags:
+            gated_vulnerabilities = (
+                Finding.objects.filter(
+                    active=settings.CELERY_CRON_STATUS_FINDINGS_PRIORIZATION
+                )
+                .filter(vulnerability_identifier_filter)
+                .filter(build_priority_filter(gated_priority_tags))
+                .order_by("cve", "test__scan_type", "severity")
+                .distinct("cve", "test__scan_type", "severity")
+            )
+            logger.info(
+                "Identified %s vulnerabilities for gated prioritization (sprint start date match).",
+                gated_vulnerabilities.count(),
+            )
+            identify_priority_vulnerabilities(gated_vulnerabilities, False)
+        elif use_sprint_start_date_for_gated_tags:
+            logger.info(
+                "Skipping gated prioritization tags %s. Today (%s) does not match azure_devops_next_sprint_start_date (%s).",
+                gated_priority_tags,
+                timezone.localdate(),
+                next_sprint_start_date,
+            )
 
     # Process hacking tags prioritization
     logger.info("Starting vulnerability prioritization check hacking tags...")
