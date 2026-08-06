@@ -1,7 +1,10 @@
 from django import forms
-from django.conf import settings
 
 from dojo.engine_participation.models import HCParticipationDiscussion
+from dojo.engine_participation.helpers import (
+    get_hc_confirm_ingress_postulation_criteria,
+    get_hc_manual_postulation_criteria,
+)
 
 
 class HCParticipationDiscussionForm(forms.ModelForm):
@@ -21,9 +24,6 @@ class HCParticipationDiscussionForm(forms.ModelForm):
 
 
 class HCManualPostulationForm(forms.Form):
-    """Form used to collect the criteria met by a product before creating
-    a manual Hacking Continuous postulation request."""
-
     criteria = forms.MultipleChoiceField(
         required=True,
         widget=forms.CheckboxSelectMultiple,
@@ -35,14 +35,11 @@ class HCManualPostulationForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        criteria_choices = list(getattr(settings, "HC_MANUAL_POSTULATION_CRITERIA", []))
+        criteria_choices = get_hc_manual_postulation_criteria()
         self.fields["criteria"].choices = [(criterion, criterion) for criterion in criteria_choices]
 
 
 class HCConfirmIngressPostulationForm(forms.Form):
-    """Checklist required for reviewers before moving a postulated
-    request to Reviewed."""
-
     criteria = forms.MultipleChoiceField(
         required=False,
         widget=forms.CheckboxSelectMultiple,
@@ -54,7 +51,7 @@ class HCConfirmIngressPostulationForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        criteria_choices = list(getattr(settings, "HC_CONFIRM_INGRESS_POSTULATION_CRITERIA", []))
+        criteria_choices = get_hc_confirm_ingress_postulation_criteria()
         self.fields["criteria"].choices = [(criterion, criterion) for criterion in criteria_choices]
         self.requires_selection = bool(criteria_choices)
         self.fields["criteria"].required = self.requires_selection

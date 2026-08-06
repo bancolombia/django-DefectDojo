@@ -44,6 +44,32 @@ def _set_bag_for_test(value: int) -> None:
     _clear_general_setting_cache("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE")
 
 
+def _set_confirm_ingress_criteria_for_test(criteria: list[str]) -> None:
+    """Set ingress confirmation criteria in DB and purge Redis cache for deterministic tests."""
+    GeneralSettings.objects.update_or_create(
+        name_key="HC_CONFIRM_INGRESS_POSTULATION_CRITERIA",
+        defaults={
+            "value": ",".join(criteria),
+            "data_type": "LIST",
+            "status": True,
+        },
+    )
+    _clear_general_setting_cache("HC_CONFIRM_INGRESS_POSTULATION_CRITERIA")
+
+
+def _set_manual_postulation_criteria_for_test(criteria: list[str]) -> None:
+    """Set manual postulation criteria in DB and purge Redis cache for deterministic tests."""
+    GeneralSettings.objects.update_or_create(
+        name_key="HC_MANUAL_POSTULATION_CRITERIA",
+        defaults={
+            "value": ",".join(criteria),
+            "data_type": "LIST",
+            "status": True,
+        },
+    )
+    _clear_general_setting_cache("HC_MANUAL_POSTULATION_CRITERIA")
+
+
 class HCParticipationModelTest(TestCase):
     """Tests for the HCParticipation model"""
     fixtures = ['dojo_testdata.json']
@@ -392,6 +418,17 @@ class ApproveRejectHCTest(TestCase):
         bag_size = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
         self.assertEqual(int(bag_size), 4)
 
+    def test_reject_reviewed_postulation_restores_bag(self):
+        """Rejecting a reviewed postulation should restore one bag slot."""
+        _set_bag_for_test(2)
+
+        reject_hc_participation(self.hc, self.user)
+
+        self.hc.refresh_from_db()
+        self.assertEqual(self.hc.status, "Rejected")
+        bag_size = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(bag_size), 3)
+
     def test_review_hc_participation_requires_pending_status(self):
         """Test reviewing only works from Pending status"""
         self.hc.status = "Approved"
@@ -713,7 +750,6 @@ class HCParticipationViewsTest(TestCase):
 
         self.assertEqual(response.status_code, 405)
 
-    @override_settings(HC_CONFIRM_INGRESS_POSTULATION_CRITERIA=["Criterion A", "Criterion B"])
     @patch("dojo.engine_participation.views.is_in_group", return_value=True)
     @patch("dojo.engine_participation.views.has_valid_comments", return_value=True)
     @patch("dojo.engine_participation.views.mark_hc_participation_reviewed")
@@ -725,6 +761,7 @@ class HCParticipationViewsTest(TestCase):
     ):
         """Reviewing postulated requests requires full checklist when configured."""
         from django.test import Client
+        _set_confirm_ingress_criteria_for_test(["Criterion A", "Criterion B"])
 
         client = Client()
         client.force_login(self.user)
@@ -739,7 +776,6 @@ class HCParticipationViewsTest(TestCase):
         self.assertContains(response, "You must confirm all ingress checklist criteria to mark as reviewed.")
         mock_mark_reviewed.assert_not_called()
 
-    @override_settings(HC_CONFIRM_INGRESS_POSTULATION_CRITERIA=["Criterion A", "Criterion B"])
     @patch("dojo.engine_participation.views.is_in_group", return_value=True)
     @patch("dojo.engine_participation.views.has_valid_comments", return_value=True)
     @patch("dojo.engine_participation.views.mark_hc_participation_reviewed")
@@ -751,6 +787,7 @@ class HCParticipationViewsTest(TestCase):
     ):
         """Reviewing postulated requests with partial checklist must be rejected."""
         from django.test import Client
+        _set_confirm_ingress_criteria_for_test(["Criterion A", "Criterion B"])
 
         client = Client()
         client.force_login(self.user)
@@ -765,7 +802,6 @@ class HCParticipationViewsTest(TestCase):
         self.assertContains(response, "You must confirm all ingress checklist criteria to mark as reviewed.")
         mock_mark_reviewed.assert_not_called()
 
-    @override_settings(HC_CONFIRM_INGRESS_POSTULATION_CRITERIA=["Criterion A", "Criterion B"])
     @patch("dojo.engine_participation.views.is_in_group", return_value=True)
     @patch("dojo.engine_participation.views.has_valid_comments", return_value=True)
     @patch("dojo.engine_participation.views.get_hc_approvers_members", return_value=[])
@@ -781,6 +817,7 @@ class HCParticipationViewsTest(TestCase):
     ):
         """Review action forwards checklist criteria when all configured are selected."""
         from django.test import Client
+        _set_confirm_ingress_criteria_for_test(["Criterion A", "Criterion B"])
 
         mock_mark_reviewed.return_value = self.hc
 
@@ -926,9 +963,9 @@ class HCParticipationViewsTest(TestCase):
 class HCManualPostulationFormTest(TestCase):
     """Tests for HCManualPostulationForm"""
 
-    @override_settings(HC_MANUAL_POSTULATION_CRITERIA=["Criterion A", "Criterion B"])
     def test_choices_loaded_from_settings(self):
-        """Form choices must come from settings.HC_MANUAL_POSTULATION_CRITERIA"""
+        """Form choices must come from GeneralSettings HC_MANUAL_POSTULATION_CRITERIA"""
+        _set_manual_postulation_criteria_for_test(["Criterion A", "Criterion B"])
         form = HCManualPostulationForm()
 
         self.assertEqual(
@@ -936,33 +973,33 @@ class HCManualPostulationFormTest(TestCase):
             [("Criterion A", "Criterion A"), ("Criterion B", "Criterion B")],
         )
 
-    @override_settings(HC_MANUAL_POSTULATION_CRITERIA=["Criterion A", "Criterion B"])
     def test_requires_at_least_one_criterion(self):
         """Submitting the form without any criteria selected must be invalid"""
+        _set_manual_postulation_criteria_for_test(["Criterion A", "Criterion B"])
         form = HCManualPostulationForm(data={})
 
         self.assertFalse(form.is_valid())
         self.assertIn("criteria", form.errors)
 
-    @override_settings(HC_MANUAL_POSTULATION_CRITERIA=["Criterion A", "Criterion B"])
     def test_valid_with_one_criterion_selected(self):
         """Selecting a single criterion must be enough to make the form valid"""
+        _set_manual_postulation_criteria_for_test(["Criterion A", "Criterion B"])
         form = HCManualPostulationForm(data={"criteria": ["Criterion A"]})
 
         self.assertTrue(form.is_valid())
         self.assertEqual(form.cleaned_data["criteria"], ["Criterion A"])
 
-    @override_settings(HC_MANUAL_POSTULATION_CRITERIA=["Criterion A", "Criterion B"])
     def test_valid_with_multiple_criteria_selected(self):
         """Selecting multiple criteria must be preserved in cleaned_data"""
+        _set_manual_postulation_criteria_for_test(["Criterion A", "Criterion B"])
         form = HCManualPostulationForm(data={"criteria": ["Criterion A", "Criterion B"]})
 
         self.assertTrue(form.is_valid())
         self.assertEqual(form.cleaned_data["criteria"], ["Criterion A", "Criterion B"])
 
-    @override_settings(HC_MANUAL_POSTULATION_CRITERIA=["Criterion A", "Criterion B"])
     def test_invalid_choice_not_in_settings_is_rejected(self):
         """A criterion that is not part of the configured choices must be rejected"""
+        _set_manual_postulation_criteria_for_test(["Criterion A", "Criterion B"])
         form = HCManualPostulationForm(data={"criteria": ["Not a configured criterion"]})
 
         self.assertFalse(form.is_valid())
@@ -972,18 +1009,18 @@ class HCManualPostulationFormTest(TestCase):
 class HCConfirmIngressPostulationFormTest(TestCase):
     """Tests for HCConfirmIngressPostulationForm behavior"""
 
-    @override_settings(HC_CONFIRM_INGRESS_POSTULATION_CRITERIA=["Criterion A", "Criterion B"])
     def test_requires_at_least_one_criterion_when_configured(self):
         from dojo.engine_participation.forms import HCConfirmIngressPostulationForm
+        _set_confirm_ingress_criteria_for_test(["Criterion A", "Criterion B"])
 
         form = HCConfirmIngressPostulationForm(data={})
 
         self.assertFalse(form.is_valid())
         self.assertIn("criteria", form.errors)
 
-    @override_settings(HC_CONFIRM_INGRESS_POSTULATION_CRITERIA=[])
     def test_allows_empty_selection_when_not_configured(self):
         from dojo.engine_participation.forms import HCConfirmIngressPostulationForm
+        _set_confirm_ingress_criteria_for_test([])
 
         form = HCConfirmIngressPostulationForm(data={})
 
@@ -1232,24 +1269,20 @@ class ManualHCPostulationViewTest(TestCase):
         page_messages = list(response.context["messages"])
         self.assertTrue(any("already in Hacking Continuous" in str(m) for m in page_messages))
 
-    @override_settings(
-        HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"],
-        HC_MANUAL_POSTULATION_CRITERIA=["Criterion A", "Criterion B"],
-    )
+    @override_settings(HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"])
     def test_post_without_criteria_shows_validation_error(self):
         """POST without any criteria selected must re-render the form with an error"""
+        _set_manual_postulation_criteria_for_test(["Criterion A", "Criterion B"])
         response = self.client.post(self.url, data={})
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "You must select at least one criterion")
         self.assertFalse(HCParticipation.objects.filter(product=self.product).exists())
 
-    @override_settings(
-        HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"],
-        HC_MANUAL_POSTULATION_CRITERIA=["Criterion A", "Criterion B"],
-    )
+    @override_settings(HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"])
     def test_post_with_criteria_creates_postulation_and_redirects(self):
         """POST with at least one criterion must create the request and redirect"""
+        _set_manual_postulation_criteria_for_test(["Criterion A", "Criterion B"])
         response = self.client.post(
             self.url,
             data={"criteria": ["Criterion A"]},
@@ -1266,13 +1299,11 @@ class ManualHCPostulationViewTest(TestCase):
         page_messages = list(response.context["messages"])
         self.assertTrue(any("Manual HC postulation created successfully" in str(m) for m in page_messages))
 
-    @override_settings(
-        HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"],
-        HC_MANUAL_POSTULATION_CRITERIA=["Criterion A", "Criterion B"],
-    )
+    @override_settings(HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"])
     def test_post_when_product_becomes_ineligible_between_get_and_post(self):
         """POST must be re-validated even if it passed the initial GET check
         (race-condition safety net implemented in create_manual_hc_postulation)"""
+        _set_manual_postulation_criteria_for_test(["Criterion A", "Criterion B"])
         HCParticipation.objects.create(
             product=self.product,
             recommendation="postulated",

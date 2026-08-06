@@ -258,25 +258,6 @@
         </div>
         {% endif %}
 
-        {% if can_review_hc_participation and hc_participation.status == 'Pending' and requires_review_checklist %}
-        <div class="panel panel-default" id="review-checklist-panel">
-            <div class="panel-heading">
-                <h4>Reviewer Ingress Checklist</h4>
-            </div>
-            <div class="panel-body">
-                <p class="text-muted">Confirm all criteria before marking this request as reviewed.</p>
-                <div id="review-checklist-warning" class="alert alert-warning" style="display: none;">
-                    <i class="fa-solid fa-triangle-exclamation"></i> You must confirm all ingress checklist criteria before marking as reviewed.
-                </div>
-                {% for choice in review_checklist_form.criteria %}
-                    <div class="checkbox">
-                        <label>{{ choice.tag }} {{ choice.choice_label }}</label>
-                    </div>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
-
         <div class="panel panel-default">
             <div class="panel-heading">
                 <h4>Risk Posture (on demand) <span class="pull-right"><a rel="noopener noreferrer" data-toggle="collapse" href="#vuln_posture"><i
@@ -423,6 +404,41 @@
                 </div>
             </div>
         </div>
+
+        {% if show_review_checklist_panel %}
+        <div class="panel panel-default" id="review-checklist-panel">
+            <div class="panel-heading">
+                <h4>Reviewer Ingress Checklist</h4>
+            </div>
+            <div class="panel-body">
+                {% if is_review_checklist_editable %}
+                <p class="text-muted">Confirm all criteria before marking this request as reviewed.</p>
+                {% elif hc_participation.status == 'Reviewed' %}
+                <p class="text-muted">Checklist confirmed when the request was marked as reviewed.</p>
+                {% elif hc_participation.status == 'Rejected' %}
+                <p class="text-muted">Checklist shown as not confirmed because the request was rejected.</p>
+                {% endif %}
+                <div id="review-checklist-warning" class="alert alert-warning" style="display: none;{% if not is_review_checklist_editable %} visibility: hidden;{% endif %}">
+                    <i class="fa-solid fa-triangle-exclamation"></i> You must confirm all ingress checklist criteria before marking as reviewed.
+                </div>
+
+                {% for criterion in review_checklist_criteria %}
+                    <div class="checkbox">
+                        <label>
+                            <input
+                                type="checkbox"
+                                name="criteria"
+                                value="{{ criterion }}"
+                                {% if criterion in review_checklist_checked_values %}checked{% endif %}
+                                {% if not is_review_checklist_editable %}disabled{% endif %}
+                            >
+                            {{ criterion }}
+                        </label>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
 
         <div class="panel panel-default">
             <div class="panel-heading">

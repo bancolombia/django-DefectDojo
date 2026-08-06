@@ -28,6 +28,10 @@ HC_STATUS_TRANSITIONS = {
 }
 HC_APPROVAL_BAG_SIZE_KEY = "HACKING_CONTINUOUS_APPROVAL_BAG_SIZE"
 HC_APPROVAL_BAG_DEFAULT_SIZE = 0
+HC_CONFIRM_INGRESS_POSTULATION_CRITERIA_KEY = "HC_CONFIRM_INGRESS_POSTULATION_CRITERIA"
+HC_CONFIRM_INGRESS_POSTULATION_CRITERIA_DEFAULT = []
+HC_MANUAL_POSTULATION_CRITERIA_KEY = "HC_MANUAL_POSTULATION_CRITERIA"
+HC_MANUAL_POSTULATION_CRITERIA_DEFAULT = []
 HC_PRESELECTED_FLAG_KEY = "is_preselected_for_hc"
 HC_INGRESS_CONFIRMATION_CRITERIA_KEY = "ingress_confirmation_criteria_checked"
 
@@ -59,6 +63,42 @@ def get_hc_approval_bag_size() -> int:
         HC_APPROVAL_BAG_DEFAULT_SIZE,
     )
     return _normalize_int(configured_value, default=HC_APPROVAL_BAG_DEFAULT_SIZE)
+
+
+def get_hc_confirm_ingress_postulation_criteria() -> list[str]:
+    configured_value = GeneralSettings.get_value(
+        HC_CONFIRM_INGRESS_POSTULATION_CRITERIA_KEY,
+        HC_CONFIRM_INGRESS_POSTULATION_CRITERIA_DEFAULT,
+    )
+
+    if not configured_value:
+        return []
+
+    if isinstance(configured_value, str):
+        configured_value = configured_value.split(",")
+
+    if not isinstance(configured_value, list):
+        return []
+
+    return [criterion.strip() for criterion in configured_value if criterion and criterion.strip()]
+
+
+def get_hc_manual_postulation_criteria() -> list[str]:
+    configured_value = GeneralSettings.get_value(
+        HC_MANUAL_POSTULATION_CRITERIA_KEY,
+        HC_MANUAL_POSTULATION_CRITERIA_DEFAULT,
+    )
+
+    if not configured_value:
+        return []
+
+    if isinstance(configured_value, str):
+        configured_value = configured_value.split(",")
+
+    if not isinstance(configured_value, list):
+        return []
+
+    return [criterion.strip() for criterion in configured_value if criterion and criterion.strip()]
 
 
 def _update_hc_approval_bag_size(delta: int) -> int:
@@ -643,20 +683,6 @@ def create_manual_hc_postulation(product, user, criteria=None):
 
 
 def delete_hc_participation_records_by_date_range(start_date, end_date):
-    """Deletes HCParticipation records (and their related discussions/logs,
-    via cascade) whose create_date falls within [start_date, end_date],
-    inclusive, by calendar date.
-
-    Args:
-        start_date: datetime.date marking the start of the range.
-        end_date: datetime.date marking the end of the range.
-
-    Returns:
-        dict summary with the date range and the number of matched/deleted records.
-
-    Raises:
-        ValueError: if either date is missing or start_date is after end_date.
-    """
     if start_date is None or end_date is None:
         raise ValueError("Both start_date and end_date are required.")
 
@@ -795,14 +821,22 @@ def reject_hc_participation(hc_participation, user):
         hc_participation = HCParticipation.objects.select_for_update().get(pk=hc_participation.pk)
         _validate_hc_status_transition(hc_participation.status, "Rejected")
 
+        previous_status = hc_participation.status
+        is_postulation_request = hc_participation.recommendation in ("postulated", "postulated_manually")
+
         security_posture_data = hc_participation.security_posture_data
         if not isinstance(security_posture_data, dict):
             security_posture_data = {}
-        if security_posture_data.pop(HC_PRESELECTED_FLAG_KEY, False):
-            _update_hc_approval_bag_size(1)
-            hc_participation.security_posture_data = security_posture_data
 
-        previous_status = hc_participation.status
+        was_preselected = bool(security_posture_data.pop(HC_PRESELECTED_FLAG_KEY, False))
+        should_restore_bag = was_preselected or (
+            is_postulation_request and previous_status == "Reviewed"
+        )
+        if should_restore_bag:
+            _update_hc_approval_bag_size(1)
+
+        hc_participation.security_posture_data = security_posture_data
+
         current_time = timezone.now()
 
         hc_participation.status = "Rejected"

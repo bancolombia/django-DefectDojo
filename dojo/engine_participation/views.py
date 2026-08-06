@@ -1,5 +1,4 @@
 from django.contrib import messages
-from django.conf import settings
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
@@ -28,6 +27,7 @@ from dojo.engine_participation.helpers import (
     create_manual_hc_postulation,
     get_hc_participation_summary,
     get_manual_hc_postulation_eligibility_error,
+    get_hc_confirm_ingress_postulation_criteria,
     reject_hc_participation,
     has_valid_comments,
     get_hc_approvers_members,
@@ -155,10 +155,22 @@ def show_hc_participation(request: HttpRequest, hcid: str) -> HttpResponse:
     
     discussion_form = HCParticipationDiscussionForm()
     review_checklist_form = HCConfirmIngressPostulationForm()
+    review_checklist_criteria = [choice[0] for choice in review_checklist_form.fields["criteria"].choices]
     requires_review_checklist = (
         hc_participation.recommendation in ("postulated", "postulated_manually")
         and review_checklist_form.requires_selection
     )
+    show_review_checklist_panel = (
+        requires_review_checklist
+        and hc_participation.status in ("Pending", "Reviewed", "Rejected")
+    )
+    is_review_checklist_editable = (
+        can_review_hc_participation := is_in_group(request.user, HCConstants.REVIEWERS_GROUP.value)
+    ) and hc_participation.status == "Pending"
+
+    review_checklist_checked_values = []
+    if show_review_checklist_panel and hc_participation.status == "Reviewed":
+        review_checklist_checked_values = list(review_checklist_criteria)
     logs = hc_participation.logs.select_related("changed_by").all()
     discussions = hc_participation.discussions.select_related("author").all()
     security_posture_data = hc_participation.security_posture_data if isinstance(hc_participation.security_posture_data, dict) else {}
@@ -175,13 +187,17 @@ def show_hc_participation(request: HttpRequest, hcid: str) -> HttpResponse:
         "hc_participation": hc_participation,
         "discussion_form": discussion_form,
         "review_checklist_form": review_checklist_form,
+        "review_checklist_criteria": review_checklist_criteria,
+        "review_checklist_checked_values": review_checklist_checked_values,
         "requires_review_checklist": requires_review_checklist,
+        "show_review_checklist_panel": show_review_checklist_panel,
+        "is_review_checklist_editable": is_review_checklist_editable,
         "logs": logs,
         "discussions": discussions,
         "security_posture_data": security_posture_data,
         "risk_posture_api_url": risk_posture_api_url,
         "risk_posture_view_url": risk_posture_view_url,
-        "can_review_hc_participation": is_in_group(request.user, HCConstants.REVIEWERS_GROUP.value),
+        "can_review_hc_participation": can_review_hc_participation,
         "can_approve_hc_participation": is_in_group(request.user, HCConstants.APPROVERS_GROUP.value),
         "can_reject_hc_participation": (
             is_in_group(request.user, HCConstants.REVIEWERS_GROUP.value)
@@ -244,7 +260,7 @@ def review_hc_participation(request: HttpRequest, hcid: str) -> HttpResponse:
     confirmation_criteria = []
 
     if hc_participation.recommendation in ("postulated", "postulated_manually"):
-        configured_criteria = list(getattr(settings, "HC_CONFIRM_INGRESS_POSTULATION_CRITERIA", []))
+        configured_criteria = get_hc_confirm_ingress_postulation_criteria()
         raw_selected_criteria = [criterion.strip() for criterion in request.POST.getlist("criteria") if criterion.strip()]
 
         if configured_criteria and not raw_selected_criteria:
