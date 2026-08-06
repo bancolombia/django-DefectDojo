@@ -823,6 +823,7 @@ def reject_hc_participation(hc_participation, user):
 
         previous_status = hc_participation.status
         is_postulation_request = hc_participation.recommendation in ("postulated", "postulated_manually")
+        is_already_in_hc_request = hc_participation.recommendation == "already_in_hc"
 
         security_posture_data = hc_participation.security_posture_data
         if not isinstance(security_posture_data, dict):
@@ -834,6 +835,11 @@ def reject_hc_participation(hc_participation, user):
         )
         if should_restore_bag:
             _update_hc_approval_bag_size(1)
+
+        # If an already_in_hc removal request was reviewed first, review already gave +1.
+        # Rejecting that removal means the product stays in HC, so we revert with -1.
+        if is_already_in_hc_request and previous_status == "Reviewed":
+            _update_hc_approval_bag_size(-1)
 
         hc_participation.security_posture_data = security_posture_data
 

@@ -586,6 +586,28 @@ class ApproveRejectHCTest(TestCase):
         bag_size = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
         self.assertEqual(int(bag_size), 1)
 
+    def test_reject_reviewed_already_in_hc_reverts_bag_size(self):
+        """Rejecting a reviewed already_in_hc removal request must consume the slot added on review."""
+        _set_bag_for_test(0)
+        removal_request = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="already_in_hc",
+            status="Pending",
+            was_in_hacking_continuous=True,
+            created_by=self.user,
+        )
+
+        mark_hc_participation_reviewed(removal_request, self.user)
+        bag_after_review = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(bag_after_review), 1)
+
+        reject_hc_participation(removal_request, self.user)
+
+        removal_request.refresh_from_db()
+        self.assertEqual(removal_request.status, "Rejected")
+        bag_after_reject = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(bag_after_reject), 0)
+
 
 class GetLatestEvaluationTest(TestCase):
     """Tests for the get_latest_hc_evaluation_for_product function"""
