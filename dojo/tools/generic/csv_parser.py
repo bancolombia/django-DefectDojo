@@ -96,7 +96,9 @@ class GenericCSVParser:
                     finding.cvssv3 = cvss_objects[0].clean_vector()
 
             finding.unsaved_tags = self._get_tags(row)
-
+            # populate unique_id_from_tool for reimport matching and differential close
+            if row.get("Unique ID from Tool"):
+                finding.unique_id_from_tool = row["Unique ID from Tool"]
             # manage endpoints
             if "Url" in row:
                 finding.unsaved_endpoints = [
