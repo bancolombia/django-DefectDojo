@@ -136,6 +136,8 @@
                 return;
             }
 
+            multiUniqueIdActive = true;
+
             const fieldContainer = uniqueIdField.closest('.col-sm-10');
             const existingValues = (uniqueIdField.val() || '')
                 .split('\n')
@@ -181,6 +183,9 @@
         }
 
         toggleHierarchicalFields();
+
+        var multiUniqueIdActive = false;
+
         initializeMultiUniqueIdInputs();
 
         $('input[name="scope"]').change(function () {
@@ -212,7 +217,9 @@
         });
 
         $('form').on('submit', function () {
-            syncUniqueIdTextarea();
+            if (multiUniqueIdActive) {
+                syncUniqueIdTextarea();
+            }
         });
 
         $(window).on('resize', function () {
