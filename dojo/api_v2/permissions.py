@@ -361,7 +361,7 @@ class UserHasEngagementPermission(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         if UserHasEngagementPermission.path_engagement_post.match(
             request.path,
-        )   or UserHasEngagementPermission.path_input_flow.match(request.path) or UserHasEngagementPermission.path_engagement.match(request.path):
+        )   or UserHasEngagementPermission.path_engagement.match(request.path):
             return check_object_permission(
                 request,
                 obj,
@@ -1424,6 +1424,8 @@ class UserHasTransferFindingPermission(permissions.BasePermission):
             Permissions.Transfer_Finding_Delete,
             Permissions.Transfer_Finding_Add,
             )
+        
+        
 class UserHasInputFlowPermission(permissions.BasePermission):
     path_input_flow = re.compile(r"^/api/v2/input_flow/$")
 
