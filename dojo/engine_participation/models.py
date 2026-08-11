@@ -14,9 +14,9 @@ class HCParticipation(models.Model):
     ]
     
     RECOMMENDATION_CHOICES = [
-        ("postulated", "Postulated to HC"),
-        ("postulated_manually", "Postulated to HC (manual)"),
-        ("already_in_hc", "Already in Hacking Continuous"),
+        ("postulated", "Postulated to Specialized DevSecOps Tests"),
+        ("postulated_manually", "Postulated to Specialized DevSecOps Tests (manual)"),
+        ("already_in_hc", "Already in Specialized DevSecOps Tests"),
         ("not_eligible", "Not eligible"),
     ]
     
@@ -140,8 +140,8 @@ class HCParticipation(models.Model):
         app_label = "dojo"
         db_table = "dojo_hc_participation"
         ordering = ["-create_date"]
-        verbose_name = "HC Participation Request"
-        verbose_name_plural = "HC Participation Requests"
+        verbose_name = "Specialized DevSecOps Testing Request"
+        verbose_name_plural = "Specialized DevSecOps Testing Requests"
         indexes = [
             models.Index(fields=["product", "-create_date"]),
             models.Index(fields=["status"]),

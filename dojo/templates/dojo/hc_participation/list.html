@@ -60,17 +60,17 @@
                 </div>
             </div>
             <div class="panel panel-default">
-                <div class="panel-heading"><strong>HC Participation Summary</strong></div>
+                <div class="panel-heading"><strong>SDT Participation Summary</strong></div>
                 <div class="panel-body">
-                    {% if hc_summary.bag_size < 0 %}
+                    {% if hc_summary.available_approvals < 0 %}
                         <div class="alert alert-danger" role="alert" style="margin-bottom: 15px;">
-                            Bag size is negative. Remove pre-selections or review already_in_hc removals before reviewing more postulated requests.
+                            Available approvals is negative. Remove pre-selections or review already_in_hc removals before reviewing more postulated requests.
                         </div>
                     {% endif %}
                     <div class="row text-center">
                         <div class="col-sm-3">
-                            <h4 {% if hc_summary.bag_size < 0 %}style="color: #d11d38;"{% endif %}>{{ hc_summary.bag_size|default:0 }}</h4>
-                            <p class="text-muted">Bag size (available approvals)</p>
+                            <h4 {% if hc_summary.available_approvals < 0 %}style="color: #d11d38;"{% endif %}>{{ hc_summary.available_approvals|default:0 }}</h4>
+                            <p class="text-muted">Available approvals</p>
                         </div>
                         <div class="col-sm-3">
                             <h4>{{ hc_summary.postulated_products|default:0 }}</h4>
@@ -82,7 +82,7 @@
                         </div>
                         <div class="col-sm-3">
                             <h4>{{ hc_summary.products_in_hc|default:0 }}</h4>
-                            <p class="text-muted">Products in Hacking Continuous</p>
+                            <p class="text-muted">Products in SDT</p>
                         </div>
                     </div>
                 </div>
@@ -122,7 +122,11 @@
                                             {% else %}#b97a0c
                                             {% endif %}" 
                                             class="pass_fail Pass">
-                                            {{ hc.status }}
+                                            {% if hc.status == 'Reviewed' %}
+                                                Approved Entry
+                                            {% else %}
+                                                {{ hc.status }}
+                                            {% endif %}
                                         </span>
                                     {% else %}
                                         {{ hc.status }}
@@ -162,7 +166,7 @@
                 </div>
             </div>
             <div class="panel panel-default table-responsive">
-                <div class="panel-heading"><strong>Already in Hacking Continuous - Review Requests</strong></div>
+                <div class="panel-heading"><strong>Already in Specialized DevSecOps Tests - Review Requests</strong></div>
                 <table id="hc-requests-already" class="tablesorter-bootstrap table table-condensed table-striped">
                     <thead>
                         <tr>
@@ -197,7 +201,9 @@
                                             {% if hc.status == 'Approved' %}
                                                 Removal Approved
                                             {% elif hc.status == 'Rejected' %}
-                                                Continues in HC
+                                                Continues in SDT
+                                            {% elif hc.status == 'Reviewed' %}
+                                                Approved Removal
                                             {% else %}
                                                 {{ hc.status }}
                                             {% endif %}
@@ -219,7 +225,7 @@
                 </div>
             </div>
             {% else %}
-                No HC participation requests found.
+                No SDT participation requests found.
             {% endif %}
         </div>
     </div>   

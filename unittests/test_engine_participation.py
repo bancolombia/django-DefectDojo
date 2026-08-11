@@ -36,8 +36,8 @@ from dojo.engine_participation.helpers import (
 )
 
 
-def _set_bag_for_test(value: int) -> None:
-    """Set bag size in DB and purge Redis cache to avoid stale values between tests."""
+def _set_available_approvals_for_test(value: int) -> None:
+    """Set available approvals in DB and purge Redis cache to avoid stale values between tests."""
     GeneralSettings.objects.update_or_create(
         name_key="HACKING_CONTINUOUS_APPROVAL_BAG_SIZE",
         defaults={"value": str(value), "data_type": "INT", "status": True},
@@ -367,7 +367,7 @@ class ApproveRejectHCTest(TestCase):
     def setUp(self):
         self.product = Product.objects.first()
         self.user = Dojo_User.objects.get(username="admin")
-        _set_bag_for_test(2)
+        _set_available_approvals_for_test(2)
         self.hc = HCParticipation.objects.create(
             product=self.product,
             recommendation="postulated",
@@ -389,8 +389,8 @@ class ApproveRejectHCTest(TestCase):
         self.assertIsNotNone(log)
         self.assertEqual(log.current_status, "Approved")
 
-        bag_size = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
-        self.assertEqual(int(bag_size), 2)
+        available_approvals = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(available_approvals), 2)
     
     def test_reject_hc_participation(self):
         """Test rejecting HC participation"""
@@ -405,9 +405,9 @@ class ApproveRejectHCTest(TestCase):
         self.assertIsNotNone(log)
         self.assertEqual(log.current_status, "Rejected")
 
-    def test_reject_preselected_clears_flag_and_restores_bag(self):
-        """Rejecting a preselected request removes the flag and increments the bag."""
-        _set_bag_for_test(3)
+    def test_reject_preselected_clears_flag_and_restores_approval(self):
+        """Rejecting a preselected request removes the flag and increments available approvals."""
+        _set_available_approvals_for_test(3)
         self.hc.security_posture_data = {"is_preselected_for_hc": True}
         self.hc.save()
 
@@ -416,19 +416,19 @@ class ApproveRejectHCTest(TestCase):
         self.hc.refresh_from_db()
         self.assertEqual(self.hc.status, "Rejected")
         self.assertFalse(self.hc.security_posture_data.get("is_preselected_for_hc", False))
-        bag_size = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
-        self.assertEqual(int(bag_size), 4)
+        available_approvals = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(available_approvals), 4)
 
-    def test_reject_reviewed_postulation_restores_bag(self):
-        """Rejecting a reviewed postulation should restore one bag slot."""
-        _set_bag_for_test(2)
+    def test_reject_reviewed_postulation_restores_approval(self):
+        """Rejecting a reviewed postulation should restore one available approval."""
+        _set_available_approvals_for_test(2)
 
         reject_hc_participation(self.hc, self.user)
 
         self.hc.refresh_from_db()
         self.assertEqual(self.hc.status, "Rejected")
-        bag_size = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
-        self.assertEqual(int(bag_size), 3)
+        available_approvals = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(available_approvals), 3)
 
     def test_review_hc_participation_requires_pending_status(self):
         """Test reviewing only works from Pending status"""
@@ -456,20 +456,20 @@ class ApproveRejectHCTest(TestCase):
         with self.assertRaises(InvalidHCParticipationTransition):
             reject_hc_participation(self.hc, self.user)
 
-    def test_approve_hc_participation_does_not_require_bag_slots(self):
-        """Approver action does not consume or validate bag slots"""
-        _set_bag_for_test(0)
+    def test_approve_hc_participation_does_not_consume_available_approvals(self):
+        """Approver action does not consume or validate available approvals"""
+        _set_available_approvals_for_test(0)
 
         approve_hc_participation(self.hc, self.user)
 
         self.hc.refresh_from_db()
         self.assertEqual(self.hc.status, "Approved")
 
-        bag_size = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
-        self.assertEqual(int(bag_size), 0)
+        available_approvals = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(available_approvals), 0)
 
-    def test_review_postulated_consumes_bag_slot(self):
-        """Reviewing a postulated request consumes one bag slot"""
+    def test_review_postulated_consumes_available_approval(self):
+        """Reviewing a postulated request consumes one available approval"""
         pending_postulation = HCParticipation.objects.create(
             product=self.product,
             recommendation="postulated",
@@ -481,12 +481,12 @@ class ApproveRejectHCTest(TestCase):
 
         pending_postulation.refresh_from_db()
         self.assertEqual(pending_postulation.status, "Reviewed")
-        bag_size = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
-        self.assertEqual(int(bag_size), 1)
+        available_approvals = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(available_approvals), 1)
 
-    def test_review_postulated_fails_when_bag_has_no_slots(self):
-        """Reviewer cannot mark postulated as reviewed when bag is empty"""
-        _set_bag_for_test(0)
+    def test_review_postulated_fails_when_no_available_approvals(self):
+        """Reviewer cannot mark postulated as reviewed when there are no available approvals"""
+        _set_available_approvals_for_test(0)
         pending_postulation = HCParticipation.objects.create(
             product=self.product,
             recommendation="postulated",
@@ -500,8 +500,8 @@ class ApproveRejectHCTest(TestCase):
         pending_postulation.refresh_from_db()
         self.assertEqual(pending_postulation.status, "Pending")
 
-    def test_review_postulated_preselected_does_not_consume_bag_twice(self):
-        """If request was already pre-selected, review should not consume an extra slot"""
+    def test_review_postulated_preselected_does_not_consume_approval_twice(self):
+        """If request was already pre-selected, review should not consume an extra approval"""
         pending_postulation = HCParticipation.objects.create(
             product=self.product,
             recommendation="postulated",
@@ -510,16 +510,16 @@ class ApproveRejectHCTest(TestCase):
         )
 
         set_hc_request_preselection(pending_postulation, True)
-        bag_after_preselection = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
-        self.assertEqual(int(bag_after_preselection), 1)
+        available_after_preselection = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(available_after_preselection), 1)
 
         mark_hc_participation_reviewed(pending_postulation, self.user)
 
-        bag_after_review = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
-        self.assertEqual(int(bag_after_review), 1)
+        available_after_review = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(available_after_review), 1)
 
-    def test_review_postulated_preselected_fails_when_bag_is_negative(self):
-        """When bag is negative, postulated requests cannot be marked as reviewed."""
+    def test_review_postulated_preselected_fails_when_approvals_negative(self):
+        """When available approvals is negative, no postulated request can be reviewed (including pre-selected ones)."""
         pending_postulation = HCParticipation.objects.create(
             product=self.product,
             recommendation="postulated",
@@ -545,17 +545,19 @@ class ApproveRejectHCTest(TestCase):
         )
         set_hc_request_preselection(third_postulation, True)
 
-        bag_size = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
-        self.assertLess(int(bag_size), 0)
+        available_approvals = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertLess(int(available_approvals), 0)
 
+        # Pre-selected products are still blocked when count is negative;
+        # reviewer must remove some pre-selections first.
         with self.assertRaises(InvalidHCParticipationTransition):
             mark_hc_participation_reviewed(pending_postulation, self.user)
 
         pending_postulation.refresh_from_db()
         self.assertEqual(pending_postulation.status, "Pending")
 
-    def test_preselect_and_remove_preselection_adjust_bag(self):
-        """Pre-select decreases bag and removing pre-selection increases it"""
+    def test_preselect_and_remove_preselection_adjust_approvals(self):
+        """Pre-select decreases available approvals and removing pre-selection increases them"""
         pending_postulation = HCParticipation.objects.create(
             product=self.product,
             recommendation="postulated",
@@ -564,16 +566,16 @@ class ApproveRejectHCTest(TestCase):
         )
 
         set_hc_request_preselection(pending_postulation, True)
-        bag_after_preselection = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
-        self.assertEqual(int(bag_after_preselection), 1)
+        available_after_preselection = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(available_after_preselection), 1)
 
         set_hc_request_preselection(pending_postulation, False)
-        bag_after_removal = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
-        self.assertEqual(int(bag_after_removal), 2)
+        available_after_removal = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(available_after_removal), 2)
 
-    def test_review_already_in_hc_increments_bag_size(self):
-        """Reviewing an already_in_hc removal request increases bag size by 1"""
-        _set_bag_for_test(0)
+    def test_review_already_in_hc_increments_available_approvals(self):
+        """Reviewing an already_in_hc removal request increases available approvals by 1"""
+        _set_available_approvals_for_test(0)
         removal_request = HCParticipation.objects.create(
             product=self.product,
             recommendation="already_in_hc",
@@ -584,12 +586,12 @@ class ApproveRejectHCTest(TestCase):
 
         mark_hc_participation_reviewed(removal_request, self.user)
 
-        bag_size = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
-        self.assertEqual(int(bag_size), 1)
+        available_approvals = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(available_approvals), 1)
 
-    def test_reject_reviewed_already_in_hc_reverts_bag_size(self):
-        """Rejecting a reviewed already_in_hc removal request must consume the slot added on review."""
-        _set_bag_for_test(0)
+    def test_reject_reviewed_already_in_hc_reverts_available_approvals(self):
+        """Rejecting a reviewed already_in_hc removal request must revert the approval added on review."""
+        _set_available_approvals_for_test(0)
         removal_request = HCParticipation.objects.create(
             product=self.product,
             recommendation="already_in_hc",
@@ -599,19 +601,19 @@ class ApproveRejectHCTest(TestCase):
         )
 
         mark_hc_participation_reviewed(removal_request, self.user)
-        bag_after_review = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
-        self.assertEqual(int(bag_after_review), 1)
+        available_after_review = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(available_after_review), 1)
 
         reject_hc_participation(removal_request, self.user)
 
         removal_request.refresh_from_db()
         self.assertEqual(removal_request.status, "Rejected")
-        bag_after_reject = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
-        self.assertEqual(int(bag_after_reject), 0)
+        available_after_reject = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(available_after_reject), 0)
 
     def test_return_to_pending_preserves_history_and_discussions(self):
         """Returning to Pending must keep prior logs/discussions and append a new log entry."""
-        _set_bag_for_test(2)
+        _set_available_approvals_for_test(2)
         HCParticipationLog.objects.create(
             hc_participation=self.hc,
             changed_by=self.user,
@@ -638,8 +640,8 @@ class ApproveRejectHCTest(TestCase):
         self.assertEqual(last_log.current_status, "Pending")
         self.assertIn("Sent back for reevaluation", last_log.notes)
 
-        bag_size = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
-        self.assertEqual(int(bag_size), 3)
+        available_approvals = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
+        self.assertEqual(int(available_approvals), 3)
 
 
 class GetLatestEvaluationTest(TestCase):
@@ -700,7 +702,7 @@ class HCParticipationViewsTest(TestCase):
             status="Pending",
             created_by=self.user,
         )
-        _set_bag_for_test(3)
+        _set_available_approvals_for_test(3)
     
     def test_list_view(self):
         """Test HC participation list view"""
@@ -714,7 +716,7 @@ class HCParticipationViewsTest(TestCase):
         self.assertContains(response, self.product.name)
 
     def test_list_view_includes_hc_summary(self):
-        """List view shows summary panel with bag size and counters"""
+        """List view shows summary panel with available approvals and counters"""
         from django.test import Client
 
         HCParticipation.objects.create(
@@ -729,15 +731,15 @@ class HCParticipationViewsTest(TestCase):
         response = client.get(reverse("hc_participations"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "HC Participation Summary")
-        self.assertContains(response, "Bag size (available approvals)")
+        self.assertContains(response, "SDT Participation Summary")
+        self.assertContains(response, "Available approvals")
         self.assertContains(response, "Postulated products")
         self.assertContains(response, "Pre-selected products")
-        self.assertContains(response, "Products in Hacking Continuous")
+        self.assertContains(response, "Products in SDT")
 
-    def test_list_view_shows_bag_in_red_when_negative(self):
-        """When bag size is negative, summary value should be rendered in red"""
-        _set_bag_for_test(-1)
+    def test_list_view_shows_approvals_in_red_when_negative(self):
+        """When available approvals is negative, summary value should be rendered in red"""
+        _set_available_approvals_for_test(-1)
 
         from django.test import Client
         client = Client()
@@ -748,7 +750,7 @@ class HCParticipationViewsTest(TestCase):
         self.assertContains(response, 'style="color: #d11d38;"')
         self.assertContains(
             response,
-            "Bag size is negative. Remove pre-selections or review already_in_hc removals before reviewing more postulated requests.",
+            "Available approvals is negative. Remove pre-selections or review already_in_hc removals before reviewing more postulated requests.",
         )
     
     def test_show_view(self):
@@ -1124,7 +1126,7 @@ class ManualHCPostulationEligibilityTest(TestCase):
 
     @override_settings(HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"])
     def test_already_in_hc_returns_error(self):
-        """A product already in Hacking Continuous is not eligible"""
+        """A product already in SDT is not eligible"""
         HCParticipation.objects.create(
             product=self.product,
             recommendation="already_in_hc",
@@ -1134,12 +1136,12 @@ class ManualHCPostulationEligibilityTest(TestCase):
 
         error = get_manual_hc_postulation_eligibility_error(self.product)
 
-        self.assertEqual(error, "This product is already in Hacking Continuous.")
+        self.assertEqual(error, "This product is already in SDT.")
 
     @override_settings(HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"])
     def test_already_in_hc_with_pending_status_is_not_confused_with_pending_postulation(self):
         """Regression test: an 'already_in_hc' record with status Pending must
-        be reported as 'already in HC', not as a pending postulation."""
+        be reported as 'already in SDT', not as a pending postulation."""
         HCParticipation.objects.create(
             product=self.product,
             recommendation="already_in_hc",
@@ -1149,7 +1151,7 @@ class ManualHCPostulationEligibilityTest(TestCase):
 
         error = get_manual_hc_postulation_eligibility_error(self.product)
 
-        self.assertEqual(error, "This product is already in Hacking Continuous.")
+        self.assertEqual(error, "This product is already in SDT.")
 
 
 class CreateManualHCPostulationTest(TestCase):
@@ -1227,7 +1229,7 @@ class CreateManualHCPostulationTest(TestCase):
 
     @override_settings(HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"])
     def test_does_not_create_request_when_already_in_hc(self):
-        """A product already in Hacking Continuous must block creation of a new request"""
+        """A product already in SDT must block creation of a new request"""
         HCParticipation.objects.create(
             product=self.product,
             recommendation="already_in_hc",
@@ -1240,7 +1242,7 @@ class CreateManualHCPostulationTest(TestCase):
         )
 
         self.assertIsNone(hc_request)
-        self.assertEqual(error, "This product is already in Hacking Continuous.")
+        self.assertEqual(error, "This product is already in SDT.")
         self.assertEqual(HCParticipation.objects.filter(product=self.product).count(), 1)
 
 
@@ -1322,7 +1324,7 @@ class ManualHCPostulationViewTest(TestCase):
 
         self.assertRedirects(response, reverse("view_product", args=[self.product.id]))
         page_messages = list(response.context["messages"])
-        self.assertTrue(any("already in Hacking Continuous" in str(m) for m in page_messages))
+        self.assertTrue(any("already in SDT" in str(m) for m in page_messages))
 
     @override_settings(HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"])
     def test_post_without_criteria_shows_validation_error(self):

@@ -70,7 +70,7 @@ def hc_participations(request: HttpRequest) -> HttpResponse:
         hc_request.is_preselected_for_hc = is_hc_request_preselected(hc_request)
     
     add_breadcrumb(
-        title="HC Participation Requests",
+        title="Specialized DevSecOps Testing Requests",
         top_level=True,
         request=request
     )
@@ -80,7 +80,7 @@ def hc_participations(request: HttpRequest) -> HttpResponse:
     return render(request, "dojo/hc_participation/list.html", {
         "has_hc_requests": filtered.qs.exists(),
         "filtered": filtered,
-        "name": "Hacking Continuous - Participation Requests",
+        "name": "Specialized DevSecOps Tests - Participation Requests",
         "postulated_requests": postulated_requests,
         "already_in_hc_requests": already_in_hc_requests,
         "can_run_hc_evaluation": request.user.is_staff or request.user.is_superuser,

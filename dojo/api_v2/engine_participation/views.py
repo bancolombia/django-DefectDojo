@@ -125,7 +125,7 @@ class ReturnHCParticipationToPendingAPIView(APIView):
         try:
             updated_request = return_hc_participation_to_pending(hc_request, request.user, reason=reason)
             return http_response.ok(
-                message="HC participation request returned to Pending successfully.",
+                message="SDT participation request returned to Pending successfully.",
                 data={
                     "hc_id": str(updated_request.uuid),
                     "status": updated_request.status,

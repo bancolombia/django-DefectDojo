@@ -132,7 +132,11 @@
                                 <form method="post" action="{% url 'review_hc_participation' hc_participation.uuid %}" id="review-dropdown-form" style="margin: 0;">
                                     {% csrf_token %}
                                     <button type="submit" class="dropdown-item btn btn-link" style="width: 100%; text-align: left;">
-                                        <i class="fa-solid fa-circle-check"></i> Mark as Reviewed
+                                        {% if hc_participation.was_in_hacking_continuous %}
+                                            <i class="fa-solid fa-circle-check"></i> Approve SDT Removal
+                                        {% else %}
+                                            <i class="fa-solid fa-circle-check"></i> Approve SDT Participation
+                                        {% endif %}
                                     </button>
                                 </form>
                             </li>
@@ -146,9 +150,9 @@
                                     {% csrf_token %}
                                     <button type="submit" class="dropdown-item btn btn-link" style="width: 100%; text-align: left;">
                                         {% if hc_participation.was_in_hacking_continuous %}
-                                            <i class="fa-solid fa-circle-check"></i> Approve Removal from HC
+                                            <i class="fa-solid fa-circle-check"></i> Approve Removal from SDT
                                         {% else %}
-                                            <i class="fa-solid fa-circle-exclamation"></i> Approve HC Participation
+                                            <i class="fa-solid fa-circle-exclamation"></i> Approve SDT Participation
                                         {% endif %}
                                     </button>
                                 </form>
@@ -163,9 +167,9 @@
                                     {% csrf_token %}
                                     <button type="submit" class="dropdown-item btn btn-link" style="width: 100%; text-align: left;">
                                         {% if hc_participation.was_in_hacking_continuous %}
-                                            <i class="fa-solid fa-circle-xmark"></i> Keep Product in HC
+                                            <i class="fa-solid fa-circle-xmark"></i> Keep Product in SDT
                                         {% else %}
-                                            <i class="fa-solid fa-circle-xmark"></i> Reject HC Participation
+                                            <i class="fa-solid fa-circle-xmark"></i> Reject SDT Participation
                                         {% endif %}
                                     </button>
                                 </form>
@@ -183,7 +187,7 @@
                     <th>Product</th>
                     <th>Product Type</th>
                     <th>Criticality</th>
-                    <th>Was in HC</th>
+                    <th>Was in SDT</th>
                     <th>Recommendation</th>
                     <th>Status</th>
                     <th>Created by</th>
@@ -216,7 +220,11 @@
                                 {% if hc_participation.was_in_hacking_continuous and hc_participation.status == 'Approved' %}
                                     Removal Approved
                                 {% elif hc_participation.was_in_hacking_continuous and hc_participation.status == 'Rejected' %}
-                                    Continues in HC
+                                    Continues in SDT
+                                {% elif hc_participation.status == 'Reviewed' and hc_participation.was_in_hacking_continuous %}
+                                    Approved Removal
+                                {% elif hc_participation.status == 'Reviewed' %}
+                                    Approved Entry
                                 {% else %}
                                     {{ hc_participation.status }}
                                 {% endif %}
@@ -315,7 +323,7 @@
                         </div>
                         <div class="col-4 timeline-step {% if hc_participation.reviewed_at %}active{% endif %}">
                             <div class="timeline-content">
-                                <pre><strong>Reviewed</strong></pre>
+                                <pre><strong>{% if hc_participation.was_in_hacking_continuous %}Approved Removal{% else %}Approved Entry{% endif %}</strong></pre>
                                 <p>
                                     {% if hc_participation.reviewed_at %}
                                         <pre>{{ hc_participation.reviewed_at|date:"d M Y H:i" }}</pre>
@@ -344,7 +352,7 @@
                                             <pre><strong>By:</strong> {{ hc_participation.approved_by.username }}</pre>
                                         {% else %}
                                             {% if hc_participation.was_in_hacking_continuous %}
-                                                <pre class="text-success"><strong>Continues in HC</strong></pre>
+                                                <pre class="text-success"><strong>Continues in SDT</strong></pre>
                                             {% else %}
                                                 <pre class="text-danger"><strong>Rejected</strong></pre>
                                             {% endif %}
@@ -378,20 +386,20 @@
                             <span class="log-user">{{ log.changed_by.username }}:</span>
                             Status changed from
                             <span class="log-status" style="background-color: {% if log.previous_status == 'Pending' %}#1B30DE{% elif log.previous_status == 'Approved' %}#096C11{% elif log.previous_status == 'Rejected' %}#d11d38{% elif log.previous_status == 'Cancelled' %}#6c757d{% elif log.previous_status == 'Reviewed' %}#b97a0c{% else %}#6c757d{% endif %};">
-                                {{ log.previous_status|default:"New" }}
+                                {% if log.previous_status == 'Reviewed' %}{% if hc_participation.was_in_hacking_continuous %}Approved Removal{% else %}Approved Entry{% endif %}{% elif log.previous_status == 'Approved' and hc_participation.was_in_hacking_continuous %}Removal Approved{% elif log.previous_status == 'Rejected' and hc_participation.was_in_hacking_continuous %}Continues in SDT{% else %}{{ log.previous_status|default:"New" }}{% endif %}
                             </span>
                             to
                             <span class="log-status" style="background-color: {% if log.current_status == 'Pending' %}#1B30DE{% elif log.current_status == 'Approved' %}#096C11{% elif log.current_status == 'Rejected' %}#d11d38{% elif log.current_status == 'Cancelled' %}#6c757d{% elif log.current_status == 'Reviewed' %}#b97a0c{% else %}#6c757d{% endif %};">
-                                {{ log.current_status }}
+                                {% if log.current_status == 'Reviewed' %}{% if hc_participation.was_in_hacking_continuous %}Approved Removal{% else %}Approved Entry{% endif %}{% elif log.current_status == 'Approved' and hc_participation.was_in_hacking_continuous %}Removal Approved{% elif log.current_status == 'Rejected' and hc_participation.was_in_hacking_continuous %}Continues in SDT{% else %}{{ log.current_status }}{% endif %}
                             </span>
                             {% if log.notes %}
                                 <span class="text-muted"> - 
                                     {% if hc_participation.was_in_hacking_continuous and log.notes == 'Request approved for Hacking Continuous participation' %}
-                                        Request approved for removal from Hacking Continuous
+                                        Request approved for removal from SDT
                                     {% elif hc_participation.was_in_hacking_continuous and log.notes == 'Request marked as reviewed' %}
-                                        Request marked as reviewed for HC continuity decision
+                                        Request marked as reviewed for SDT continuity decision
                                     {% elif hc_participation.was_in_hacking_continuous and log.notes == 'Request rejected' %}
-                                        Request rejected: product remains in Hacking Continuous
+                                        Request rejected: product remains in SDT
                                     {% else %}
                                         {{ log.notes }}
                                     {% endif %}
