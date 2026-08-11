@@ -242,7 +242,7 @@ class InputFlowViewSet(
 
     permission_classes = (
         IsAuthenticated,
-        permissions.UserHasEngagementPermission,
+        permissions.UserHasInputFlowPermission,
     )
 
     def create(self, request, *args, **kwargs):
@@ -331,7 +331,7 @@ class InputURLViewSet(
 
     permission_classes = (
         IsAuthenticated,
-        permissions.UserHasEngagementPermission,
+        permissions.UserHasInputFlowPermission,
     )
 
     def retrieve(self, request, *args, **kwargs):
@@ -391,7 +391,7 @@ class InputScenarioViewSet(
 
     permission_classes = (
         IsAuthenticated,
-        permissions.UserHasEngagementPermission,
+        permissions.UserHasInputFlowPermission,
     )
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop("partial", False)

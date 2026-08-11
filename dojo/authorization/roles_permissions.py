@@ -198,7 +198,12 @@ class Permissions(IntEnum):
     Long_Risk_Acceptance_Rule_Eng_Edit = 6002
     Long_Risk_Acceptance_Rule_Eng_Delete = 6003
     Long_Risk_Acceptance_Rule_Eng_View = 6004
-
+    
+    Input_Flow_Add = 7001
+    Input_Flow_Edit = 7002
+    Input_Flow_Delete = 7003
+    Input_Flow_View = 7004
+    
     @classmethod
     def has_value(cls, value):
         try:
@@ -249,7 +254,11 @@ class Permissions(IntEnum):
             Permissions.Risk_Acceptance_Eng_Note_Delete,
             Permissions.Risk_Acceptance_Eng_Note_Edit,
             Permissions.Risk_Acceptance_Eng_Note_Add,
-            
+            Permissions.Input_Flow_Add,
+            Permissions.Input_View,
+            Permissions.Input_Delete,
+            Permissions.Input_Edit,
+
 
         }.union(cls.get_test_permissions())
 
@@ -506,7 +515,11 @@ def get_roles_with_permissions():
             Permissions.Input_View,
             Permissions.Input_Edit,
             Permissions.Input_Add,
-            Permissions.Input_Delete
+            Permissions.Input_Delete,
+            Permissions.Input_Flow_Add,
+            Permissions.Input_Flow_Edit,
+            Permissions.Input_Flow_Delete,
+            Permissions.Input_Flow_View
         },
         Roles.Maintainer: {
             Permissions.Product_Type_Add_Product,
@@ -639,6 +652,10 @@ def get_roles_with_permissions():
             Permissions.Long_Risk_Acceptance_Rule_Eng_Edit,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Delete,
             Permissions.Long_Risk_Acceptance_Rule_Eng_View,
+            Permissions.Input_Flow_Add,
+            Permissions.Input_Flow_Edit,
+            Permissions.Input_Flow_Delete,
+            Permissions.Input_Flow_View
         },
         Roles.Owner: {
             Permissions.Product_Type_Add_Product,
@@ -736,6 +753,10 @@ def get_roles_with_permissions():
             Permissions.Long_Risk_Acceptance_Rule_Eng_Edit,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Delete,
             Permissions.Long_Risk_Acceptance_Rule_Eng_View,
+            Permissions.Input_Flow_Add,
+            Permissions.Input_Flow_Edit,
+            Permissions.Input_Flow_Delete,
+            Permissions.Input_Flow_View
 
         },
         Roles.Developer: {
@@ -776,6 +797,8 @@ def get_roles_with_permissions():
             Permissions.Risk_Acceptance_Eng_Note_View,
             Permissions.Risk_Acceptance_Eng_Note_Add,
             Permissions.Risk_Acceptance_Eng_Render,
+            Permissions.Input_Flow_Add,
+            Permissions.Input_Flow_View
 
         },
         Roles.Leader: {
@@ -828,6 +851,10 @@ def get_roles_with_permissions():
             Permissions.Long_Risk_Acceptance_Rule_Eng_Edit,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Delete,
             Permissions.Long_Risk_Acceptance_Rule_Eng_View,
+            Permissions.Input_Flow_Add,
+            Permissions.Input_Flow_Edit,
+            Permissions.Input_Flow_Delete,
+            Permissions.Input_Flow_View
         },
         Roles.Cibersecurity: {
             Permissions.Product_Type_View,
