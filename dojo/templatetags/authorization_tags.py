@@ -134,8 +134,9 @@ def is_tags_authorized_for_whitelist(finding):
     if tags:
         if 'white_list' in tags:
             return False
+        exclusion_tags = [t.strip() for t in settings.FINDING_EXCLUSION_FILTER_TAGS.split(",")]
         for tag in tags:
-            if tag.name in settings.FINDING_EXCLUSION_FILTER_TAGS:
+            if tag.name in exclusion_tags:
                 return True
     
     return False
