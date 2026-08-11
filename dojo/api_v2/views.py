@@ -3772,7 +3772,20 @@ class TransferFindingFindingsViewSet(prefetch.PrefetchListMixin,
                 return http_response.ok(message="Transfer Deleted")
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
+    
+    @extend_schema(
+    methods=["GET"],
+    responses={
+        status.HTTP_200_OK: serializers.FindingSerializer,
+    },
+    )
+    @action(detail=True, methods=["get"]) 
+    def pre_review(self, request, pk=None):
+        transfer_finding_finding = get_object_or_404(TransferFindingFinding, id=int(pk))
+        if transfer_finding_finding.findings:
+            serializer = serializers.FindingSerializer(transfer_finding_finding.findings)
+            return http_response.ok(data=serializer.data, message="Transfer Finding Pre Review")
+        return
 
 class SchemaOa3View(SpectacularAPIView):
     permnission_classe = [permissions.UserHasViewSwaggerDocumentation]
