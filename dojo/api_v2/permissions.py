@@ -1424,7 +1424,6 @@ class UserHasTransferFindingPermission(permissions.BasePermission):
             Permissions.Transfer_Finding_Delete,
             Permissions.Transfer_Finding_Add,
             )
-
 class UserHasInputFlowPermission(permissions.BasePermission):
     path_input_flow = re.compile(r"^/api/v2/input_flow/$")
 
@@ -1432,7 +1431,7 @@ class UserHasInputFlowPermission(permissions.BasePermission):
         if UserHasInputFlowPermission.path_input_flow.match(request.path):
             return check_post_permission(
                 request,
-                Product,
+                Engagement,
                 "engagement",
                 Permissions.Input_Flow_Add,
             )
