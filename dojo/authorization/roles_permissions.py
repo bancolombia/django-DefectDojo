@@ -516,10 +516,6 @@ def get_roles_with_permissions():
             Permissions.Input_Edit,
             Permissions.Input_Add,
             Permissions.Input_Delete,
-            Permissions.Input_Flow_Add,
-            Permissions.Input_Flow_Edit,
-            Permissions.Input_Flow_Delete,
-            Permissions.Input_Flow_View
         },
         Roles.Maintainer: {
             Permissions.Product_Type_Add_Product,
@@ -851,10 +847,6 @@ def get_roles_with_permissions():
             Permissions.Long_Risk_Acceptance_Rule_Eng_Edit,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Delete,
             Permissions.Long_Risk_Acceptance_Rule_Eng_View,
-            Permissions.Input_Flow_Add,
-            Permissions.Input_Flow_Edit,
-            Permissions.Input_Flow_Delete,
-            Permissions.Input_Flow_View
         },
         Roles.Cibersecurity: {
             Permissions.Product_Type_View,
