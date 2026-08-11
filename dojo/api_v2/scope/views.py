@@ -210,7 +210,7 @@ class InputFileViewSet(prefetch.PrefetchListMixin,
                           permissions.UserHasEngagementPermission,)
     serializer_class = InputFileSerializer 
     filter_backends = (DjangoFilterBackend,)
-    #parser_classes = (MultiPartParser, FormParser, JSONParser)
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
 
     def patch(self, request, *args, **kwargs):
         input_id = request.query_params.get("id")
@@ -238,7 +238,7 @@ class InputFlowViewSet(
 
     serializer_class = InputFlowSerializer
     filter_backends = (DjangoFilterBackend,)
-    #parser_classes = (MultiPartParser, FormParser, JSONParser)
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
 
     permission_classes = (
         IsAuthenticated,
