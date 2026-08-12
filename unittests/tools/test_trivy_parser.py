@@ -1,5 +1,6 @@
 import re
 
+from django.test.utils import override_settings
 from dojo.models import Test
 from dojo.tools.trivy.parser import TrivyParser
 from unittests.dojo_test_case import DojoTestCase, get_unit_tests_scans_path
@@ -319,3 +320,31 @@ Number  Content
                 self.assertEqual("High", finding.severity)
                 self.assertEqual("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N", finding.cvssv3)
                 self.assertEqual(7.5, finding.cvssv3_score)
+
+    @override_settings(
+        DD_CUSTOM_TAG_PARSER={
+            "trivy": "engine_container",
+            "trivy_dependencies": "engine_dependencies",
+            "trivy_container": "engine_container",
+        },
+    )
+    def test_custom_tag_for_dependency_artifact_type(self):
+        with sample_path("issue_9092.json").open(encoding="utf-8") as test_file:
+            parser = TrivyParser()
+            findings = parser.get_findings(test_file, Test())
+            self.assertEqual(1, len(findings))
+            self.assertEqual(["engine_dependencies"], findings[0].unsaved_tags)
+
+    @override_settings(
+        DD_CUSTOM_TAG_PARSER={
+            "trivy": "engine_dependencies",
+            "trivy_dependencies": "engine_dependencies",
+            "trivy_container": "engine_container",
+        },
+    )
+    def test_custom_tag_for_container_artifact_type(self):
+        with sample_path("scheme_2_many_vulns.json").open(encoding="utf-8") as test_file:
+            parser = TrivyParser()
+            findings = parser.get_findings(test_file, Test())
+            self.assertEqual(5, len(findings))
+            self.assertEqual(["engine_container"], findings[0].unsaved_tags)
