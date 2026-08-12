@@ -215,6 +215,7 @@ class InputSerializer(serializers.Serializer):
         return authorization_helper.get_permissions(obj)
     
 class InputScenarioSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(required=False)
     STATUS_CHOICES = [
         ("untested", "Sin probar"),
         ("not_possible", "No fue posible probar"),
@@ -224,9 +225,7 @@ class InputScenarioSerializer(serializers.ModelSerializer):
 
     designed_by = serializers.SlugRelatedField(
         slug_field="username",
-        queryset=Dojo_User.objects.all(),
-        required=False,
-        allow_null=True
+        read_only=True
     )
     description = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     status = serializers.ChoiceField(choices=STATUS_CHOICES)
@@ -240,7 +239,7 @@ class InputScenarioSerializer(serializers.ModelSerializer):
             "description",
             "status",
         ]
-        read_only_fields = ["id"]
+        read_only_fields = ["designed_by"]
 
     def validate_estimated_time(self, value):
         if value is None:
@@ -259,15 +258,9 @@ class InputScenarioSerializer(serializers.ModelSerializer):
             allow_blank=True
         )
 
-    def validate(self, attrs):
-        designed_by = attrs.get("designed_by")
-        if designed_by and not getattr(designed_by, "is_active", True):
-            raise serializers.ValidationError({
-                "designed_by": "The selected user is inactive."
-            })
-        return attrs
 
 class InputURLSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(required=False)
     scenarios = InputScenarioSerializer(many=True, required=False)
 
     class Meta:
@@ -279,23 +272,33 @@ class InputURLSerializer(serializers.ModelSerializer):
             "updated",
             "scenarios",
         ]
-        read_only_fields = ["id", "created", "updated"]
+        read_only_fields = [ "created", "updated"]
 
     def validate_url(self, value):
         return validate_safe_url(value)
 
     def create(self, validated_data):
         scenarios_data = validated_data.pop("scenarios", [])
+        request = self.context.get("request")
+        user = request.user if request else None
 
         with transaction.atomic():
             url = InputURL.objects.create(**validated_data)
 
             for scenario_data in scenarios_data:
-                InputScenario.objects.create(url=url, **scenario_data)
+                scenario_data.pop("designed_by", None)
+                InputScenario.objects.create(
+                    url=url,
+                    designed_by=user,
+                    **scenario_data
+                )
 
         return url
 
+
 class InputFlowSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(required=False)
+    engagement_name = serializers.CharField(source="engagement.name", read_only=True)
     urls = InputURLSerializer(many=True, required=False)
 
     class Meta:
@@ -304,11 +307,12 @@ class InputFlowSerializer(serializers.ModelSerializer):
             "id",
             "flowName",
             "engagement",
+            "engagement_name",
             "created",
             "updated",
             "urls",
         ]
-        read_only_fields = ["id", "created", "updated"]
+        read_only_fields = ["id","created", "updated", "engagement_name"]
 
     def validate_flowName(self, value):
         value = validate_safe_text(
@@ -323,9 +327,8 @@ class InputFlowSerializer(serializers.ModelSerializer):
 
         return value
 
-
     def validate(self, attrs):
-        engagement = attrs.get("engagement")
+        engagement = attrs.get("engagement", getattr(self.instance, "engagement", None))
         if engagement is None:
             raise serializers.ValidationError({
                 "engagement": "engagement is required."
@@ -334,6 +337,8 @@ class InputFlowSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         urls_data = validated_data.pop("urls", [])
+        request = self.context.get("request")
+        user = request.user if request else None
 
         with transaction.atomic():
             flow = InputFlow.objects.create(**validated_data)
@@ -343,9 +348,72 @@ class InputFlowSerializer(serializers.ModelSerializer):
                 url = InputURL.objects.create(flow=flow, **url_data)
 
                 for scenario_data in scenarios_data:
-                    InputScenario.objects.create(url=url, **scenario_data)
+                    scenario_data.pop("designed_by", None)
+                    InputScenario.objects.create(
+                        url=url,
+                        designed_by=user,
+                        **scenario_data
+                    )
 
         return flow
+    def update(self, instance, validated_data):
+        urls_data = validated_data.pop("urls", None)
+        request = self.context.get("request")
+        user = request.user if request else None
+
+        with transaction.atomic():
+            instance.flowName = validated_data.get("flowName", instance.flowName)
+            instance.engagement = validated_data.get("engagement", instance.engagement)
+            instance.save()
+
+            if urls_data is not None:
+                for url_data in urls_data:
+                    scenarios_data = url_data.pop("scenarios", [])
+                    url_id = url_data.pop("id", None)
+
+                    if url_id:
+                        url_instance = instance.urls.filter(id=url_id).first()
+                        if not url_instance:
+                            raise serializers.ValidationError({
+                                "urls": [f"URL with id {url_id} does not belong to this flow."]
+                            })
+
+                        url_instance.url = url_data.get("url", url_instance.url)
+                        url_instance.save()
+                    else:
+                        url_instance = InputURL.objects.create(flow=instance, **url_data)
+
+                    for scenario_data in scenarios_data:
+                        scenario_id = scenario_data.pop("id", None)
+
+                        if scenario_id:
+                            scenario_instance = url_instance.scenarios.filter(id=scenario_id).first()
+                            if not scenario_instance:
+                                raise serializers.ValidationError({
+                                    "scenarios": [f"Scenario with id {scenario_id} does not belong to this URL."]
+                                })
+
+                            scenario_instance.estimated_time = scenario_data.get(
+                                "estimated_time", scenario_instance.estimated_time
+                            )
+                            scenario_instance.description = scenario_data.get(
+                                "description", scenario_instance.description
+                            )
+                            scenario_instance.status = scenario_data.get(
+                                "status", scenario_instance.status
+                            )
+                            scenario_instance.designed_by = user
+                            scenario_instance.save()
+                        else:
+                            scenario_data.pop("designed_by", None)
+                            InputScenario.objects.create(
+                                url=url_instance,
+                                designed_by=user,
+                                **scenario_data
+                            )
+
+        return instance
+
     
 def validate_safe_text(value, field_name="value", max_length=None, allow_blank=True):
     if value is None:
