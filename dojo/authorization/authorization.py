@@ -56,8 +56,9 @@ def user_has_permission(user, obj, permission):
     if user.is_superuser:
         return True
     
-    if isinstance(obj,InputFlow):
-        return user_has_permission(user, obj.input, permission)
+    if isinstance(obj, InputFlow):
+        return user_has_permission(user, obj.engagement, permission)
+
     if isinstance(obj, InputSecret):
         return user_has_permission(user, obj.input, permission)
     if isinstance(obj, InputFile):
