@@ -180,11 +180,23 @@ class DefaultReImporter(BaseImporter, DefaultReImporterOptions):
         # we need to make sure there are no side effects such as closing findings
         # for findings with a different service value
         # https://github.com/DefectDojo/django-DefectDojo/issues/12754
+        # Defer large text fields — original_items is only used for status tracking
+        # and set arithmetic; loading full text blows work_mem and causes IO:BufFileWrite.
         original_findings = (
             self.test.finding_set.all()
             .filter(service=self.service)
+            .defer(
+                "description",
+                "mitigation",
+                "impact",
+                "steps_to_reproduce",
+                "severity_justification",
+                "references",
+                "url",
+                "ia_recommendation",
+            )
         )
-        logger.debug(f"original_findings_qyer: {original_findings.query}")
+        logger.debug(f"original_findings_query: {original_findings.query}")
         self.original_items = list(original_findings)
         logger.debug(f"original_items: {[(item.id, item.hash_code) for item in self.original_items]}")
         self.new_items = []
