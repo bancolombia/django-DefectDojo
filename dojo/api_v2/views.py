@@ -2410,10 +2410,13 @@ class TestsViewSet(
         previous_engagement_id = serializer.instance.engagement_id
 
         updated_test = serializer.save()
+        enable_service_propagation = GeneralSettings.get_value(
+            "ENABLE_PROPAGATE_TEST_ENGAGEMENT_TO_FINDING_SERVICE", False,
+        )
 
         # If the engagement changed via this API update, propagate the new
         # engagement name to the `service` field of all Findings on this Test.
-        if previous_engagement_id != updated_test.engagement_id:
+        if enable_service_propagation and previous_engagement_id != updated_test.engagement_id:
             try:
                 new_service_value = updated_test.engagement.name if updated_test.engagement else None
                 if new_service_value is not None:
@@ -2793,7 +2796,9 @@ class UserProfileView(GenericAPIView):
         global_role = (
             user.global_role if hasattr(user, "global_role") else None
         )
-        dojo_group_member = Dojo_Group_Member.objects.filter(user=user)
+        dojo_group_member = Dojo_Group_Member.objects.filter(user=user).select_related(
+            "group__global_role__role",
+        )
         product_type_member = Product_Type_Member.objects.filter(user=user)
         product_member = Product_Member.objects.filter(user=user)
         serializer = serializers.UserProfileSerializer(
@@ -3767,7 +3772,20 @@ class TransferFindingFindingsViewSet(prefetch.PrefetchListMixin,
                 return http_response.ok(message="Transfer Deleted")
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
+    
+    @extend_schema(
+    methods=["GET"],
+    responses={
+        status.HTTP_200_OK: serializers.FindingSerializer,
+    },
+    )
+    @action(detail=True, methods=["get"]) 
+    def pre_review(self, request, pk=None):
+        transfer_finding_finding = get_object_or_404(TransferFindingFinding, id=int(pk))
+        if transfer_finding_finding.findings:
+            serializer = serializers.FindingSerializer(transfer_finding_finding.findings)
+            return http_response.ok(data=serializer.data, message="Transfer Finding Pre Review")
+        return
 
 class SchemaOa3View(SpectacularAPIView):
     permnission_classe = [permissions.UserHasViewSwaggerDocumentation]

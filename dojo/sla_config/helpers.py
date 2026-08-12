@@ -1,4 +1,7 @@
 import logging
+import datetime
+
+from django.core.cache import cache
 
 from dojo.celery import app
 from dojo.decorators import dojo_async_task
@@ -27,6 +30,10 @@ PRIORITY_CLASSIFICATION_TO_FILTER_VALUE = {
 # Optional global setting: if this variable contains tags, only findings with
 # those tags are included in SLA expiration date recalculation.
 SLA_FINDINGS_TAGS_FILTER_SETTING = "SLA_FINDINGS_TAGS_FILTER"
+
+# Optional global setting: when enabled, sla_expiration_date is recalculated only
+# for findings whose sla_start_date matches the azure_devops_next_sprint_start_date cache value.
+SLA_FINDINGS_START_DATE_FILTER_SETTING = "SLA_FINDINGS_START_DATE_FILTER"
 
 
 def _normalize_tags_filter_value(tags_value):
@@ -96,6 +103,30 @@ def update_sla_expiration_dates_sla_config_sync(sla_config, product_ids=None, se
             SLA_FINDINGS_TAGS_FILTER_SETTING,
             configured_tags_filter,
         )
+
+    if GeneralSettings.objects.filter(name_key=SLA_FINDINGS_START_DATE_FILTER_SETTING).exists():
+        start_date_filter_enabled = GeneralSettings.get_value(name_key=SLA_FINDINGS_START_DATE_FILTER_SETTING, default=False)
+        if start_date_filter_enabled:
+            filter_date = cache.get("azure_devops_next_sprint_start_date")
+            if isinstance(filter_date, datetime.datetime):
+                filter_date = filter_date.date()
+            elif isinstance(filter_date, str):
+                try:
+                    filter_date = datetime.date.fromisoformat(filter_date[:10])
+                except ValueError:
+                    logger.warning(
+                        "Invalid cached azure_devops_next_sprint_start_date value: %s",
+                        filter_date,
+                    )
+                    filter_date = None
+            if filter_date:
+                findings = findings.filter(sla_start_date=filter_date)
+                logger.info(
+                    "Applying start date filter from cache azure_devops_next_sprint_start_date: sla_start_date=%s",
+                    filter_date,
+                )
+
+    
 
     findings = findings.prefetch_related(
             "test",

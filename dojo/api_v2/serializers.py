@@ -738,9 +738,25 @@ class DojoGroupSerializer(serializers.ModelSerializer):
 
 
 class DojoGroupMemberSerializer(serializers.ModelSerializer):
+    global_role = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = Dojo_Group_Member
         fields = "__all__"
+
+    def get_global_role(self, obj):
+        group_global_role = getattr(obj.group, "global_role", None)
+        if group_global_role is None:
+            return None
+
+        role = group_global_role.role
+        if role is None:
+            return None
+
+        return {
+            "id": role.id,
+            "name": role.name,
+        }
 
     def validate(self, data):
         if (

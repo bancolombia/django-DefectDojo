@@ -1351,29 +1351,42 @@ class UserHasTransferFindingFindingPermission(permissions.BasePermission):
     path_transfer_finding_finding_post = re.compile(r"^/api/v2/transfer_finding_findings/$")
     path_transfer_finding_finding = re.compile(r"^/api/v2/transfer_finding_findings/\d+/$")
     path_transfer_finding_finding_change_status = re.compile(r"^/api/v2/transfer_finding_findings/\d+/change_status/$")
-   
+    path_transfer_finding_finding_pre_review = re.compile(r"^/api/v2/transfer_finding_findings/\d+/pre_review/$")
+
     def has_permission(self, request, view):
-        transfer_finding_id = view.kwargs.get("pk", None)
+        transfer_finding_finding_id = view.kwargs.get("pk", None)
         if self.path_transfer_finding_finding_post.match(request.path):
             return check_post_permission(
                 request, Finding, "findings", Permissions.Transfer_Finding_Finding_Add,
             )
         if self.path_transfer_finding_finding_change_status.match(request.path):
-            return check_patch_permission(request, TransferFinding, transfer_finding_id, Permissions.Transfer_Finding_Finding_Accept)
+            return check_patch_permission(request, TransferFindingFinding, transfer_finding_finding_id, Permissions.Transfer_Finding_Finding_Accept)
         if self.path_transfer_finding_finding.match(
             request.path,
         ):
             if request.method in ["PATCH", "PUT"]:
-                return check_patch_permission(request, TransferFinding, transfer_finding_id, Permissions.Transfer_Finding_Finding_Edit)
+                return check_patch_permission(request, TransferFindingFinding, transfer_finding_finding_id, Permissions.Transfer_Finding_Finding_Edit)
+        if self.path_transfer_finding_finding_pre_review.match(request.path):
+            obj = get_object_or_404(TransferFindingFinding, pk=transfer_finding_finding_id)
+            return check_object_permission(
+                request,
+                obj,
+                Permissions.Transfer_Finding_Finding_View,
+                Permissions.Transfer_Finding_Finding_Edit,
+                Permissions.Transfer_Finding_Finding_Delete,
+                Permissions.Transfer_Finding_Finding_Add,
+            )
 
-        return False
+        return True 
 
     def has_object_permission(self, request, view, obj):
-        if self.path_transfer_finding_finding_post.match(
-            request.path,
-        ) or self.path_transfer_finding_finding.match(
-            request.path,
-        ):
+        if (
+            self.path_transfer_finding_finding_post.match(
+                request.path,
+            ) or self.path_transfer_finding_finding.match(
+                request.path
+            )
+            ):
             return check_object_permission(
                 request,
                 obj,

@@ -1543,7 +1543,7 @@ def async_bulk_update_sla_start_date(tags, priority_classification, sla_start_da
     ).filter(
         # Only findings that actually need the SLA start date changed:
         # those without one yet, or with a different one already set
-        Q(sla_start_date__isnull=True) | ~Q(sla_start_date=sla_start_date),
+        Q(sla_start_date__isnull=True) | Q(sla_start_date__lt=sla_start_date),
     ).select_related(
         "test__engagement__product__prod_type",
         "test__test_type",
