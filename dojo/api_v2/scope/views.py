@@ -242,7 +242,7 @@ class InputFlowViewSet(
 
     permission_classes = (
         IsAuthenticated,
-        permissions.UserHasEngagementPermission,
+        permissions.UserHasInputFlowPermission,
     )
 
     def create(self, request, *args, **kwargs):
@@ -256,16 +256,16 @@ class InputFlowViewSet(
 
         engagement = get_object_or_404(Engagement, pk=engagement_id)
         self.check_object_permissions(request, engagement)
+        engagement_name = engagement.name
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         instance = serializer.save()
 
         return http_response.ok(
-            message=f"Se creó el flujo {instance.flowName} correctamente.",
+            message=f"Se creó el flujo {instance.flowName} correctamente en el engagement {engagement_name}.",
             data=self.get_serializer(instance).data
         )
-
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop("partial", False)
         instance = self.get_object()
@@ -331,7 +331,7 @@ class InputURLViewSet(
 
     permission_classes = (
         IsAuthenticated,
-        permissions.UserHasEngagementPermission,
+        permissions.UserHasInputFlowPermission,
     )
 
     def retrieve(self, request, *args, **kwargs):
@@ -391,7 +391,7 @@ class InputScenarioViewSet(
 
     permission_classes = (
         IsAuthenticated,
-        permissions.UserHasEngagementPermission,
+        permissions.UserHasInputFlowPermission,
     )
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop("partial", False)

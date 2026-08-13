@@ -43,13 +43,8 @@ class InputURL(models.Model):
     updated = models.DateTimeField(auto_now=True)
     
 class InputScenario(models.Model):
-
-    
     url = models.ForeignKey("InputURL", related_name="scenarios", on_delete=models.CASCADE)
-    estimated_time = models.IntegerField(
-        verbose_name="estimated_time",
-        help_text="Enter the time in minutes",
-    )
+    estimated_time = models.IntegerField(verbose_name="estimated_time",help_text="Enter the time in minutes",)
     designed_by = models.ForeignKey("Dojo_User", on_delete=models.SET_NULL, null=True, blank=True)
     description = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=30, default="untested")
