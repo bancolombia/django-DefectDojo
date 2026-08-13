@@ -355,7 +355,7 @@ def _fetch_microservice(user, endpoint_url: str) -> list:
             json=request_body,
             headers=_build_hc_auth_headers(token_key),
             timeout=timeout_seconds,
-            verify=False,
+            # verify=False,
         )
         response.raise_for_status()
         payload = response.json()
