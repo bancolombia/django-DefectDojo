@@ -335,7 +335,7 @@
                                 </p>
                             </div>
                         </div>
-                        <div class="col-4 timeline-step {% if hc_participation.final_status == 'Approved' %}active{% elif hc_participation.final_status == 'Rejected' %}danger{% endif %}">
+                        <div class="col-4 timeline-step {% if hc_participation.final_status == 'Approved' and hc_participation.was_in_hacking_continuous %}danger{% elif hc_participation.final_status == 'Approved' or hc_participation.final_status == 'Rejected' and hc_participation.was_in_hacking_continuous %}active{% elif hc_participation.final_status == 'Rejected' %}danger{% endif %}">
                             <div class="timeline-content">
                                 <pre><strong>Final Status</strong></pre>
                                 <p>
@@ -385,11 +385,11 @@
                             <span class="log-date">[{{ log.changed_at|date:"d M Y H:i" }}]</span>
                             <span class="log-user">{{ log.changed_by.username }}:</span>
                             Status changed from
-                            <span class="log-status" style="background-color: {% if log.previous_status == 'Pending' %}#1B30DE{% elif log.previous_status == 'Approved' %}#096C11{% elif log.previous_status == 'Rejected' %}#d11d38{% elif log.previous_status == 'Cancelled' %}#6c757d{% elif log.previous_status == 'Reviewed' %}#b97a0c{% else %}#6c757d{% endif %};">
+                            <span class="log-status" style="background-color: {% if log.previous_status == 'Pending' %}#1B30DE{% elif log.previous_status == 'Approved' and hc_participation.was_in_hacking_continuous %}#d11d38{% elif log.previous_status == 'Approved' %}#096C11{% elif log.previous_status == 'Rejected' and hc_participation.was_in_hacking_continuous %}#096C11{% elif log.previous_status == 'Rejected' %}#d11d38{% elif log.previous_status == 'Cancelled' %}#6c757d{% elif log.previous_status == 'Reviewed' %}#b97a0c{% else %}#6c757d{% endif %};">
                                 {% if log.previous_status == 'Reviewed' %}{% if hc_participation.was_in_hacking_continuous %}Approved Removal{% else %}Approved Entry{% endif %}{% elif log.previous_status == 'Approved' and hc_participation.was_in_hacking_continuous %}Removal Approved{% elif log.previous_status == 'Rejected' and hc_participation.was_in_hacking_continuous %}Continues in SDT{% else %}{{ log.previous_status|default:"New" }}{% endif %}
                             </span>
                             to
-                            <span class="log-status" style="background-color: {% if log.current_status == 'Pending' %}#1B30DE{% elif log.current_status == 'Approved' %}#096C11{% elif log.current_status == 'Rejected' %}#d11d38{% elif log.current_status == 'Cancelled' %}#6c757d{% elif log.current_status == 'Reviewed' %}#b97a0c{% else %}#6c757d{% endif %};">
+                            <span class="log-status" style="background-color: {% if log.current_status == 'Pending' %}#1B30DE{% elif log.current_status == 'Approved' and hc_participation.was_in_hacking_continuous %}#d11d38{% elif log.current_status == 'Approved' %}#096C11{% elif log.current_status == 'Rejected' and hc_participation.was_in_hacking_continuous %}#096C11{% elif log.current_status == 'Rejected' %}#d11d38{% elif log.current_status == 'Cancelled' %}#6c757d{% elif log.current_status == 'Reviewed' %}#b97a0c{% else %}#6c757d{% endif %};">
                                 {% if log.current_status == 'Reviewed' %}{% if hc_participation.was_in_hacking_continuous %}Approved Removal{% else %}Approved Entry{% endif %}{% elif log.current_status == 'Approved' and hc_participation.was_in_hacking_continuous %}Removal Approved{% elif log.current_status == 'Rejected' and hc_participation.was_in_hacking_continuous %}Continues in SDT{% else %}{{ log.current_status }}{% endif %}
                             </span>
                             {% if log.notes %}
