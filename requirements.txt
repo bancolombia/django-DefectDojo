@@ -128,7 +128,7 @@ psycopg==3.3.4
 psycopg-c==3.3.4
 psycopg-pool==3.3.1
 py==1.11.0
-pyarrow==25.0.0
+pyarrow==25.0.1
 pycparser==3.0
 pycryptodome==3.23.0
 pycurl==7.47.0
