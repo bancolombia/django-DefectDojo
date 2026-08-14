@@ -166,7 +166,7 @@ stream-inflate==0.0.43
 stream-unzip==0.0.101
 tinycss2==1.4.0
 titlecase==2.4.1
-typing-inspection==0.4.2
+typing-inspection==0.4.3
 typing_extensions==4.16.0
 tzdata==2026.3
 tzlocal==5.4.4
