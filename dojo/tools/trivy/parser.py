@@ -53,6 +53,17 @@ LICENSE_DESCRIPTION_TEMPLATE = """{title}
 
 
 class TrivyParser:
+    DEPENDENCY_ARTIFACT_TYPES = {
+        "cyclonedx",
+        "spdx",
+        "spdx-json",
+        "spdx-tag-value",
+    }
+
+    CONTAINER_ARTIFACT_TYPES = {
+        "container_image",
+    }
+
     def get_scan_types(self):
         return ["Trivy Scan"]
 
@@ -155,6 +166,23 @@ class TrivyParser:
         # default is to fallback to default Defect Dojo behaviour which takes scan parameters into account
         return status_mapping.get(trivy_status, {})
 
+    def get_custom_tag(self, artifact_type: str | None):
+        custom_tags = settings.DD_CUSTOM_TAG_PARSER
+        normalized_artifact_type = (artifact_type or "").lower()
+
+        if normalized_artifact_type in self.DEPENDENCY_ARTIFACT_TYPES:
+            candidate_keys = ("trivy_dependencies", "xray_on_demand", "dependency_check", "trivy")
+        elif normalized_artifact_type in self.CONTAINER_ARTIFACT_TYPES:
+            candidate_keys = ("trivy_container", "trivy", "twistlock")
+        else:
+            candidate_keys = ("trivy", "trivy_container", "trivy_dependencies")
+
+        for key in candidate_keys:
+            if custom_tag := custom_tags.get(key):
+                return custom_tag
+
+        return None
+
     def get_findings(self, scan_file, test):
         scan_data = scan_file.read()
 
@@ -171,10 +199,16 @@ class TrivyParser:
             return self.get_result_items(test, data)
         schema_version = data.get("SchemaVersion", None)
         artifact_name = data.get("ArtifactName", "")
+        artifact_type = data.get("ArtifactType", "")
         cluster_name = data.get("ClusterName")
         if schema_version == 2:
             results = data.get("Results", [])
-            return self.get_result_items(test, results, artifact_name=artifact_name)
+            return self.get_result_items(
+                test,
+                results,
+                artifact_name=artifact_name,
+                artifact_type=artifact_type,
+            )
         if cluster_name is not None:
             findings = []
             vulnerabilities = data.get("Vulnerabilities", [])
@@ -231,8 +265,9 @@ class TrivyParser:
         msg = "Schema of Trivy json report is not supported"
         raise ValueError(msg)
 
-    def get_result_items(self, test, results, service_name=None, artifact_name=""):
+    def get_result_items(self, test, results, service_name=None, artifact_name="", artifact_type=""):
         items = []
+        custom_tag = self.get_custom_tag(artifact_type)
         for target_data in results:
             if (
                 not isinstance(target_data, dict)
@@ -346,7 +381,6 @@ class TrivyParser:
                     **status_fields,
                 )
                 
-                custom_tag = settings.DD_CUSTOM_TAG_PARSER.get("trivy")
                 if custom_tag:
                     finding.unsaved_tags = [custom_tag]
                 else:
