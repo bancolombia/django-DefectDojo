@@ -10,6 +10,7 @@ from crum import get_current_user
 from dateutil.relativedelta import relativedelta
 from django.conf import settings
 from django.contrib.auth.models import Permission
+from django.db.models import Q
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.db import transaction
@@ -743,14 +744,21 @@ class EngagementViewSet(
         return response
 
     @extend_schema(
+        parameters=[
+            OpenApiParameter(name="engagement_name", type=OpenApiTypes.STR, description="Filter by engagement name (case-insensitive, partial match)", required=False),
+        ],
         responses={status.HTTP_200_OK: serializers.EngagementByProductResponseSerializer},
     )
     @action(
         detail=True, methods=["get"], permission_classes=[IsAuthenticated],
     )
     def engagement_by_product(self, request, pk):
+        engagement_name = request.query_params.get("engagement_name")
         paginator = self.pagination_class()
-        data = Engagement.objects.filter(product=pk).values("id", "name")
+        queryset = Engagement.objects.filter(product=pk)
+        if engagement_name:
+            queryset = queryset.filter(name__icontains=engagement_name)
+        data = queryset.values("id", "name")
         paginated_data = paginator.paginate_queryset(data, request)
         serializer = serializers.EngagementByProductResponseSerializer(paginated_data, many=True)
         return paginator.get_paginated_response(serializer.data)
@@ -2086,14 +2094,28 @@ class ProductViewSet(
                 type=OpenApiTypes.INT,
                 description="Product Type Id",
                 required=True,
-            ),],
+            ),
+            OpenApiParameter(
+                name="product_name",
+                type=OpenApiTypes.STR,
+                description="Filter by product name (case-insensitive, partial match)",
+                required=False,
+            ),
+        ],
         responses={status.HTTP_200_OK: serializers.ProductOfProductTypes},
     )
     @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated],)
     def get_products_name(self, request):
         pk = request.query_params.get("id")
+        product_name = request.query_params.get("product_name")
+        if not pk:
+            return http_response.bad_request(message="'id' parameter is required")
+        
         paginator = self.pagination_class()
-        data = Product.objects.filter(prod_type=pk).values("id", "name")
+        queryset = Product.objects.filter(prod_type=pk)
+        if product_name:
+            queryset = queryset.filter(name__icontains=product_name)
+        data = queryset.values("id", "name")
         paginated_data = paginator.paginate_queryset(data, request)
         serializer = serializers.ProductOfProductTypes(paginated_data, many=True)
         return paginator.get_paginated_response(serializer.data)
@@ -3552,6 +3574,19 @@ class AnnouncementViewSet(
         return Announcement.objects.all().order_by("id")
 
 
+@extend_schema_view(
+    list=extend_schema(
+        parameters=[
+            OpenApiParameter(
+                "status",
+                OpenApiTypes.STR,
+                OpenApiParameter.QUERY,
+                required=False,
+                description="Filter by transfer finding status (comma-separated list, e.g., 'Transfer Accepted,Transfer Rejected,Transfer Pending,Transfer Expired,Risk Active')",
+            ),
+        ],
+    ),
+)
 class TransferFindingViewSet(prefetch.PrefetchListMixin,
                              prefetch.PrefetchRetrieveMixin,
                              DojoModelViewSet):
@@ -3576,6 +3611,15 @@ class TransferFindingViewSet(prefetch.PrefetchListMixin,
     def get_queryset(self):
         transfer_finding = get_authorized_transfer_finding(
             Permissions.Transfer_Finding_View)
+        
+        status_param = self.request.query_params.get("status")
+        if status_param:
+            status_list = [s.strip() for s in status_param.split(",")]
+            status_filter = Q()
+            for s in status_list:
+                status_filter |= Q(transfer_findings__findings__risk_status=s)
+            transfer_finding = transfer_finding.filter(status_filter).distinct()
+        
         return transfer_finding
 
     @extend_schema(
