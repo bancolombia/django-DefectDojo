@@ -180,7 +180,7 @@ vobject==0.9.9
 vulners==4.0.0
 watchdog==6.0.0
 wcwidth==0.8.2
-webencodings==0.5.1
+webencodings==0.6.1
 whitenoise==5.2.0
 wrapt==2.3.0
 xmlschema==2.5.1
