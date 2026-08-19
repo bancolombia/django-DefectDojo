@@ -19,3 +19,16 @@ def view_long_risk_acceptance_details(request: HttpRequest, pk: int) -> HttpResp
         'actions': page_name,
         'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/long-term-acceptance/detail{base_params}",
         'user': user})
+
+@dojo_ratelimit_view()
+def view_long_risk_acceptance_list(request: HttpRequest) -> HttpResponse:
+    page_name = ('view_long_risk_acceptance_list')
+    user = request.user.id
+    cookie_csrftoken = get_token(request)
+    cookie_sessionid = request.COOKIES.get('sessionid', '')
+    base_params = f"?csrftoken={cookie_csrftoken}&sessionid={cookie_sessionid}"
+    add_breadcrumb(title=page_name, request=request, top_level=False)
+    return render(request, 'dojo/generic_view.html', {
+        'actions': page_name,
+        'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/long-term-acceptance/list{base_params}",
+        'user': user})
