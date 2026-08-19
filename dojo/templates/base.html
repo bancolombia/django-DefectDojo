@@ -309,6 +309,26 @@
                                             </ul>
                                             <!-- /.nav-second-level -->
                                         </li>
+                                        {% if "RENDER_NEW_VIEWS"|general_settings_get_value:"False" %}
+                                         <li>
+                                               <a rel="noopener noreferrer" href="{% url 'view_all_risk_acceptance' %}" aria-expanded="false" aria-label="Findings">
+                                                <i class="fa-solid fa-user-shield"></i>
+                                                <span>{% trans "Risk Acceptance All" %}</span>
+                                                <span class="glyphicon arrow"></span>
+                                                
+                                            </a>
+                                        </li>
+                                        {% endif %}
+                                           {% if "RENDER_NEW_VIEWS"|general_settings_get_value:"False" %}
+                                         <li>
+                                               <a rel="noopener noreferrer" href="{% url 'view_long_risk_acceptance_list' %}" aria-expanded="false" aria-label="Findings">
+                                                <i class="fa-solid fa-file-shield"></i> 
+                                                <span>{% trans "Long Risk Acceptance All" %}</span>
+                                                <span class="glyphicon arrow"></span>
+                                                
+                                            </a>
+                                        </li>
+                                        {% endif %}
                                         {% if system_settings.enable_transfer_finding %}
                                          <li>
                                                <a rel="noopener noreferrer" href="{% url 'view_all_transfer' %}" aria-expanded="false" aria-label="Findings">
