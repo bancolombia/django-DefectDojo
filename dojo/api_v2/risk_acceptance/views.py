@@ -81,7 +81,7 @@ class RiskAcceptanceViewSet(
             .prefetch_related(
                 "notes", "engagement_set", "owner", "accepted_findings",
             )
-            .distinct()
+            .distinct().order_by("-id")
         )
     
     @action(
