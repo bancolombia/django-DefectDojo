@@ -3076,7 +3076,7 @@ class ApiRiskAcceptanceFilter(DojoFilter):
     o = OrderingFilter(
         # tuple-mapping retains order
         fields=(
-            ("id", "id"),
+            ("name", "name"),
         ),
     )
 
