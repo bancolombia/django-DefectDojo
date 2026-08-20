@@ -31,6 +31,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.generics import GenericAPIView
+from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import DjangoModelPermissions, IsAuthenticated 
 from rest_framework.response import Response
@@ -830,6 +831,14 @@ class FindingTemplatesViewSet(
         return Finding_Template.objects.all().order_by("id")
 
 
+class _FindingCountPagination(LimitOffsetPagination):
+    def get_count(self, queryset):
+        # Avoid SELECT COUNT(*) FROM (SELECT DISTINCT all_77_cols) by counting only the PK
+        if queryset.query.distinct:
+            return queryset.values("id").distinct().count()
+        return super().get_count(queryset)
+
+
 # Authorization: object-based
 @extend_schema_view(
     list=extend_schema(
@@ -885,6 +894,7 @@ class FindingViewSet(
     queryset = Finding.objects.none()
     filter_backends = (DjangoFilterBackend,)
     filterset_class = ApiFindingFilter
+    pagination_class = _FindingCountPagination
     permission_classes = (
         IsAuthenticated,
         permissions.UserHasFindingPermission,
