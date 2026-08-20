@@ -6,13 +6,14 @@ import requests
 
 from django.db import transaction
 from django.conf import settings
+from django.core.cache import cache
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
 
 from celery.utils.log import get_task_logger
 
-from dojo.models import Product, Dojo_Group, Dojo_User
+from dojo.models import GeneralSettings, Product, Dojo_Group, Dojo_User
 from dojo.group.queries import get_group_members_for_group
 from dojo.notifications.helper import create_notification
 from dojo.engine_participation.models import HCParticipation, HCParticipationLog
@@ -25,6 +26,14 @@ HC_STATUS_TRANSITIONS = {
     "Approved": {"Reviewed"},
     "Rejected": {"Pending", "Reviewed"},
 }
+HC_APPROVAL_BAG_SIZE_KEY = "HACKING_CONTINUOUS_APPROVAL_BAG_SIZE"
+HC_AVAILABLE_APPROVALS_DEFAULT = 0
+HC_CONFIRM_INGRESS_POSTULATION_CRITERIA_KEY = "HC_CONFIRM_INGRESS_POSTULATION_CRITERIA"
+HC_CONFIRM_INGRESS_POSTULATION_CRITERIA_DEFAULT = []
+HC_MANUAL_POSTULATION_CRITERIA_KEY = "HC_MANUAL_POSTULATION_CRITERIA"
+HC_MANUAL_POSTULATION_CRITERIA_DEFAULT = []
+HC_PRESELECTED_FLAG_KEY = "is_preselected_for_hc"
+HC_INGRESS_CONFIRMATION_CRITERIA_KEY = "ingress_confirmation_criteria_checked"
 
 
 class HCConstants(Enum):
@@ -34,6 +43,219 @@ class HCConstants(Enum):
 
 class InvalidHCParticipationTransition(Exception):
     """Raised when a workflow action is attempted from an invalid state."""
+
+
+def _normalize_int(raw_value, default=0) -> int:
+    try:
+        return int(raw_value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _clear_general_setting_cache(name_key: str) -> None:
+    if getattr(settings, "USE_CACHE_REDIS", False):
+        cache.delete(f"GENERAL_SETTINGS:{name_key}")
+
+
+def get_hc_available_approvals() -> int:
+    configured_value = GeneralSettings.get_value(
+        HC_APPROVAL_BAG_SIZE_KEY,
+        HC_AVAILABLE_APPROVALS_DEFAULT,
+    )
+    return _normalize_int(configured_value, default=HC_AVAILABLE_APPROVALS_DEFAULT)
+
+
+def get_hc_confirm_ingress_postulation_criteria() -> list[str]:
+    configured_value = GeneralSettings.get_value(
+        HC_CONFIRM_INGRESS_POSTULATION_CRITERIA_KEY,
+        HC_CONFIRM_INGRESS_POSTULATION_CRITERIA_DEFAULT,
+    )
+
+    if not configured_value:
+        return []
+
+    if isinstance(configured_value, str):
+        configured_value = configured_value.split(",")
+
+    if not isinstance(configured_value, list):
+        return []
+
+    return [criterion.strip() for criterion in configured_value if criterion and criterion.strip()]
+
+
+def get_hc_manual_postulation_criteria() -> list[str]:
+    configured_value = GeneralSettings.get_value(
+        HC_MANUAL_POSTULATION_CRITERIA_KEY,
+        HC_MANUAL_POSTULATION_CRITERIA_DEFAULT,
+    )
+
+    if not configured_value:
+        return []
+
+    if isinstance(configured_value, str):
+        configured_value = configured_value.split(",")
+
+    if not isinstance(configured_value, list):
+        return []
+
+    return [criterion.strip() for criterion in configured_value if criterion and criterion.strip()]
+
+
+def _update_hc_available_approvals(delta: int) -> int:
+    with transaction.atomic():
+        setting_row = GeneralSettings.objects.select_for_update().filter(
+            name_key=HC_APPROVAL_BAG_SIZE_KEY,
+        ).first()
+
+        if setting_row is None:
+            current_value = HC_AVAILABLE_APPROVALS_DEFAULT
+            setting_row = GeneralSettings(
+                name_key=HC_APPROVAL_BAG_SIZE_KEY,
+                value=str(current_value),
+                category="engine_participation",
+                data_type="INT",
+                description="Products available to approve into SDT",
+                status=True,
+            )
+        else:
+            current_value = _normalize_int(
+                setting_row.value,
+                default=HC_AVAILABLE_APPROVALS_DEFAULT,
+            )
+
+        next_value = current_value + delta
+        setting_row.value = str(next_value)
+        if not setting_row.data_type:
+            setting_row.data_type = "INT"
+        if setting_row.status is None:
+            setting_row.status = True
+        setting_row.save()
+
+    _clear_general_setting_cache(HC_APPROVAL_BAG_SIZE_KEY)
+    return next_value
+
+
+def _consume_hc_available_approval() -> int:
+    with transaction.atomic():
+        setting_row = GeneralSettings.objects.select_for_update().filter(
+            name_key=HC_APPROVAL_BAG_SIZE_KEY,
+        ).first()
+        if setting_row is None:
+            current_value = HC_AVAILABLE_APPROVALS_DEFAULT
+            setting_row = GeneralSettings(
+                name_key=HC_APPROVAL_BAG_SIZE_KEY,
+                value=str(current_value),
+                category="engine_participation",
+                data_type="INT",
+                description="Products available to approve into SDT",
+                status=True,
+            )
+        else:
+            current_value = _normalize_int(
+                setting_row.value,
+                default=HC_AVAILABLE_APPROVALS_DEFAULT,
+            )
+
+        if current_value <= 0:
+            raise InvalidHCParticipationTransition(
+                "No available approvals. Review removal requests already_in_hc to increase available approvals."
+            )
+
+        next_value = current_value - 1
+        setting_row.value = str(next_value)
+        if not setting_row.data_type:
+            setting_row.data_type = "INT"
+        if setting_row.status is None:
+            setting_row.status = True
+        setting_row.save()
+
+    _clear_general_setting_cache(HC_APPROVAL_BAG_SIZE_KEY)
+    return next_value
+
+
+def get_hc_participation_summary() -> dict:
+    postulated_products = HCParticipation.objects.filter(
+        recommendation__in=("postulated", "postulated_manually"),
+        status__in=ACTIVE_HC_REQUEST_STATUSES,
+    ).values("product_id").distinct().count()
+
+    preselected_products = 0
+    preselected_requests = HCParticipation.objects.filter(
+        recommendation__in=("postulated", "postulated_manually"),
+        status="Pending",
+    ).only("security_posture_data")
+    for request in preselected_requests:
+        if is_hc_request_preselected(request):
+            preselected_products += 1
+
+    latest_by_product = {}
+    for request in HCParticipation.objects.only(
+        "product_id",
+        "recommendation",
+        "status",
+        "create_date",
+    ).order_by("product_id", "-create_date"):
+        if request.product_id not in latest_by_product:
+            latest_by_product[request.product_id] = request
+
+    products_in_hc = 0
+    for latest in latest_by_product.values():
+        if latest.recommendation in ("postulated", "postulated_manually"):
+            # Reviewer approval (Reviewed) already commits the product into SDT
+            if latest.status in ("Reviewed", "Approved"):
+                products_in_hc += 1
+        elif latest.recommendation == "already_in_hc":
+            # Once reviewer approves removal (Reviewed), product leaves SDT
+            if latest.status in ("Pending", "Rejected"):
+                products_in_hc += 1
+
+    return {
+        "available_approvals": get_hc_available_approvals(),
+        "postulated_products": postulated_products,
+        "preselected_products": preselected_products,
+        "products_in_hc": products_in_hc,
+    }
+
+
+def is_hc_request_preselected(hc_participation) -> bool:
+    security_posture_data = hc_participation.security_posture_data
+    if not isinstance(security_posture_data, dict):
+        return False
+    return bool(security_posture_data.get(HC_PRESELECTED_FLAG_KEY, False))
+
+
+def set_hc_request_preselection(hc_participation, is_preselected: bool):
+    with transaction.atomic():
+        locked_hc_participation = HCParticipation.objects.select_for_update().get(pk=hc_participation.pk)
+
+        if locked_hc_participation.recommendation not in ("postulated", "postulated_manually"):
+            raise InvalidHCParticipationTransition(
+                "Only postulated requests can be pre-selected."
+            )
+
+        if locked_hc_participation.status != "Pending":
+            raise InvalidHCParticipationTransition(
+                "Only pending postulated requests can be pre-selected."
+            )
+
+        security_posture_data = locked_hc_participation.security_posture_data
+        if not isinstance(security_posture_data, dict):
+            security_posture_data = {}
+
+        currently_preselected = bool(security_posture_data.get(HC_PRESELECTED_FLAG_KEY, False))
+        if currently_preselected == is_preselected:
+            return locked_hc_participation
+
+        if is_preselected:
+            _update_hc_available_approvals(-1)
+        else:
+            _update_hc_available_approvals(1)
+
+        security_posture_data[HC_PRESELECTED_FLAG_KEY] = is_preselected
+        locked_hc_participation.security_posture_data = security_posture_data
+        locked_hc_participation.save()
+
+    return locked_hc_participation
 
 
 def _get_hc_postulated_endpoint_url() -> str:
@@ -261,11 +483,11 @@ def run_hc_participation_evaluation(user=None) -> dict:
         )
 
         if recommendation == "already_in_hc":
-            default_reason = "Product already in Hacking Continuous. Review required to continue."
+            default_reason = "Product already in SDT. Review required to continue."
         elif recommendation == "not_eligible":
-            default_reason = "Product is not eligible for Hacking Continuous."
+            default_reason = "Product is not eligible for Specialized DevSecOps Tests."
         else:
-            default_reason = "Postulated to Hacking Continuous Test."
+            default_reason = "Postulated to Specialized DevSecOps Tests."
 
         evaluation_result = {
             "product_id": product.id,
@@ -354,10 +576,10 @@ def _notify_reviewers_of_new_requests(requests, batch_id):
     
     create_notification(
         event="hc_participation_request",
-        subject=f"🎯 {len(requests)} new Hacking Continuous requests",
-        title=f"New Hacking Continuous participation requests",
+        subject=f"🎯 {len(requests)} new SDT requests",
+        title=f"New Specialized DevSecOps Tests participation requests",
         description=(
-            f"{len(requests)} new HC participation requests have been generated "
+            f"{len(requests)} new SDT participation requests have been generated "
             f"for products: {', '.join(product_names)}{more_text}. "
             f"Batch ID: {batch_id}"
         ),
@@ -411,7 +633,7 @@ def get_manual_hc_postulation_eligibility_error(product) -> str | None:
         )
 
     if is_product_in_hacking_continuous_from_requests(product):
-        return "This product is already in Hacking Continuous."
+        return "This product is already in SDT."
 
     pending_postulation_exists = HCParticipation.objects.filter(
         product=product,
@@ -462,20 +684,6 @@ def create_manual_hc_postulation(product, user, criteria=None):
 
 
 def delete_hc_participation_records_by_date_range(start_date, end_date):
-    """Deletes HCParticipation records (and their related discussions/logs,
-    via cascade) whose create_date falls within [start_date, end_date],
-    inclusive, by calendar date.
-
-    Args:
-        start_date: datetime.date marking the start of the range.
-        end_date: datetime.date marking the end of the range.
-
-    Returns:
-        dict summary with the date range and the number of matched/deleted records.
-
-    Raises:
-        ValueError: if either date is missing or start_date is after end_date.
-    """
     if start_date is None or end_date is None:
         raise ValueError("Both start_date and end_date are required.")
 
@@ -503,10 +711,40 @@ def delete_hc_participation_records_by_date_range(start_date, end_date):
     }
 
 
-def mark_hc_participation_reviewed(hc_participation, user):
+def mark_hc_participation_reviewed(hc_participation, user, confirmation_criteria=None):
     with transaction.atomic():
         locked_hc_participation = HCParticipation.objects.select_for_update().get(pk=hc_participation.pk)
         _validate_hc_status_transition(locked_hc_participation.status, "Reviewed")
+
+        is_postulation_request = locked_hc_participation.recommendation in (
+            "postulated",
+            "postulated_manually",
+        )
+        is_already_in_hc_request = locked_hc_participation.recommendation == "already_in_hc"
+        was_preselected = is_hc_request_preselected(locked_hc_participation)
+
+        current_available_approvals = get_hc_available_approvals()
+        if is_postulation_request and current_available_approvals < 0:
+            raise InvalidHCParticipationTransition(
+                "Available approvals is negative. Remove pre-selections or review already_in_hc removals before reviewing more postulated requests."
+            )
+
+        if is_postulation_request and not was_preselected:
+            _consume_hc_available_approval()
+
+        if is_postulation_request and was_preselected:
+            security_posture_data = locked_hc_participation.security_posture_data
+            if not isinstance(security_posture_data, dict):
+                security_posture_data = {}
+            security_posture_data[HC_PRESELECTED_FLAG_KEY] = False
+            locked_hc_participation.security_posture_data = security_posture_data
+
+        if is_postulation_request and confirmation_criteria:
+            security_posture_data = locked_hc_participation.security_posture_data
+            if not isinstance(security_posture_data, dict):
+                security_posture_data = {}
+            security_posture_data[HC_INGRESS_CONFIRMATION_CRITERIA_KEY] = list(confirmation_criteria)
+            locked_hc_participation.security_posture_data = security_posture_data
 
         previous_status = locked_hc_participation.status
         current_time = timezone.now()
@@ -520,7 +758,7 @@ def mark_hc_participation_reviewed(hc_participation, user):
 
         review_note = "Request marked as reviewed"
         if locked_hc_participation.was_in_hacking_continuous:
-            review_note = "Request marked as reviewed for HC continuity decision"
+            review_note = "Request marked as reviewed for SDT continuity decision"
 
         HCParticipationLog.objects.create(
             hc_participation=locked_hc_participation,
@@ -530,11 +768,13 @@ def mark_hc_participation_reviewed(hc_participation, user):
             notes=review_note,
         )
 
+        if is_already_in_hc_request:
+            _update_hc_available_approvals(1)
+
     return locked_hc_participation
 
 
 def approve_hc_participation(hc_participation, user):
- 
     with transaction.atomic():
         hc_participation = HCParticipation.objects.select_for_update().get(pk=hc_participation.pk)
         _validate_hc_status_transition(hc_participation.status, "Approved")
@@ -550,9 +790,9 @@ def approve_hc_participation(hc_participation, user):
         hc_participation.status_updated_by = user
         hc_participation.save()
 
-        approval_note = "Request approved for Hacking Continuous participation"
+        approval_note = "Request approved for SDT participation"
         if hc_participation.was_in_hacking_continuous:
-            approval_note = "Request approved for removal from Hacking Continuous"
+            approval_note = "Request approved for removal from SDT"
 
         HCParticipationLog.objects.create(
             hc_participation=hc_participation,
@@ -567,7 +807,7 @@ def approve_hc_participation(hc_participation, user):
             event="hc_participation_approved",
             subject=f"✅ HC Request approved - {hc_participation.product.name}",
             title=f"HC Request approved for {hc_participation.product.name}",
-            description=f"The Hacking Continuous participation request for product {hc_participation.product.name} has been approved.",
+            description=f"The SDT participation request for product {hc_participation.product.name} has been approved.",
             url=reverse("hc_participation", args=[str(hc_participation.pk)]),
             recipients=[hc_participation.created_by.username],
             icon="check-circle",
@@ -583,6 +823,27 @@ def reject_hc_participation(hc_participation, user):
         _validate_hc_status_transition(hc_participation.status, "Rejected")
 
         previous_status = hc_participation.status
+        is_postulation_request = hc_participation.recommendation in ("postulated", "postulated_manually")
+        is_already_in_hc_request = hc_participation.recommendation == "already_in_hc"
+
+        security_posture_data = hc_participation.security_posture_data
+        if not isinstance(security_posture_data, dict):
+            security_posture_data = {}
+
+        was_preselected = bool(security_posture_data.pop(HC_PRESELECTED_FLAG_KEY, False))
+        should_restore_approval = was_preselected or (
+            is_postulation_request and previous_status == "Reviewed"
+        )
+        if should_restore_approval:
+            _update_hc_available_approvals(1)
+
+        # If an already_in_hc removal request was reviewed first, review already gave +1.
+        # Rejecting that removal means the product stays in HC, so we revert with -1.
+        if is_already_in_hc_request and previous_status == "Reviewed":
+            _update_hc_available_approvals(-1)
+
+        hc_participation.security_posture_data = security_posture_data
+
         current_time = timezone.now()
 
         hc_participation.status = "Rejected"
@@ -599,7 +860,7 @@ def reject_hc_participation(hc_participation, user):
 
         rejection_note = "Request rejected"
         if hc_participation.was_in_hacking_continuous:
-            rejection_note = "Request rejected: product remains in Hacking Continuous"
+            rejection_note = "Request rejected: product remains in SDT"
 
         HCParticipationLog.objects.create(
             hc_participation=hc_participation,
@@ -614,11 +875,57 @@ def reject_hc_participation(hc_participation, user):
             event="hc_participation_rejected",
             subject=f"❌ HC Request rejected - {hc_participation.product.name}",
             title=f"HC Request rejected for {hc_participation.product.name}",
-            description=f"The Hacking Continuous participation request for product {hc_participation.product.name} has been rejected.",
+            description=f"The SDT participation request for product {hc_participation.product.name} has been rejected.",
             url=reverse("hc_participation", args=[str(hc_participation.pk)]),
             recipients=[hc_participation.created_by.username],
             icon="times-circle",
             color_icon="#dc3545",
+        )
+
+    return hc_participation
+
+
+def return_hc_participation_to_pending(hc_participation, user, reason: str = ""):
+    with transaction.atomic():
+        hc_participation = HCParticipation.objects.select_for_update().get(pk=hc_participation.pk)
+
+        previous_status = hc_participation.status
+        if previous_status == "Pending":
+            return hc_participation
+
+        allowed_statuses = {"Reviewed", "Approved", "Rejected"}
+        if previous_status not in allowed_statuses:
+            raise InvalidHCParticipationTransition(
+                f"Cannot return HC request from {previous_status} to Pending. "
+                f"Allowed previous statuses: {', '.join(sorted(allowed_statuses))}."
+            )
+
+        is_postulation_request = hc_participation.recommendation in ("postulated", "postulated_manually")
+        is_already_in_hc_request = hc_participation.recommendation == "already_in_hc"
+
+        if is_postulation_request and previous_status in {"Reviewed", "Approved"}:
+            _update_hc_available_approvals(1)
+
+        if is_already_in_hc_request and previous_status in {"Reviewed", "Approved"}:
+            _update_hc_available_approvals(-1)
+
+        current_time = timezone.now()
+        hc_participation.status = "Pending"
+        hc_participation.final_status = None
+        hc_participation.status_updated_at = current_time
+        hc_participation.status_updated_by = user
+        hc_participation.save()
+
+        log_note = "Request returned to Pending for reevaluation"
+        if reason:
+            log_note = f"{log_note}. Reason: {reason.strip()}"
+
+        HCParticipationLog.objects.create(
+            hc_participation=hc_participation,
+            changed_by=user,
+            previous_status=previous_status,
+            current_status="Pending",
+            notes=log_note,
         )
 
     return hc_participation

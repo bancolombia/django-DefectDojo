@@ -129,10 +129,14 @@
                         {% if can_review_hc_participation %}
                             {% if hc_participation.status == 'Pending' %}
                             <li>
-                                <form method="post" action="{% url 'review_hc_participation' hc_participation.uuid %}" style="margin: 0;">
+                                <form method="post" action="{% url 'review_hc_participation' hc_participation.uuid %}" id="review-dropdown-form" style="margin: 0;">
                                     {% csrf_token %}
                                     <button type="submit" class="dropdown-item btn btn-link" style="width: 100%; text-align: left;">
-                                        <i class="fa-solid fa-circle-check"></i> Mark as Reviewed
+                                        {% if hc_participation.was_in_hacking_continuous %}
+                                            <i class="fa-solid fa-circle-check"></i> Approve SDT Removal
+                                        {% else %}
+                                            <i class="fa-solid fa-circle-check"></i> Approve SDT Participation
+                                        {% endif %}
                                     </button>
                                 </form>
                             </li>
@@ -146,9 +150,9 @@
                                     {% csrf_token %}
                                     <button type="submit" class="dropdown-item btn btn-link" style="width: 100%; text-align: left;">
                                         {% if hc_participation.was_in_hacking_continuous %}
-                                            <i class="fa-solid fa-circle-check"></i> Approve Removal from HC
+                                            <i class="fa-solid fa-circle-check"></i> Approve Removal from SDT
                                         {% else %}
-                                            <i class="fa-solid fa-circle-exclamation"></i> Approve HC Participation
+                                            <i class="fa-solid fa-circle-exclamation"></i> Approve SDT Participation
                                         {% endif %}
                                     </button>
                                 </form>
@@ -163,9 +167,9 @@
                                     {% csrf_token %}
                                     <button type="submit" class="dropdown-item btn btn-link" style="width: 100%; text-align: left;">
                                         {% if hc_participation.was_in_hacking_continuous %}
-                                            <i class="fa-solid fa-circle-xmark"></i> Keep Product in HC
+                                            <i class="fa-solid fa-circle-xmark"></i> Keep Product in SDT
                                         {% else %}
-                                            <i class="fa-solid fa-circle-xmark"></i> Reject HC Participation
+                                            <i class="fa-solid fa-circle-xmark"></i> Reject SDT Participation
                                         {% endif %}
                                     </button>
                                 </form>
@@ -183,7 +187,7 @@
                     <th>Product</th>
                     <th>Product Type</th>
                     <th>Criticality</th>
-                    <th>Was in HC</th>
+                    <th>Was in SDT</th>
                     <th>Recommendation</th>
                     <th>Status</th>
                     <th>Created by</th>
@@ -216,7 +220,11 @@
                                 {% if hc_participation.was_in_hacking_continuous and hc_participation.status == 'Approved' %}
                                     Removal Approved
                                 {% elif hc_participation.was_in_hacking_continuous and hc_participation.status == 'Rejected' %}
-                                    Continues in HC
+                                    Continues in SDT
+                                {% elif hc_participation.status == 'Reviewed' and hc_participation.was_in_hacking_continuous %}
+                                    Approved Removal
+                                {% elif hc_participation.status == 'Reviewed' %}
+                                    Approved Entry
                                 {% else %}
                                     {{ hc_participation.status }}
                                 {% endif %}
@@ -315,7 +323,7 @@
                         </div>
                         <div class="col-4 timeline-step {% if hc_participation.reviewed_at %}active{% endif %}">
                             <div class="timeline-content">
-                                <pre><strong>Reviewed</strong></pre>
+                                <pre><strong>{% if hc_participation.was_in_hacking_continuous %}Approved Removal{% else %}Approved Entry{% endif %}</strong></pre>
                                 <p>
                                     {% if hc_participation.reviewed_at %}
                                         <pre>{{ hc_participation.reviewed_at|date:"d M Y H:i" }}</pre>
@@ -327,7 +335,7 @@
                                 </p>
                             </div>
                         </div>
-                        <div class="col-4 timeline-step {% if hc_participation.final_status == 'Approved' %}active{% elif hc_participation.final_status == 'Rejected' %}danger{% endif %}">
+                        <div class="col-4 timeline-step {% if hc_participation.final_status == 'Approved' and hc_participation.was_in_hacking_continuous %}danger{% elif hc_participation.final_status == 'Approved' or hc_participation.final_status == 'Rejected' and hc_participation.was_in_hacking_continuous %}active{% elif hc_participation.final_status == 'Rejected' %}danger{% endif %}">
                             <div class="timeline-content">
                                 <pre><strong>Final Status</strong></pre>
                                 <p>
@@ -344,7 +352,7 @@
                                             <pre><strong>By:</strong> {{ hc_participation.approved_by.username }}</pre>
                                         {% else %}
                                             {% if hc_participation.was_in_hacking_continuous %}
-                                                <pre class="text-success"><strong>Continues in HC</strong></pre>
+                                                <pre class="text-success"><strong>Continues in SDT</strong></pre>
                                             {% else %}
                                                 <pre class="text-danger"><strong>Rejected</strong></pre>
                                             {% endif %}
@@ -377,21 +385,21 @@
                             <span class="log-date">[{{ log.changed_at|date:"d M Y H:i" }}]</span>
                             <span class="log-user">{{ log.changed_by.username }}:</span>
                             Status changed from
-                            <span class="log-status" style="background-color: {% if log.previous_status == 'Pending' %}#1B30DE{% elif log.previous_status == 'Approved' %}#096C11{% elif log.previous_status == 'Rejected' %}#d11d38{% elif log.previous_status == 'Cancelled' %}#6c757d{% elif log.previous_status == 'Reviewed' %}#b97a0c{% else %}#6c757d{% endif %};">
-                                {{ log.previous_status|default:"New" }}
+                            <span class="log-status" style="background-color: {% if log.previous_status == 'Pending' %}#1B30DE{% elif log.previous_status == 'Approved' and hc_participation.was_in_hacking_continuous %}#d11d38{% elif log.previous_status == 'Approved' %}#096C11{% elif log.previous_status == 'Rejected' and hc_participation.was_in_hacking_continuous %}#096C11{% elif log.previous_status == 'Rejected' %}#d11d38{% elif log.previous_status == 'Cancelled' %}#6c757d{% elif log.previous_status == 'Reviewed' %}#b97a0c{% else %}#6c757d{% endif %};">
+                                {% if log.previous_status == 'Reviewed' %}{% if hc_participation.was_in_hacking_continuous %}Approved Removal{% else %}Approved Entry{% endif %}{% elif log.previous_status == 'Approved' and hc_participation.was_in_hacking_continuous %}Removal Approved{% elif log.previous_status == 'Rejected' and hc_participation.was_in_hacking_continuous %}Continues in SDT{% else %}{{ log.previous_status|default:"New" }}{% endif %}
                             </span>
                             to
-                            <span class="log-status" style="background-color: {% if log.current_status == 'Pending' %}#1B30DE{% elif log.current_status == 'Approved' %}#096C11{% elif log.current_status == 'Rejected' %}#d11d38{% elif log.current_status == 'Cancelled' %}#6c757d{% elif log.current_status == 'Reviewed' %}#b97a0c{% else %}#6c757d{% endif %};">
-                                {{ log.current_status }}
+                            <span class="log-status" style="background-color: {% if log.current_status == 'Pending' %}#1B30DE{% elif log.current_status == 'Approved' and hc_participation.was_in_hacking_continuous %}#d11d38{% elif log.current_status == 'Approved' %}#096C11{% elif log.current_status == 'Rejected' and hc_participation.was_in_hacking_continuous %}#096C11{% elif log.current_status == 'Rejected' %}#d11d38{% elif log.current_status == 'Cancelled' %}#6c757d{% elif log.current_status == 'Reviewed' %}#b97a0c{% else %}#6c757d{% endif %};">
+                                {% if log.current_status == 'Reviewed' %}{% if hc_participation.was_in_hacking_continuous %}Approved Removal{% else %}Approved Entry{% endif %}{% elif log.current_status == 'Approved' and hc_participation.was_in_hacking_continuous %}Removal Approved{% elif log.current_status == 'Rejected' and hc_participation.was_in_hacking_continuous %}Continues in SDT{% else %}{{ log.current_status }}{% endif %}
                             </span>
                             {% if log.notes %}
                                 <span class="text-muted"> - 
                                     {% if hc_participation.was_in_hacking_continuous and log.notes == 'Request approved for Hacking Continuous participation' %}
-                                        Request approved for removal from Hacking Continuous
+                                        Request approved for removal from SDT
                                     {% elif hc_participation.was_in_hacking_continuous and log.notes == 'Request marked as reviewed' %}
-                                        Request marked as reviewed for HC continuity decision
+                                        Request marked as reviewed for SDT continuity decision
                                     {% elif hc_participation.was_in_hacking_continuous and log.notes == 'Request rejected' %}
-                                        Request rejected: product remains in Hacking Continuous
+                                        Request rejected: product remains in SDT
                                     {% else %}
                                         {{ log.notes }}
                                     {% endif %}
@@ -404,6 +412,41 @@
                 </div>
             </div>
         </div>
+
+        {% if show_review_checklist_panel %}
+        <div class="panel panel-default" id="review-checklist-panel">
+            <div class="panel-heading">
+                <h4>Reviewer Ingress Checklist</h4>
+            </div>
+            <div class="panel-body">
+                {% if is_review_checklist_editable %}
+                <p class="text-muted">Confirm all criteria before marking this request as reviewed.</p>
+                {% elif hc_participation.status == 'Reviewed' %}
+                <p class="text-muted">Checklist confirmed when the request was marked as reviewed.</p>
+                {% elif hc_participation.status == 'Rejected' %}
+                <p class="text-muted">Checklist shown as not confirmed because the request was rejected.</p>
+                {% endif %}
+                <div id="review-checklist-warning" class="alert alert-warning" style="display: none;{% if not is_review_checklist_editable %} visibility: hidden;{% endif %}">
+                    <i class="fa-solid fa-triangle-exclamation"></i> You must confirm all ingress checklist criteria before marking as reviewed.
+                </div>
+
+                {% for criterion in review_checklist_criteria %}
+                    <div class="checkbox">
+                        <label>
+                            <input
+                                type="checkbox"
+                                name="criteria"
+                                value="{{ criterion }}"
+                                {% if criterion in review_checklist_checked_values %}checked{% endif %}
+                                {% if not is_review_checklist_editable %}disabled{% endif %}
+                            >
+                            {{ criterion }}
+                        </label>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
 
         <div class="panel panel-default">
             <div class="panel-heading">
@@ -457,6 +500,33 @@
 </div>
 
 <script>
+    (function () {
+        var reviewDropdownForm = document.getElementById('review-dropdown-form');
+        if (reviewDropdownForm) {
+            reviewDropdownForm.addEventListener('submit', function (e) {
+                var checkboxes = document.querySelectorAll('#review-checklist-panel input[name="criteria"]');
+                if (checkboxes.length === 0) return;
+                var allChecked = Array.from(checkboxes).every(function (cb) { return cb.checked; });
+                if (!allChecked) {
+                    e.preventDefault();
+                    var warning = document.getElementById('review-checklist-warning');
+                    if (warning) {
+                        warning.style.display = 'block';
+                        warning.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                    return false;
+                }
+                checkboxes.forEach(function (cb) {
+                    var hidden = document.createElement('input');
+                    hidden.type = 'hidden';
+                    hidden.name = 'criteria';
+                    hidden.value = cb.value;
+                    reviewDropdownForm.appendChild(hidden);
+                });
+            });
+        }
+    })();
+
     (function () {
         const apiUrl = "{{ risk_posture_api_url }}";
         const activeEl = document.getElementById("hc-posture-active-findings");
