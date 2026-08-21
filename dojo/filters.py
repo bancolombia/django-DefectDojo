@@ -3083,10 +3083,13 @@ class ApiRiskAcceptanceFilter(DojoFilter):
     class Meta:
         model = Risk_Acceptance
         fields = [
-            "name", "accepted_findings", "recommendation", "recommendation_details",
-            "decision", "decision_details", "accepted_by", "owner", "expiration_date",
-            "expiration_date_warned", "expiration_date_handled", "reactivate_expired",
-            "restart_sla_expired", "notes",
+            "id",
+            "name",
+            "accepted_by",
+            "owner",
+            "expiration_date",
+            "expiration_date_warned",
+            "expiration_date_handled"
         ]
 
 

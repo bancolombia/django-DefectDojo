@@ -1616,11 +1616,11 @@ class TestImportSerializer(serializers.ModelSerializer):
 
 class RiskAcceptanceSerializer(serializers.ModelSerializer):
     path = serializers.SerializerMethodField()
-    owner = serializers.CharField(read_only=True)
     name = serializers.CharField(required=True)
     long_term_acceptance = serializers.BooleanField(default=False)
     accepted_findings = serializers.PrimaryKeyRelatedField(many=True, queryset=Finding.objects.all())
     severity = serializers.CharField(read_only=True)
+    priority_classification = serializers.CharField(source="priority", read_only=True)
     recommendation = serializers.CharField(required=False)
     recommendation_details = serializers.CharField(required=False)
     decision = serializers.CharField(required=False)
@@ -1628,7 +1628,10 @@ class RiskAcceptanceSerializer(serializers.ModelSerializer):
     accepted_by = serializers.CharField(read_only=True)
     reviewed_by = serializers.CharField(read_only=True)
     path = serializers.SerializerMethodField()
-    owner = serializers.PrimaryKeyRelatedField(queryset=Dojo_User.objects.all(), required=False)
+    engagement = serializers.PrimaryKeyRelatedField(read_only=True)
+    engagement_name = serializers.CharField(source="engagement", read_only=True)
+    owner = serializers.PrimaryKeyRelatedField(queryset=Dojo_User.objects.all(), required=False)    
+    owner_name = serializers.CharField(read_only=True, source="owner.username")
     reviewed_date = serializers.DateTimeField(read_only=True)
     accepted_date = serializers.DateTimeField(read_only=True)
     expiration_date = serializers.DateTimeField(required=False)
@@ -1695,12 +1698,9 @@ class RiskAcceptanceSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(serializers.IntegerField())
     def get_engagement(self, obj):
-        engagement = Engagement.objects.filter(
-            risk_acceptance__id__in=[obj.id],
-        ).first()
-        return EngagementSerializer(read_only=True).to_representation(
-            engagement,
-        )
+        if obj.engagement:
+           return obj.engagement.id
+        return None
 
     def validate(self, data):
         def validate_findings_have_same_engagement(finding_objects: list[Finding]):

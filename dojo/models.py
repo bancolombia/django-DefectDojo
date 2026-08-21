@@ -4222,7 +4222,7 @@ class Risk_Acceptance(models.Model):
     @property
     def priority(self):
         if self.accepted_findings.exists():
-            return self.accepted_findings[0].priority_classification
+            return self.accepted_findings.first().priority_classification
         raise ValueError("No accepted findings associated with this risk acceptance.")
 
     # relationship is many to many, but we use it as one-to-many
