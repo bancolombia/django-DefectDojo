@@ -12,7 +12,7 @@ from django import forms
 from django.apps import apps
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Count, JSONField, Q, F
+from django.db.models import Count, Exists, JSONField, OuterRef, Q, F
 from django.forms import HiddenInput
 from django.utils.timezone import now, tzinfo
 from django.utils.translation import gettext_lazy as _
@@ -1434,6 +1434,10 @@ class ApiEngagementFilter(DojoFilter):
                                                 help_text="Comma separated list of exact tags not present on product",
                                                 exclude="True")
     has_tags = BooleanFilter(field_name="tags", lookup_expr="isnull", exclude=True, label="Has tags")
+    has_findings = BooleanFilter(
+        method="filter_has_findings",
+        label="Has findings",
+        help_text="Filter engagements that do, or do not, have any findings")
 
     o = OrderingFilter(
         # tuple-mapping retains order
@@ -1452,6 +1456,12 @@ class ApiEngagementFilter(DojoFilter):
         },
 
     )
+
+    def filter_has_findings(self, queryset, name, value):
+        # Use EXISTS instead of a COUNT/GROUP BY so the check short-circuits on the first match
+        # and doesn't multiply rows (keeps working together with the .distinct() on the queryset).
+        has_findings_subquery = Finding.objects.filter(test__engagement=OuterRef("pk"))
+        return queryset.annotate(_has_findings=Exists(has_findings_subquery)).filter(_has_findings=value)
 
     class Meta:
         model = Engagement
