@@ -833,6 +833,9 @@ class FindingTemplatesViewSet(
 
 class _FindingCountPagination(LimitOffsetPagination):
     def get_count(self, queryset):
+        # delete_preview passes a plain list of related objects, not a queryset
+        if not hasattr(queryset, "query"):
+            return super().get_count(queryset)
         # Avoid SELECT COUNT(*) FROM (SELECT DISTINCT all_77_cols) by counting only the PK
         if queryset.query.distinct:
             return queryset.values("id").distinct().count()
