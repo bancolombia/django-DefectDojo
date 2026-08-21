@@ -24,7 +24,9 @@ app = Celery("dojo")
 # pickle the object when using Windows.
 app.config_from_object("django.conf:settings", namespace="CELERY")
 
-app.autodiscover_tasks(lambda: settings.INSTALLED_APPS)
+# "tagulous" has no tasks module; its >=2.2 "django_tagulous" rename shim raises
+# ModuleNotFoundError("django_tagulous.tasks") which celery's name-matching can't swallow.
+app.autodiscover_tasks(lambda: [a for a in settings.INSTALLED_APPS if a != "tagulous"])
 
 # celery worker liveness check
 app.steps["worker"].add(LivenessProbe)
