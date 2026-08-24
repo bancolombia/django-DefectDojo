@@ -69,12 +69,21 @@ class RiskAcceptanceEngagementViewSet(prefetch.PrefetchListMixin,
     @extend_schema(
         methods=["GET"],
         responses=FindingRenderRuleSerializer(many=True),
+        parameters=[
+            OpenApiParameter(
+                name="reverse_query",
+                type=OpenApiTypes.BOOL,
+                description="Reverse query flag",
+                required=False,
+                )
+            ],
         request=None,
     )
     @action(detail=True, methods=["get"])
     def render_rule(self, request, pk):
+        reverse_query = request.query_params.get("reverse_query", "false").lower() == "true"
         ra_engagement = get_object_or_404(RiskAcceptanceEngagement, id=pk)
-        query = helper_ra_engagement.render_rule(ra_engagement)
+        query = helper_ra_engagement.render_rule(ra_engagement, reverse_query=reverse_query)
         if query:
             page = self.paginate_queryset(query)
             serializer = FindingRenderRuleSerializer(page if page is not None else query, many=True)
