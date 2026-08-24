@@ -79,6 +79,7 @@ from dojo.api_v2.views import (
 )
 from dojo.api_v2.risk_acceptance.views import RiskAcceptanceViewSet
 from dojo.api_v2.long_risk_acceptance.views import RiskAcceptanceEngagementViewSet, RiskAcceptanceExclusionRuleViewSet
+from dojo.api_v2.cross_approval.views import CrossApprovalRequestViewSet
 from dojo.api_v2.ia_recommendation.views import IArecommendationApiView
 from dojo.api_v2.scope.views import ScopeViewSet, InputSecretViewSet, InputFileViewSet, InputFlowViewSet,InputURLViewSet,InputScenarioViewSet
 from dojo.api_v2.general_settings.views import GeneralSettingsViewSet
@@ -95,6 +96,7 @@ from dojo.endpoint.urls import urlpatterns as endpoint_urls
 from dojo.engagement.urls import urlpatterns as eng_urls
 from dojo.finding.urls import urlpatterns as finding_urls
 from dojo.engine_tools.urls import urlpatterns as engine_tools_url
+from dojo.engine_tools.cross_approval_urls import urlpatterns as cross_approval_urls
 from dojo.transfer_findings.urls import urlpatterns as transfer_finding_urls
 from dojo.risk_acceptance.urls import urlpatterns as risk_acceptance_urls
 from dojo.finding_group.urls import urlpatterns as finding_group_urls
@@ -220,6 +222,7 @@ v2_api.register(r"input_file", InputFileViewSet, basename="input_file")
 v2_api.register(r"alerts", AlertViewSet, basename="alerts")
 v2_api.register(r"long_risk_acceptance", RiskAcceptanceEngagementViewSet, basename="long_risk_acceptance")
 v2_api.register(r"long_risk_acceptance_rule", RiskAcceptanceExclusionRuleViewSet, basename="long_risk_acceptance_rule")
+v2_api.register(r"crossapproval_requests", CrossApprovalRequestViewSet, basename="crossapproval_request")
 v2_api.register(r"input_flow", InputFlowViewSet, basename="input_flow")
 v2_api.register(r"input_url", InputURLViewSet, basename="input_url")
 v2_api.register(r"input_scenario",InputScenarioViewSet,basename="input_scenario")
@@ -229,6 +232,7 @@ ur += endpoint_urls
 ur += eng_urls
 ur += finding_urls
 ur += engine_tools_url
+ur += cross_approval_urls
 ur += transfer_finding_urls
 ur += risk_acceptance_urls
 ur += long_risk_acceptance_urls

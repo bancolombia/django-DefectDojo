@@ -125,7 +125,7 @@ prompt_toolkit==3.0.53
 propcache==0.5.2
 protobuf==6.33.5
 psycopg==3.3.4
-psycopg-c==3.3.4
+
 psycopg-pool==3.3.1
 py==1.11.0
 pyarrow==25.0.1
