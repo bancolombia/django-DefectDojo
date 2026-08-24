@@ -27,7 +27,10 @@ def apply_dynamic_filter(query: QuerySet[Finding], filter_field: str, filter_val
     
     return query.filter(q_filter)
 
-def to_execute_rule(query: QuerySet[Finding], rules: list[dict]) -> QuerySet[Finding]:
+def to_execute_rule(query: QuerySet[Finding],
+                    rules: list[dict],
+                    reverse_query: bool
+    ) -> QuerySet[Finding]:
     combined_rules_include = Q()
     combined_rules_exclude = Q()
     
@@ -58,19 +61,26 @@ def to_execute_rule(query: QuerySet[Finding], rules: list[dict]) -> QuerySet[Fin
                     combined_rules_exclude |= Q(**{field: value})
 
     if combined_rules_include:
-        query = query.filter(combined_rules_include)
+        if not reverse_query:
+            query = query.filter(combined_rules_include)
+        else:
+            query = query.exclude(combined_rules_include) # Query Severse
+    
     if combined_rules_exclude:
-        query = query.exclude(combined_rules_exclude)
+        if not reverse_query:
+            query = query.exclude(combined_rules_exclude)
+        else:
+            query = query.filter(combined_rules_exclude)
     
     return query
 
-def render_rule(ra_engagement: RiskAcceptanceEngagement):
+def render_rule(ra_engagement: RiskAcceptanceEngagement, reverse_query: bool):
     rules = ra_engagement.riskacceptanceexclusionrule_set.all()
     finding_qr = None
     for eng in ra_engagement.engagement_set.all():
         query = eng.get_all_finding_active
         if finding_qr is None:
-            finding_qr = to_execute_rule(query, rules)
+            finding_qr = to_execute_rule(query, rules, reverse_query)
         else:
             finding_qr = finding_qr.union(to_execute_rule(query, rules))
 
