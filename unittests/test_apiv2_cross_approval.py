@@ -180,3 +180,44 @@ class CrossApprovalRequestWorkflowViewTest(SimpleTestCase):
 
         revert.assert_called_once_with(exclusion)
         instance.delete.assert_called_once_with()
+
+    def test_expire_exclusion_serializes_a_refreshed_request(self):
+        exclusion = SimpleNamespace(pk=3)
+        instance = SimpleNamespace(
+            status="approved",
+            exclusions=SimpleNamespace(
+                filter=Mock(return_value=SimpleNamespace(first=Mock(return_value=exclusion))),
+            ),
+        )
+        refreshed_instance = SimpleNamespace(status="approved")
+        view = self._view_for(instance)
+        view.get_object.side_effect = [instance, refreshed_instance]
+        request = SimpleNamespace(data={"exclusion_id": 3}, user=SimpleNamespace())
+
+        with patch("dojo.api_v2.cross_approval.views.expire_cross_approval_exclusion"):
+            response = view.expire_exclusion(request)
+
+        self.assertEqual(response.status_code, 200)
+        view.get_serializer.assert_called_once_with(refreshed_instance)
+
+    def test_reopen_exclusion_serializes_a_refreshed_request(self):
+        exclusion = SimpleNamespace(pk=3)
+        instance = SimpleNamespace(
+            status="approved",
+            exclusions=SimpleNamespace(
+                filter=Mock(return_value=SimpleNamespace(first=Mock(return_value=exclusion))),
+            ),
+        )
+        refreshed_instance = SimpleNamespace(status="approved")
+        view = self._view_for(instance)
+        view.get_object.side_effect = [instance, refreshed_instance]
+        request = SimpleNamespace(data={"exclusion_id": 3}, user=SimpleNamespace())
+
+        with patch(
+            "dojo.api_v2.cross_approval.views.reopen_cross_approval_exclusion",
+            return_value=True,
+        ):
+            response = view.reopen_exclusion(request)
+
+        self.assertEqual(response.status_code, 200)
+        view.get_serializer.assert_called_once_with(refreshed_instance)

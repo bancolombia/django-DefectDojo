@@ -79,7 +79,7 @@ class CrossApprovalRequestViewSet(ModelViewSet):
         if not exclusion:
             return Response({"detail": "Exclusion not found on this request."}, status=404)
         expire_cross_approval_exclusion(exclusion, request.user)
-        return Response(self.get_serializer(instance).data)
+        return Response(self.get_serializer(self.get_object()).data)
 
     @action(detail=True, methods=["post"], url_path="reopen-exclusion")
     def reopen_exclusion(self, request, pk=None):
@@ -91,7 +91,7 @@ class CrossApprovalRequestViewSet(ModelViewSet):
             return Response({"detail": "Exclusion not found on this request."}, status=404)
         if not reopen_cross_approval_exclusion(exclusion, request.user):
             return Response({"detail": "Only manually expired, non-expired exclusions can reopen."}, status=400)
-        return Response(self.get_serializer(instance).data)
+        return Response(self.get_serializer(self.get_object()).data)
 
     @action(detail=True, methods=["get", "post"])
     def discussions(self, request, pk=None):
