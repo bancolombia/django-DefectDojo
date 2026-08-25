@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
+from dojo.api_v2.mixins import DeletePreviewModelMixin
 from dojo.api_v2.cross_approval.helpers import (
     apply_request_exclusions,
     expire_cross_approval_exclusion,
@@ -22,7 +23,7 @@ from dojo.api_v2.cross_approval.serializers import (
 )
 
 
-class CrossApprovalRequestViewSet(ModelViewSet):
+class CrossApprovalRequestViewSet(DeletePreviewModelMixin, ModelViewSet):
     queryset = CrossApprovalRequest.objects.select_related(
         "created_by", "status_updated_by"
     ).prefetch_related("exclusions", "discussions__author", "logs__changed_by")
