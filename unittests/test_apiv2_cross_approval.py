@@ -1,4 +1,5 @@
-from unittest.mock import patch
+from contextlib import nullcontext
+from unittest.mock import Mock, patch
 from types import SimpleNamespace
 
 from django.test import SimpleTestCase
@@ -89,3 +90,47 @@ class CrossApprovalRequestValidationViewTest(SimpleTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["conflicts"], [{"request_id": 9, "status": "rejected"}])
+
+
+class CrossApprovalRequestWorkflowViewTest(SimpleTestCase):
+    def _view_for(self, instance):
+        view = CrossApprovalRequestViewSet()
+        view.get_object = Mock(return_value=instance)
+        view.get_serializer = Mock(return_value=SimpleNamespace(data={"id": 7}))
+        return view
+
+    def test_approve_records_status_and_queues_exclusions(self):
+        instance = SimpleNamespace(pk=7, status="pending", save=Mock())
+        view = self._view_for(instance)
+        request = SimpleNamespace(user=SimpleNamespace(username="maintainer"))
+
+        with (
+            patch("dojo.api_v2.cross_approval.views.log_status_change") as log_change,
+            patch("dojo.api_v2.cross_approval.views.apply_request_exclusions") as apply_exclusions,
+            patch("dojo.api_v2.cross_approval.views.notify_request_status") as notify,
+        ):
+            response = view._set_status(request, "approved")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(instance.status, "approved")
+        log_change.assert_called_once_with(instance, request.user, "pending", "approved")
+        apply_exclusions.assert_called_once_with(instance)
+        notify.assert_called_once()
+
+    def test_destroy_reverts_approved_exclusions_before_deletion(self):
+        exclusion = SimpleNamespace(pk=3)
+        instance = SimpleNamespace(
+            status="approved",
+            exclusions=SimpleNamespace(all=Mock(return_value=[exclusion])),
+            delete=Mock(),
+        )
+        view = CrossApprovalRequestViewSet()
+
+        with (
+            patch("dojo.api_v2.cross_approval.views.transaction.atomic", return_value=nullcontext()),
+            patch("dojo.api_v2.cross_approval.views.revert_cross_approval_exclusion") as revert,
+        ):
+            view.perform_destroy(instance)
+
+        revert.assert_called_once_with(exclusion)
+        instance.delete.assert_called_once_with()

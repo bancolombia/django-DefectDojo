@@ -2,7 +2,12 @@ from datetime import datetime
 
 from rest_framework import serializers
 
-from dojo.api_v2.cross_approval.models import CrossApprovalExclusion, CrossApprovalRequest
+from dojo.api_v2.cross_approval.models import (
+    CrossApprovalDiscussion,
+    CrossApprovalExclusion,
+    CrossApprovalRequest,
+    CrossApprovalRequestLog,
+)
 from dojo.api_v2.serializers import UserStubSerializer
 
 
@@ -17,6 +22,7 @@ def parse_cross_approval_date(value):
 
 
 class CrossApprovalExclusionSerializer(serializers.ModelSerializer):
+    exclusion_id = serializers.IntegerField(source="pk", read_only=True)
     id = serializers.CharField(source="vulnerability_id")
     cve_id = serializers.CharField(required=False, allow_blank=True, default="")
     x86_image_name = serializers.ListField(
@@ -28,9 +34,10 @@ class CrossApprovalExclusionSerializer(serializers.ModelSerializer):
     class Meta:
         model = CrossApprovalExclusion
         fields = (
-            "id", "cve_id", "where", "create_date", "expired_date", "priority",
+            "exclusion_id", "id", "cve_id", "where", "create_date", "expired_date", "expired_at", "priority",
             "severity", "hu", "reason", "x86_image_name",
         )
+        read_only_fields = ("expired_at",)
 
     def to_internal_value(self, data):
         data = data.copy()
@@ -62,12 +69,14 @@ class CrossApprovalRequestSerializer(serializers.ModelSerializer):
     status_updated_by = UserStubSerializer(read_only=True)
     exclusions = CrossApprovalExclusionSerializer(many=True)
     type = serializers.CharField(default="x86", required=False)
+    discussions = serializers.SerializerMethodField()
+    logs = serializers.SerializerMethodField()
 
     class Meta:
         model = CrossApprovalRequest
         fields = (
             "id", "type", "status", "created_at", "created_by", "status_updated_by",
-            "status_updated_at", "exclusions",
+            "status_updated_at", "exclusions", "discussions", "logs",
         )
         read_only_fields = (
             "id", "status", "created_at", "created_by", "status_updated_by",
@@ -111,6 +120,14 @@ class CrossApprovalRequestSerializer(serializers.ModelSerializer):
         )
         return request
 
+    def get_discussions(self, instance):
+        return CrossApprovalDiscussionSerializer(
+            instance.discussions.all(), many=True, context=self.context
+        ).data
+
+    def get_logs(self, instance):
+        return CrossApprovalRequestLogSerializer(instance.logs.all(), many=True).data
+
     def update(self, instance, validated_data):
         exclusions = validated_data.pop("exclusions", None)
         if exclusions is not None:
@@ -121,3 +138,25 @@ class CrossApprovalRequestSerializer(serializers.ModelSerializer):
         instance.type = validated_data.get("type", instance.type)
         instance.save(update_fields=["type"])
         return instance
+
+
+class CrossApprovalDiscussionSerializer(serializers.ModelSerializer):
+    author = UserStubSerializer(read_only=True)
+    is_mine = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CrossApprovalDiscussion
+        fields = ("id", "author", "content", "created_at", "updated_at", "is_mine")
+        read_only_fields = ("id", "author", "created_at", "updated_at", "is_mine")
+
+    def get_is_mine(self, instance):
+        request = self.context.get("request")
+        return bool(request and request.user == instance.author)
+
+
+class CrossApprovalRequestLogSerializer(serializers.ModelSerializer):
+    changed_by = UserStubSerializer(read_only=True)
+
+    class Meta:
+        model = CrossApprovalRequestLog
+        fields = ("id", "previous_status", "current_status", "changed_by", "changed_at")

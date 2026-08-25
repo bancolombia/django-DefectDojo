@@ -43,9 +43,36 @@ class CrossApprovalExclusion(models.Model):
     hu = models.CharField(max_length=100)
     reason = models.TextField()
     image_names = models.JSONField(default=list)
+    expired_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ("id",)
 
     def __str__(self):
         return self.cve_id
+
+
+class CrossApprovalRequestLog(models.Model):
+    request = models.ForeignKey(
+        CrossApprovalRequest, on_delete=models.CASCADE, related_name="logs"
+    )
+    previous_status = models.CharField(max_length=20, blank=True)
+    current_status = models.CharField(max_length=20)
+    changed_by = models.ForeignKey("Dojo_User", on_delete=models.PROTECT)
+    changed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-changed_at",)
+
+
+class CrossApprovalDiscussion(models.Model):
+    request = models.ForeignKey(
+        CrossApprovalRequest, on_delete=models.CASCADE, related_name="discussions"
+    )
+    author = models.ForeignKey("Dojo_User", on_delete=models.PROTECT)
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("created_at",)
