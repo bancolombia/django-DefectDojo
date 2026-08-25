@@ -161,7 +161,7 @@ def has_permission_to_reclassify_orphans(user) -> bool:
 @register.filter
 def has_permission_to_cross_approval(user) -> bool:
     groups = GeneralSettings.get_value(
-        "GROUPS_TO_CROSS_APPROVAL",
+        "GROUPS_TO_CROSS_SUBMITER",
         settings.REVIEWER_GROUP_NAME
     )
 

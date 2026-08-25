@@ -590,13 +590,11 @@
                                                         {% trans "Blacklist - Zero-Day and Whitelist" %}
                                                     </a>
                                                 </li>
-                                                {% if request.user|has_permission_to_cross_approval %}
-                                                    <li>
-                                                        <a rel="noopener noreferrer" href="{% url 'crossapproval_list' %}">
-                                                            {% trans "Cross-approval of suppliers" %}
-                                                        </a>
-                                                    </li>
-                                                {% endif %}
+                                                <li>
+                                                    <a rel="noopener noreferrer" href="{% url 'crossapproval_list' %}">
+                                                        {% trans "Cross-approval of suppliers" %}
+                                                    </a>
+                                                </li>
                                                 <li>
                                                     <a rel="noopener noreferrer" href="{% url 'hc_participations' %}">
                                                         {% trans "HC Participation Requests" %}

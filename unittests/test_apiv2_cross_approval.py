@@ -2,12 +2,11 @@ from contextlib import nullcontext
 from unittest.mock import MagicMock, Mock, patch
 from types import SimpleNamespace
 
-from django.core.exceptions import PermissionDenied
 from django.test import SimpleTestCase
 from rest_framework.request import Request
 from rest_framework.test import APIRequestFactory
 
-from dojo.api_v2.cross_approval.permissions import IsCrossApprovalMaintainer
+from dojo.api_v2.cross_approval.permissions import IsCrossApprovalReviewer, IsCrossApprovalSubmitter
 from dojo.api_v2.cross_approval.helpers import (
     _get_findings,
     check_new_findings_to_cross_approval_exclusion_list,
@@ -18,7 +17,6 @@ from dojo.api_v2.cross_approval.serializers import (
 )
 from dojo.api_v2.cross_approval.views import CrossApprovalRequestViewSet
 from dojo.engine_tools.cross_approval_views import crossapproval_list
-from dojo.templatetags.authorization_tags import has_permission_to_cross_approval
 
 
 class CrossApprovalExclusionSerializerTest(SimpleTestCase):
@@ -144,45 +142,57 @@ class CrossApprovalRequestValidationViewTest(SimpleTestCase):
 
 
 class CrossApprovalPermissionTest(SimpleTestCase):
-    def test_permission_uses_configured_cross_approval_groups(self):
-        user = SimpleNamespace(is_superuser=False)
+    def _user(self):
+        return SimpleNamespace(
+            is_superuser=False,
+            groups=SimpleNamespace(filter=Mock(return_value=SimpleNamespace(exists=Mock(return_value=False)))),
+        )
 
+    def test_submitter_permission_uses_configured_cross_approval_groups(self):
+        user = self._user()
         with (
             patch(
-                "dojo.templatetags.authorization_tags.GeneralSettings.get_value",
+                "dojo.api_v2.cross_approval.permissions.GeneralSettings.get_value",
                 return_value=["cross-approval-group"],
             ),
             patch(
-                "dojo.templatetags.authorization_tags.is_in_group",
+                "dojo.api_v2.cross_approval.permissions._is_in_group",
                 return_value=True,
             ) as is_in_group,
         ):
-            result = has_permission_to_cross_approval(user)
+            result = IsCrossApprovalSubmitter().has_permission(SimpleNamespace(user=user), None)
 
         self.assertTrue(result)
         is_in_group.assert_called_once_with(user, "cross-approval-group")
 
-    def test_drf_permission_uses_cross_approval_permission(self):
-        request = SimpleNamespace(user=SimpleNamespace())
+    def test_reviewer_permission_is_separate_from_submitter_permission(self):
+        user = self._user()
+        request = SimpleNamespace(user=user)
 
         with patch(
-            "dojo.api_v2.cross_approval.permissions.has_permission_to_cross_approval",
-            return_value=True,
-        ) as has_permission:
-            result = IsCrossApprovalMaintainer().has_permission(request, None)
+            "dojo.api_v2.cross_approval.permissions._is_in_group",
+            side_effect=lambda current_user, group: group == "reviewers",
+        ):
+            with patch("dojo.api_v2.cross_approval.permissions.settings.REVIEWER_GROUP_NAME", "reviewers"):
+                with patch("dojo.api_v2.cross_approval.permissions.settings.APPROVER_GROUP_NAME", "approvers"):
+                    result = IsCrossApprovalReviewer().has_permission(request, None)
 
         self.assertTrue(result)
-        has_permission.assert_called_once_with(request.user)
+ 
+    def test_cross_approval_html_endpoint_allows_authenticated_readers(self):
+        request = SimpleNamespace(
+            user=SimpleNamespace(
+                is_authenticated=True,
+                is_superuser=False,
+                groups=SimpleNamespace(filter=Mock(return_value=SimpleNamespace(exists=Mock(return_value=False)))),
+            ),
+            COOKIES={},
+        )
 
-    def test_html_endpoint_denies_user_without_cross_approval_permission(self):
-        request = SimpleNamespace(user=SimpleNamespace())
+        with patch("dojo.engine_tools.cross_approval_views.render") as render:
+            crossapproval_list(request)
 
-        with patch(
-            "dojo.engine_tools.cross_approval_views.has_permission_to_cross_approval",
-            return_value=False,
-        ):
-            with self.assertRaises(PermissionDenied):
-                crossapproval_list(request)
+        render.assert_called_once()
 
 
 class CrossApprovalRequestWorkflowViewTest(SimpleTestCase):

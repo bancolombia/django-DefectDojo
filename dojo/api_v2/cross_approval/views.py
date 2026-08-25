@@ -16,7 +16,7 @@ from dojo.api_v2.cross_approval.helpers import (
     revert_cross_approval_exclusion,
 )
 from dojo.api_v2.cross_approval.models import CrossApprovalDiscussion, CrossApprovalExclusion, CrossApprovalRequest
-from dojo.api_v2.cross_approval.permissions import IsCrossApprovalMaintainer
+from dojo.api_v2.cross_approval.permissions import IsCrossApprovalReviewer, IsCrossApprovalSubmitter
 from dojo.api_v2.cross_approval.serializers import (
     CrossApprovalDiscussionSerializer,
     CrossApprovalRequestSerializer,
@@ -31,8 +31,10 @@ class CrossApprovalRequestViewSet(DeletePreviewModelMixin, ModelViewSet):
     permission_classes = (IsAuthenticated,)
 
     def get_permissions(self):
-        if self.action in {"update", "partial_update", "destroy", "approve", "reject", "expire", "expire_exclusion", "reopen_exclusion"}:
-            return [IsAuthenticated(), IsCrossApprovalMaintainer()]
+        if self.action in {"approve", "reject"}:
+            return [IsAuthenticated(), IsCrossApprovalReviewer()]
+        if self.action in {"create", "update", "partial_update", "destroy", "expire", "expire_exclusion", "reopen_exclusion"}:
+            return [IsAuthenticated(), IsCrossApprovalSubmitter()]
         return super().get_permissions()
 
     @action(detail=False, methods=["get"], url_path="validate-vulnerability-id")
@@ -97,7 +99,7 @@ class CrossApprovalRequestViewSet(DeletePreviewModelMixin, ModelViewSet):
     @action(detail=True, methods=["get", "post"])
     def discussions(self, request, pk=None):
         instance = self.get_object()
-        if request.user != instance.created_by and not IsCrossApprovalMaintainer().has_permission(request, self):
+        if request.method == "POST" and request.user != instance.created_by and not IsCrossApprovalReviewer().has_permission(request, self):
             return Response({"detail": "Only the requester or a maintainer can access discussions."}, status=403)
         if request.method == "GET":
             return Response(CrossApprovalDiscussionSerializer(
