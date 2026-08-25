@@ -1,11 +1,8 @@
 from rest_framework import permissions
 
-from dojo.engine_tools.helpers import Constants
-from dojo.templatetags.authorization_tags import is_in_group
+from dojo.templatetags.authorization_tags import has_permission_to_cross_approval
 
 
 class IsCrossApprovalMaintainer(permissions.BasePermission):
     def has_permission(self, request, view):
-        if request.user.is_superuser:
-            return True
-        return is_in_group(request.user, Constants.REVIEWERS_MAINTAINER_GROUP.value)
+        return has_permission_to_cross_approval(request.user)

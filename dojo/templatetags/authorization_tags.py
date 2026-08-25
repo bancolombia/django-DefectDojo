@@ -156,3 +156,20 @@ def has_permission_to_reclassify_orphans(user) -> bool:
             return True
 
     return False
+
+
+@register.filter
+def has_permission_to_cross_approval(user) -> bool:
+    groups = GeneralSettings.get_value(
+        "GROUPS_TO_CROSS_APPROVAL",
+        settings.REVIEWER_GROUP_NAME
+    )
+
+    if user.is_superuser:
+        return True
+
+    for group_name in groups:
+        if is_in_group(user, group_name.strip()):
+            return True
+
+    return False

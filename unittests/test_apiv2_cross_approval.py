@@ -2,15 +2,19 @@ from contextlib import nullcontext
 from unittest.mock import Mock, patch
 from types import SimpleNamespace
 
+from django.core.exceptions import PermissionDenied
 from django.test import SimpleTestCase
 from rest_framework.request import Request
 from rest_framework.test import APIRequestFactory
 
+from dojo.api_v2.cross_approval.permissions import IsCrossApprovalMaintainer
 from dojo.api_v2.cross_approval.serializers import (
     CrossApprovalExclusionSerializer,
     CrossApprovalRequestSerializer,
 )
 from dojo.api_v2.cross_approval.views import CrossApprovalRequestViewSet
+from dojo.engine_tools.cross_approval_views import crossapproval_list
+from dojo.templatetags.authorization_tags import has_permission_to_cross_approval
 
 
 class CrossApprovalExclusionSerializerTest(SimpleTestCase):
@@ -90,6 +94,48 @@ class CrossApprovalRequestValidationViewTest(SimpleTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["conflicts"], [{"request_id": 9, "status": "rejected"}])
+
+
+class CrossApprovalPermissionTest(SimpleTestCase):
+    def test_permission_uses_configured_cross_approval_groups(self):
+        user = SimpleNamespace(is_superuser=False)
+
+        with (
+            patch(
+                "dojo.templatetags.authorization_tags.GeneralSettings.get_value",
+                return_value=["cross-approval-group"],
+            ),
+            patch(
+                "dojo.templatetags.authorization_tags.is_in_group",
+                return_value=True,
+            ) as is_in_group,
+        ):
+            result = has_permission_to_cross_approval(user)
+
+        self.assertTrue(result)
+        is_in_group.assert_called_once_with(user, "cross-approval-group")
+
+    def test_drf_permission_uses_cross_approval_permission(self):
+        request = SimpleNamespace(user=SimpleNamespace())
+
+        with patch(
+            "dojo.api_v2.cross_approval.permissions.has_permission_to_cross_approval",
+            return_value=True,
+        ) as has_permission:
+            result = IsCrossApprovalMaintainer().has_permission(request, None)
+
+        self.assertTrue(result)
+        has_permission.assert_called_once_with(request.user)
+
+    def test_html_endpoint_denies_user_without_cross_approval_permission(self):
+        request = SimpleNamespace(user=SimpleNamespace())
+
+        with patch(
+            "dojo.engine_tools.cross_approval_views.has_permission_to_cross_approval",
+            return_value=False,
+        ):
+            with self.assertRaises(PermissionDenied):
+                crossapproval_list(request)
 
 
 class CrossApprovalRequestWorkflowViewTest(SimpleTestCase):
