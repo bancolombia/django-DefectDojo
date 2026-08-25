@@ -1630,8 +1630,11 @@ class RiskAcceptanceSerializer(serializers.ModelSerializer):
     path = serializers.SerializerMethodField()
     engagement = serializers.PrimaryKeyRelatedField(read_only=True)
     engagement_name = serializers.CharField(source="engagement", read_only=True)
+    product = serializers.PrimaryKeyRelatedField(read_only=True)
+    product_name = serializers.CharField(source="engagement.product.name", read_only=True)
     owner = serializers.PrimaryKeyRelatedField(queryset=Dojo_User.objects.all(), required=False)    
     owner_name = serializers.CharField(read_only=True, source="owner.username")
+    status = serializers.SerializerMethodField()
     reviewed_date = serializers.DateTimeField(read_only=True)
     accepted_date = serializers.DateTimeField(read_only=True)
     expiration_date = serializers.DateTimeField(required=False)
@@ -1701,6 +1704,29 @@ class RiskAcceptanceSerializer(serializers.ModelSerializer):
         if obj.engagement:
            return obj.engagement.id
         return None
+
+    @extend_schema_field(serializers.IntegerField())
+    def get_product(self, obj):
+        if obj.engagement:
+            return obj.engagement.product.id
+        return None
+
+    @extend_schema_field(serializers.CharField())
+    def get_status(self, obj):
+        """Status of the risk_acceptance based on the risk status of the findings in the risk acceptance"""
+        statuses = obj.accepted_findings.values_list("risk_status", flat=True)
+        statuses = set(statuses)
+        if not statuses:        
+            return "No Findings"
+        if "Risk Pending" in statuses:
+            return "Risk Pending"
+        if "Risk Expired" in statuses:
+            return "Risk Expired"
+        if "Risk Rejected" in statuses:
+            return "Risk Rejected"
+        return statuses.pop()
+
+    
 
     def validate(self, data):
         def validate_findings_have_same_engagement(finding_objects: list[Finding]):

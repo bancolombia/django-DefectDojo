@@ -3089,6 +3089,28 @@ class ApiRiskAcceptanceFilter(DojoFilter):
             ("name", "name"),
         ),
     )
+    product = CharFilter(field_name="engagement__product")
+    owner = CharFilter(field_name="owner__username")
+    accepted_by = CharFilter(method='filter_accepted_by')
+    expiration_date_before = DateFilter(field_name="expiration_date", lookup_expr="lte")
+    expiration_date_after = DateFilter(field_name="expiration_date", lookup_expr="gte")
+    expiring_within_days = NumberFilter(method='filter_expiring_within_days')
+    
+    def filter_accepted_by(self, queryset, name, value):
+        if not value:
+            return queryset
+        return queryset.filter(accepted_by__contains=value)
+    
+    
+    def filter_expiring_within_days(self, queryset, name, value):
+        if not value:
+            return queryset
+        today = timezone.now().date()
+        limit = today + timedelta(days=int(value))
+        return queryset.filter(
+            expiration_date__gte=today,
+            expiration_date__lte=limit
+        )
 
     class Meta:
         model = Risk_Acceptance
@@ -3098,6 +3120,8 @@ class ApiRiskAcceptanceFilter(DojoFilter):
             "accepted_by",
             "owner",
             "expiration_date",
+            "engagement",
+            "product",
             "expiration_date_warned",
             "expiration_date_handled"
         ]

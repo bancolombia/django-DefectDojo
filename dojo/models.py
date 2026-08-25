@@ -4234,6 +4234,23 @@ class Risk_Acceptance(models.Model):
 
         return None
 
+    @property
+    def product(self):
+        engs = self.engagement_set.all()
+        if engs:
+            return engs[0].product
+        return None
+    
+    @property
+    def status(self):
+        if self.is_expired:
+            return "Expired"
+        if self.accepted_date is not None:
+            return "Accepted"
+        if self.reviewed_date is not None:
+            return "Reviewed"
+        return "Draft"
+
     def copy(self, engagement=None):
         copy = _copy_model_util(self)
         # Save the necessary ManyToMany relationships
