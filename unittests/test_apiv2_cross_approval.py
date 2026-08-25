@@ -180,16 +180,19 @@ class CrossApprovalPermissionTest(SimpleTestCase):
         self.assertTrue(result)
  
     def test_cross_approval_html_endpoint_allows_authenticated_readers(self):
-        request = SimpleNamespace(
-            user=SimpleNamespace(
-                is_authenticated=True,
-                is_superuser=False,
-                groups=SimpleNamespace(filter=Mock(return_value=SimpleNamespace(exists=Mock(return_value=False)))),
-            ),
-            COOKIES={},
+        request = APIRequestFactory().get("/cross-approval/")
+        request.session = {}
+        request.user = SimpleNamespace(
+            is_authenticated=True,
+            is_superuser=False,
+            groups=SimpleNamespace(filter=Mock(return_value=SimpleNamespace(exists=Mock(return_value=False)))),
         )
 
-        with patch("dojo.engine_tools.cross_approval_views.render") as render:
+        with (
+            patch("dojo.engine_tools.cross_approval_views.render") as render,
+            patch("dojo.engine_tools.cross_approval_views.is_cross_approval_submitter", return_value=False),
+            patch("dojo.engine_tools.cross_approval_views.is_cross_approval_reviewer", return_value=False),
+        ):
             crossapproval_list(request)
 
         render.assert_called_once()
