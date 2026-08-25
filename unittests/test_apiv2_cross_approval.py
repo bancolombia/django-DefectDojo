@@ -1,5 +1,5 @@
 from contextlib import nullcontext
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 from types import SimpleNamespace
 
 from django.core.exceptions import PermissionDenied
@@ -8,6 +8,10 @@ from rest_framework.request import Request
 from rest_framework.test import APIRequestFactory
 
 from dojo.api_v2.cross_approval.permissions import IsCrossApprovalMaintainer
+from dojo.api_v2.cross_approval.helpers import (
+    _get_findings,
+    check_new_findings_to_cross_approval_exclusion_list,
+)
 from dojo.api_v2.cross_approval.serializers import (
     CrossApprovalExclusionSerializer,
     CrossApprovalRequestSerializer,
@@ -31,12 +35,11 @@ class CrossApprovalExclusionSerializerTest(SimpleTestCase):
             "x86.image.name": ["registry.example.com/base:1.0"],
         }
 
-    def test_accepts_exclusion_without_cve_id(self):
+    def test_accepts_exclusion_payload(self):
         serializer = CrossApprovalExclusionSerializer(data=self.valid_payload())
 
         self.assertTrue(serializer.is_valid(), serializer.errors)
         self.assertEqual(serializer.validated_data["vulnerability_id"], "#sym:vulnerability_id")
-        self.assertEqual(serializer.validated_data["cve_id"], "")
         self.assertEqual(serializer.validated_data["image_names"], ["registry.example.com/base:1.0"])
 
     def test_rejects_expired_date_before_create_date(self):
@@ -74,6 +77,50 @@ class CrossApprovalRequestSerializerTest(SimpleTestCase):
 
         self.assertFalse(serializer.is_valid())
         self.assertIn("exclusions", serializer.errors)
+
+
+class CrossApprovalHelpersTest(SimpleTestCase):
+    def test_get_findings_matches_priority_or_severity_and_images(self):
+        matching_finding = SimpleNamespace(
+            priority_classification="High",
+            severity="Low",
+        )
+        non_matching_finding = SimpleNamespace(
+            priority_classification="Medium Low",
+            severity="Info",
+        )
+        findings = MagicMock()
+        findings.prefetch_related.return_value = findings
+        findings.filter.return_value = findings
+        findings.__iter__ = Mock(return_value=iter([matching_finding, non_matching_finding]))
+        exclusion = SimpleNamespace(
+            vulnerability_id="VULN-1",
+            priority="high",
+            severity="critical",
+            image_names=["registry.example.com/base:1.0"],
+        )
+
+        with patch("dojo.api_v2.cross_approval.helpers.Finding.objects.filter", return_value=findings):
+            result = _get_findings(exclusion)
+
+        self.assertEqual(result, [matching_finding])
+        findings.filter.assert_called_once()
+
+    def test_check_new_findings_queues_current_approved_exclusions(self):
+        exclusions = [SimpleNamespace(pk=3), SimpleNamespace(pk=5)]
+
+        with (
+            patch(
+                "dojo.api_v2.cross_approval.helpers.CrossApprovalExclusion.objects.filter",
+                return_value=exclusions,
+            ),
+            patch("dojo.api_v2.cross_approval.helpers.apply_cross_approval_exclusion.delay") as delay,
+        ):
+            check_new_findings_to_cross_approval_exclusion_list()
+
+        delay.assert_any_call(3)
+        delay.assert_any_call(5)
+        self.assertEqual(delay.call_count, 2)
 
 
 class CrossApprovalRequestValidationViewTest(SimpleTestCase):

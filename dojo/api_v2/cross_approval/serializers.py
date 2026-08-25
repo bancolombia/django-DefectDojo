@@ -24,7 +24,6 @@ def parse_cross_approval_date(value):
 class CrossApprovalExclusionSerializer(serializers.ModelSerializer):
     exclusion_id = serializers.IntegerField(source="pk", read_only=True)
     id = serializers.CharField(source="vulnerability_id")
-    cve_id = serializers.CharField(required=False, allow_blank=True, default="")
     x86_image_name = serializers.ListField(
         source="image_names", child=serializers.CharField(), min_length=1
     )
@@ -34,7 +33,7 @@ class CrossApprovalExclusionSerializer(serializers.ModelSerializer):
     class Meta:
         model = CrossApprovalExclusion
         fields = (
-            "exclusion_id", "id", "cve_id", "where", "create_date", "expired_date", "expired_at", "priority",
+            "exclusion_id", "id", "where", "create_date", "expired_date", "expired_at", "priority",
             "severity", "hu", "reason", "x86_image_name",
         )
         read_only_fields = ("expired_at",)

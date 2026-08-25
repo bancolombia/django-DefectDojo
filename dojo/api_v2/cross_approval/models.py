@@ -34,7 +34,6 @@ class CrossApprovalExclusion(models.Model):
         CrossApprovalRequest, on_delete=models.CASCADE, related_name="exclusions"
     )
     vulnerability_id = models.CharField(max_length=255)
-    cve_id = models.CharField(max_length=255)
     where = models.CharField(max_length=255)
     create_date = models.DateField()
     expired_date = models.DateField()
@@ -49,7 +48,7 @@ class CrossApprovalExclusion(models.Model):
         ordering = ("id",)
 
     def __str__(self):
-        return self.cve_id
+        return self.vulnerability_id
 
 
 class CrossApprovalRequestLog(models.Model):

@@ -496,6 +496,8 @@ env = environ.FileAwareEnv(
     DD_FINDING_EXCLUSION_EXPIRATION_DAYS=(int, 30),
     DD_CHECK_EXPIRING_FINDINGEXCLUSION=(int, 12),
     DD_CHECK_NEW_FINDINGS_TO_EXCLUSION_LIST=(int, 5),
+    DD_CHECK_EXPIRING_CROSS_APPROVAL_EXCLUSIONS=(int, 12),
+    DD_CHECK_NEW_FINDINGS_TO_CROSS_APPROVAL_EXCLUSION_LIST=(int, 5),
     
     # tags for filter to finding exclusion
     DD_FINDING_EXCLUSION_FILTER_TAGS=(str, "tag1,tag2"),
@@ -1684,6 +1686,8 @@ CELERY_CRON_SCHEDULE_DUPE_DELETE = env("DD_CELERY_CRON_SCHEDULE_DUPE_DELETE")
 CELERY_CRON_SCHEDULE_EXPIRE_PERMISSION_KEY = env("DD_CELERY_CRON_SCHEDULE_EXPIRE_PERMISSION_KEY")
 CELERY_EXPIRING_FINDINGEXCLUSION = env("DD_CHECK_EXPIRING_FINDINGEXCLUSION")
 CELERY_NEW_FINDINGS_TO_EXCLUSION_LIST = env("DD_CHECK_NEW_FINDINGS_TO_EXCLUSION_LIST")
+CELERY_EXPIRING_CROSS_APPROVAL_EXCLUSIONS = env("DD_CHECK_EXPIRING_CROSS_APPROVAL_EXCLUSIONS")
+CELERY_NEW_FINDINGS_TO_CROSS_APPROVAL_EXCLUSION_LIST = env("DD_CHECK_NEW_FINDINGS_TO_CROSS_APPROVAL_EXCLUSION_LIST")
 CELERY_CRON_CHECK_PRIORIZATION = env("DD_CELERY_CRON_CHECK_PRIORIZATION")
 CELERY_CRON_STATUS_FINDINGS_PRIORIZATION = env("DD_CELERY_CRON_STATUS_FINDINGS_PRIORIZATION")
 CELERY_CRON_CLEAR_SESSIONS = env("DD_CELERY_CRON_CLEAR_SESSIONS")
@@ -1749,6 +1753,14 @@ CELERY_BEAT_SCHEDULE = {
     "check_new_findings_to_exclusion_list": {
         'task': 'dojo.engine_tools.helpers.check_new_findings_to_exclusion_list',
         'schedule': crontab(hour=CELERY_NEW_FINDINGS_TO_EXCLUSION_LIST, minute=0),
+    },
+    "expire_cross_approval_exclusions": {
+        'task': 'dojo.api_v2.cross_approval.helpers.expire_cross_approval_exclusions',
+        'schedule': crontab(hour=CELERY_EXPIRING_CROSS_APPROVAL_EXCLUSIONS, minute=0),
+    },
+    "check_new_findings_to_cross_approval_exclusion_list": {
+        'task': 'dojo.api_v2.cross_approval.helpers.check_new_findings_to_cross_approval_exclusion_list',
+        'schedule': crontab(hour=CELERY_NEW_FINDINGS_TO_CROSS_APPROVAL_EXCLUSION_LIST, minute=0),
     },
     "notification_webhook_status_cleanup": {
         "task": "dojo.notifications.helper.webhook_status_cleanup",

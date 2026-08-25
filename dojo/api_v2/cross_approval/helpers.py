@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
 
@@ -13,10 +14,28 @@ from .models import CrossApprovalExclusion, CrossApprovalRequestLog
 
 
 def _get_findings(exclusion):
-    return Finding.objects.filter(
+    findings = Finding.objects.filter(
         get_unique_ids_filter(exclusion.vulnerability_id),
         active=True,
     ).prefetch_related("tags", "notes")
+    if exclusion.image_names:
+        image_filter = Q()
+        for image_name in exclusion.image_names:
+            image_filter |= Q(description__icontains=image_name)
+        findings = findings.filter(image_filter)
+
+    if exclusion.priority or exclusion.severity:
+        priority = exclusion.priority.casefold()
+        severity = exclusion.severity.casefold()
+        findings = [
+            finding for finding in findings
+            if (
+                priority and finding.priority_classification.casefold() == priority
+            ) or (
+                severity and finding.severity.casefold() == severity
+            )
+        ]
+    return findings
 
 
 @app.task
@@ -113,6 +132,17 @@ def expire_cross_approval_exclusions():
         request__status="approved", expired_at__isnull=True, expired_date__lt=timezone.localdate()
     ):
         revert_cross_approval_exclusion_task.delay(exclusion.pk)
+
+
+@app.task
+def check_new_findings_to_cross_approval_exclusion_list():
+    exclusions = CrossApprovalExclusion.objects.filter(
+        request__status="approved",
+        expired_at__isnull=True,
+        expired_date__gte=timezone.localdate(),
+    )
+    for exclusion in exclusions:
+        apply_cross_approval_exclusion.delay(exclusion.pk)
 
 
 def log_status_change(request, user, previous_status, current_status):
