@@ -24,7 +24,7 @@ app = Celery("dojo")
 # pickle the object when using Windows.
 app.config_from_object("django.conf:settings", namespace="CELERY")
 
-app.autodiscover_tasks(['dojo'])
+app.autodiscover_tasks(lambda: settings.INSTALLED_APPS)
 
 # celery worker liveness check
 app.steps["worker"].add(LivenessProbe)
