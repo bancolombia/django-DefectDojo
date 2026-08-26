@@ -64,16 +64,16 @@ class RiskAcceptanceEngagementSerializer(serializers.ModelSerializer):
         validators=[validators.valid_chars_validator],
     )
     engagements_id = serializers.PrimaryKeyRelatedField(queryset=Engagement.objects.all(), many=True, source="engagement_set", required=True)
-    engagements = EngagementSerializerRiskLongAcceptance(source="engagement_set", many=True) 
+    engagements = EngagementSerializerRiskLongAcceptance(read_only=True, source="engagement_set", many=True) 
     accepted_by_id = serializers.PrimaryKeyRelatedField(source="accepted_by", queryset=Dojo_User.objects.all(), many=False, required=False)
     accepted_by = serializers.CharField(required=False)
     reviewed_by_id = serializers.PrimaryKeyRelatedField(source="reviewed_by", queryset=Dojo_User.objects.all(), many=False, required=False)
     reviewed_by = serializers.CharField(required=False)
     rules = RiskAcceptanceExclusionRuleSerializers(read_only=True, source="riskacceptanceexclusionrule_set", many=True)
     owner_id = serializers.PrimaryKeyRelatedField(source="owner", queryset=Dojo_User.objects.all(), many=False, required=False)
-    owner = UserStubSerializer()
+    owner = UserStubSerializer(required=False)
     product = serializers.PrimaryKeyRelatedField(queryset=Product.objects.all(), many=False, required=True)
-    notes = NoteSerializer(many=True)
+    notes = NoteSerializer(many=True, required=False)
     class Meta:
         model = RiskAcceptanceEngagement
         fields = '__all__'
