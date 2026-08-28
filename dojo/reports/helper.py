@@ -5,6 +5,9 @@ from django.shortcuts import get_object_or_404
 from django.conf import settings
 from dojo.finding.views import BaseListFindings
 from dojo.authorization.authorization import user_has_permission_or_403
+from dojo.authorization.exclusive_permissions import exclude_test_or_finding_with_tag
+from dojo.finding.queries import get_authorized_findings
+from dojo.filters import ApiFindingFilter
 from dojo.models import Product, Engagement, Test
 from dojo.reports.custom_request import CustomRequest
 from dojo.celery import app
@@ -108,9 +111,30 @@ def get_findings(request):
     list_findings = BaseListFindings(
         filter_name=filter_name, product_id=pid, engagement_id=eid, test_id=tid
     )
-    findings = list_findings.get_fully_filtered_findings(request).qs
+    findings = optimize_findings_for_report(list_findings.get_fully_filtered_findings(request).qs)
 
     return findings, obj, url
+
+
+def optimize_findings_for_report(findings):
+    """
+    Report generation reads almost every FK/M2M attribute of each finding row by row
+    (dir()-based introspection in configure_headers/values_csv/excel), which causes
+    N+1 queries without this. select_related/prefetch_related resolves them upfront.
+    """
+    return findings.select_related(
+        "test__test_type",
+        "test__engagement",
+        "test__engagement__product",
+        "test__engagement__product__prod_type",
+        "defect_review_requested_by",
+        "duplicate_finding",
+        "last_reviewed_by",
+        "mitigated_by",
+        "reporter",
+        "review_requested_by",
+        "sonarqube_issue",
+    ).prefetch_related("tags", "endpoints", "vulnerability_id_set", "risk_acceptance_set", "finding_group_set")
 
 
 def get_name_key(user, product):
@@ -142,6 +166,27 @@ def async_generate_report(request_data: dict):
         logger.error(f"REPORT FINDING: Unsupported format: {format_type}")
         raise Exception(400, f"Unsupported report format: {format_type}")
     
+    report_class.generate_report()
+
+
+@app.task()
+def async_generate_findings_csv_export_api(request_data: dict):
+    """
+    Same as async_generate_report(format=csv) but for the API v2 findings
+    endpoint, where findings are already filtered using ApiFindingFilter
+    instead of the web report's URL-path convention.
+    """
+    logger.debug(f"REPORT FINDING: async_generate_findings_csv_export_api {request_data}")
+    request = CustomRequest(**request_data)
+    findings = get_authorized_findings(Permissions.Finding_View, user=request.user)
+    if settings.ENABLE_FILTER_FOR_TAG_RED_TEAM:
+        findings = exclude_test_or_finding_with_tag(findings)
+    findings = ApiFindingFilter(request.GET, queryset=findings, request=request).qs
+    findings = optimize_findings_for_report(findings)
+    if findings.count() == 0:
+        raise Exception(500, "No findings found for the report.")
+
+    report_class = CSVReportManager(findings, request)
     report_class.generate_report()
 
 
