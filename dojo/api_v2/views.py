@@ -1,5 +1,6 @@
 import os
 import base64
+import csv
 import logging
 import mimetypes
 from datetime import datetime
@@ -185,7 +186,13 @@ from dojo.product_type.queries import (
     get_authorized_product_type_members,
     get_authorized_product_types,
 )
+from dojo.reports.helper import get_excludes
+from dojo.reports import helper as helper_reports
+from dojo.reports.utils import configure_headers_csv, configure_values_csv
 from dojo.reports.views import (
+    EXCEL_CHAR_LIMIT,
+    get_attributes,
+    get_foreign_keys,
     prefetch_related_findings_for_report,
     report_url_resolver,
 )
@@ -1169,6 +1176,65 @@ class FindingViewSet(
             logger.debug(f"BULK_CLOSE: finish process Success {success}")
             logger.debug(f"BULK_CLOSE: finish process Error {errors}")
             return http_response.ok(data={"success": success, "errors": errors})
+
+    @extend_schema(
+        methods=["GET"],
+        responses={status.HTTP_200_OK: OpenApiTypes.BINARY},
+    )
+    @action(detail=False, methods=["get"], url_path="csv_export")
+    def csv_export(self, request):
+        """
+        GET /findings/csv_export/
+
+        Exports the findings matching the current list filters (same filters
+        supported by the findings list endpoint) as a CSV file. When the
+        number of matching findings reaches MAXIMUM_FINDINGS_IN_REPORT and
+        ENABLE_ASYNCHRONOUS_REPORT_GENERATION is enabled, the export is
+        generated in the background and a notification/email is sent instead.
+        """
+        findings = helper_reports.optimize_findings_for_report(self.filter_queryset(self.get_queryset()))
+        max_findings = GeneralSettings.get_value("MAXIMUM_FINDINGS_IN_REPORT", 1000)
+
+        if (
+            GeneralSettings.get_value("ENABLE_ASYNCHRONOUS_REPORT_GENERATION", False)
+            and findings.count() >= max_findings
+        ):
+            request_data = {
+                "query_dict_get": request.META.get("QUERY_STRING", ""),
+                "query_string_meta": request.META.get("QUERY_STRING", ""),
+                "user_id": request.user.id,
+            }
+            helper_reports.async_generate_findings_csv_export_api.apply_async(args=(request_data,))
+            return http_response.accepted(
+                message=(
+                    f"The number of findings exceeds {max_findings}, so the CSV export will be "
+                    f"generated asynchronously and sent to your email ({request.user.email}) "
+                    "once it's ready."
+                ),
+            )
+
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = "attachment; filename=findings.csv"
+        writer = csv.writer(response)
+        allowed_attributes = get_attributes()
+        excludes_list = get_excludes()
+        allowed_foreign_keys = get_foreign_keys()
+        first_row = True
+
+        generic_fields = None
+        column_order = None
+        for finding in findings:
+            if first_row:
+                fields = []
+                generic_fields, column_order = configure_headers_csv(finding, excludes_list, allowed_attributes, fields)
+                writer.writerow(fields)
+                first_row = False
+            else:
+                fields = []
+                configure_values_csv(finding, excludes_list, allowed_foreign_keys, allowed_attributes, fields, EXCEL_CHAR_LIMIT, generic_fields, column_order)
+                writer.writerow(fields)
+
+        return response
 
     @extend_schema(
         methods=["POST"],

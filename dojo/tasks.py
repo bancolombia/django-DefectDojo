@@ -455,7 +455,8 @@ def update_next_sprint_start_date(*args, **kwargs):
         max_batch_size = 1000
         findings_queryset = (
             Finding.objects
-            .filter(active=True, sla_start_date__isnull=True)
+            .filter(Q(sla_start_date__isnull=True) | Q(sla_expiration_date__isnull=True))
+            .filter(active=True)
             .filter(test__tags__name__in=test_tags)
             .select_related('test__engagement__product__prod_type')  # Optimize related object access
             .only('id', 'sla_start_date', 'sla_expiration_date', 'test__engagement__product__prod_type', 'tags')

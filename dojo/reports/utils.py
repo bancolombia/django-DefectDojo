@@ -46,150 +46,118 @@ def upload_s3(session_s3, buffer, bucket, key):
         logger.error(f"REPORT FINDING: Error uploading to S3: {e}")
         raise Exception("Failed to upload to S3 after multiple attempts due to expired token.")
 
-def configure_headers_excel(finding, worksheet, font_bold, excludes_list, allowed_attributes, row_num, col_num):
-    for key in dir(finding):
-        try:
-            if key not in excludes_list and (not callable(getattr(finding, key)) or key in allowed_attributes) and not key.startswith("_"):
-                if callable(getattr(finding, key)) and key not in allowed_attributes:
-                    continue
-                cell = worksheet.cell(row=row_num, column=col_num, value=key)
-                cell.font = font_bold
-                col_num += 1
-        except Exception as exc:
-            logger.warning(f"Error in attribute: {key}" + str(exc))
-            cell = worksheet.cell(row=row_num, column=col_num, value=key)
-            col_num += 1
-            continue
-    cell = worksheet.cell(row=row_num, column=col_num, value="risk_acceptance_expiration_date")
-    cell.font = font_bold
-    col_num += 1
-    cell = worksheet.cell(row=row_num, column=col_num, value="environment_image")
-    cell.font = font_bold
-    col_num += 1
-    cell = worksheet.cell(row=row_num, column=col_num, value="cluster")
-    cell.font = font_bold
-    col_num += 1
-    cell = worksheet.cell(row=row_num, column=col_num, value="registry_image")
-    cell.font = font_bold
-    col_num += 1
-    cell = worksheet.cell(row=row_num, column=col_num, value="repository_image")
-    cell.font = font_bold
-    col_num += 1
-    cell = worksheet.cell(row=row_num, column=col_num, value="namespace_image")
-    cell.font = font_bold
-    col_num += 1
-    cell = worksheet.cell(row=row_num, column=col_num, value="tag_image")
-    cell.font = font_bold
-    col_num += 1
-    cell = worksheet.cell(row=row_num, column=col_num, value="cloud_id")
-    cell.font = font_bold
-    col_num += 1
-    cell = worksheet.cell(row=row_num, column=col_num, value="hostname")
-    cell.font = font_bold
-    col_num += 1
-    cell = worksheet.cell(row=row_num, column=col_num, value="custom_id")
-    cell.font = font_bold
-    col_num += 1
-    cell = worksheet.cell(row=row_num, column=col_num, value="found_by")
-    cell.font = font_bold
-    col_num += 1
-    cell = worksheet.cell(row=row_num, column=col_num, value="engagement")
-    cell.font = font_bold
-    col_num += 1
-    cell = worksheet.cell(row=row_num, column=col_num, value="area_responsible")
-    cell.font = font_bold
-    col_num += 1
-    cell = worksheet.cell(row=row_num, column=col_num, value="product")
-    cell.font = font_bold
-    col_num += 1
-    cell = worksheet.cell(row=row_num, column=col_num, value="product_type")
-    cell.font = font_bold
-    col_num += 1
-    cell = worksheet.cell(row=row_num, column=col_num, value="product_type_environment")
-    cell.font = font_bold
-    col_num += 1
-    cell = worksheet.cell(row=row_num, column=col_num, value="company")
-    cell.font = font_bold
-    col_num += 1
-    cell = worksheet.cell(row=row_num, column=col_num, value="endpoints")
-    cell.font = font_bold
-    col_num += 1
-    cell = worksheet.cell(row=row_num, column=col_num, value="vulnerability_ids")
-    cell.font = font_bold
-    col_num += 1
-    cell = worksheet.cell(row=row_num, column=col_num, value="tags")
-    cell.font = font_bold
-    col_num += 1
-    cell = worksheet.cell(row=row_num, column=col_num, value="classification")
-    cell.font = font_bold
-    col_num += 1
+# desired report column order; anything not listed here keeps its current
+# relative order and is appended after these
+REPORT_COLUMN_ORDER = [
+    "id", "title", "description", "component_name", "component_version", "mitigation",
+    "vulnerability_ids", "references", "priority_classification", "priority", "cvssv3_score",
+    "created", "sla_start_date", "sla_expiration_date", "sla_age", "sla_days_remaining", "active", "false_p", "is_mitigated", "mitigated",
+    "risk_status", "accepted_by", "risk_acceptance_expiration_date", "long_term_acceptance", "product_type_environment", "product_type",
+    "product", "engagement", "area_responsible", "company", "reporter", "reporter_name", "tags", "custom_id",
+    "environment_device", "account_id_device",
+    "environment_image", "cluster", "registry_image", "repository_image", "namespace_image", "tag_image",
+    "cloud_id", "item_class", "class_id", "environment_device", "account_id_device"
+]
 
-def configure_values_excel(finding, worksheet, excludes_list, allowed_foreign_keys, allowed_attributes, row_num, col_num, EXCEL_CHAR_LIMIT):
+
+def get_column_order(names):
+    """Index permutation putting REPORT_COLUMN_ORDER columns first (in that order),
+    then any remaining columns in their original relative order."""
+    priority = {name: i for i, name in enumerate(REPORT_COLUMN_ORDER)}
+    return sorted(range(len(names)), key=lambda i: priority.get(names[i], len(REPORT_COLUMN_ORDER)))
+
+def get_generic_field_keys(finding, excludes_list, allowed_attributes):
+    """
+    The set of reportable attribute names is the same for every finding of the same
+    model, so callers should compute this once (from the header row) and reuse the
+    returned list for every subsequent data row instead of re-walking dir(finding).
+    """
+    keys = []
     for key in dir(finding):
+        # excludes_list/underscore check must run before getattr() so known-bad
+        # accessors (e.g. github_issue/jira_issue reverse o2o, objects manager)
+        # are never touched, matching the original short-circuited condition.
+        if key in excludes_list or key.startswith("_"):
+            continue
         try:
-            if key not in excludes_list and (not callable(getattr(finding, key)) or key in allowed_attributes) and not key.startswith("_"):
-                if not callable(getattr(finding, key)):
-                    value = finding.__dict__.get(key)
-                if (key in allowed_foreign_keys or key in allowed_attributes) and getattr(finding, key):
-                    if callable(getattr(finding, key)):
-                        func = getattr(finding, key)
-                        result = func()
-                        value = result
-                    else:
-                        value = str(getattr(finding, key))
-                if value and isinstance(value, datetime):
-                    value = value.replace(tzinfo=None)
-                worksheet.cell(row=row_num, column=col_num, value=value)
-                col_num += 1
+            is_callable = callable(getattr(finding, key))
+            if not is_callable or key in allowed_attributes:
+                if is_callable and key not in allowed_attributes:
+                    continue
+                keys.append(key)
         except Exception as exc:
             logger.warning(f"Error in attribute: {key}" + str(exc))
-            worksheet.cell(row=row_num, column=col_num, value="Value not supported")
-            col_num += 1
+            keys.append(key)
+            continue
+    return keys
+
+def configure_headers_excel(finding, worksheet, font_bold, excludes_list, allowed_attributes, row_num, col_num):
+    generic_fields = get_generic_field_keys(finding, excludes_list, allowed_attributes)
+    raw_fields = list(generic_fields)
+    raw_fields.extend((
+        "risk_acceptance_expiration_date",
+        "environment_image",
+        "cluster",
+        "registry_image",
+        "repository_image",
+        "namespace_image",
+        "tag_image",
+        "cloud_id",
+        "custom_id",
+        "engagement",
+        "area_responsible",
+        "product",
+        "product_type",
+        "product_type_environment",
+        "company",
+        "vulnerability_ids",
+        "tags",
+        "reporter_name",
+        "environment_device",
+        "account_id_device",
+        "classification",
+    ))
+    order = get_column_order(raw_fields)
+    for i in order:
+        cell = worksheet.cell(row=row_num, column=col_num, value=raw_fields[i])
+        cell.font = font_bold
+        col_num += 1
+    return generic_fields, order
+
+def configure_values_excel(finding, worksheet, excludes_list, allowed_foreign_keys, allowed_attributes, row_num, col_num, EXCEL_CHAR_LIMIT, generic_fields=None, order=None):
+    if generic_fields is None:
+        generic_fields = get_generic_field_keys(finding, excludes_list, allowed_attributes)
+    raw_values = []
+    for key in generic_fields:
+        try:
+            attr_value = getattr(finding, key)
+            is_callable = callable(attr_value)
+            value = finding.__dict__.get(key) if not is_callable else None
+            if (key in allowed_foreign_keys or key in allowed_attributes) and attr_value:
+                value = attr_value() if is_callable else str(attr_value)
+            if value and isinstance(value, datetime):
+                value = value.replace(tzinfo=None)
+            raw_values.append(value)
+        except Exception as exc:
+            logger.warning(f"Error in attribute: {key}" + str(exc))
+            raw_values.append("Value not supported")
             continue
     value_ra_expiration_date = finding.risk_acceptance.expiration_date.strftime("%Y-%m-%d") if finding.risk_acceptance else ""
-    worksheet.cell(row=row_num, column=col_num, value=value_ra_expiration_date)
-    col_num += 1
-    worksheet.cell(row=row_num, column=col_num, value=extract_field_from_text_regex(finding.impact, "Environment"))
-    col_num += 1
-    worksheet.cell(row=row_num, column=col_num, value=extract_field_from_text_html(finding.description, "Cluster:"))
-    col_num += 1
-    worksheet.cell(row=row_num, column=col_num, value=extract_field_from_text_regex(finding.impact, "Registry"))
-    col_num += 1
-    worksheet.cell(row=row_num, column=col_num, value=extract_field_from_text_regex(finding.impact, "Repository"))
-    col_num += 1
-    worksheet.cell(row=row_num, column=col_num, value=extract_field_from_text_html(finding.description, "Namespaces:"))
-    col_num += 1
-    worksheet.cell(row=row_num, column=col_num, value=extract_field_from_text_html(finding.description, "Tag:"))
-    col_num += 1
-    worksheet.cell(row=row_num, column=col_num, value=extract_field_from_text_html(finding.description, "Cloud Id:"))
-    col_num += 1
-    worksheet.cell(row=row_num, column=col_num, value=extract_field_from_text_html(finding.description, "Hostname:"))
-    col_num += 1
-    worksheet.cell(row=row_num, column=col_num, value=extract_field_from_text_html(finding.description, "Custom Id:"))
-    col_num += 1
-    worksheet.cell(row=row_num, column=col_num, value=finding.test.test_type.name)
-    col_num += 1
-    worksheet.cell(row=row_num, column=col_num, value=finding.test.engagement.name)
-    col_num += 1
-    worksheet.cell(row=row_num, column=col_num, value=extract_field_from_text_regex(finding.test.engagement.product.description, "AREA RESPONSABLE TI"))
-    col_num += 1
-    worksheet.cell(row=row_num, column=col_num, value=finding.test.engagement.product.name)
-    col_num += 1
-    worksheet.cell(row=row_num, column=col_num, value=finding.test.engagement.product.prod_type.name)
-    col_num += 1
-    worksheet.cell(row=row_num, column=col_num, value=extract_field_from_text_regex(finding.test.engagement.product.prod_type.description, "Environment"))
-    col_num += 1
-    worksheet.cell(row=row_num, column=col_num, value=extract_field_from_text_html(finding.description, "Company:"))
-    col_num += 1
-
-    endpoint_value = ""
-    for endpoint in finding.endpoints.all():
-        endpoint_value += f"{endpoint}; \n"
-    endpoint_value = endpoint_value.removesuffix("; \n")
-    if len(endpoint_value) > EXCEL_CHAR_LIMIT:
-        endpoint_value = endpoint_value[:EXCEL_CHAR_LIMIT - 3] + "..."
-    worksheet.cell(row=row_num, column=col_num, value=endpoint_value)
-    col_num += 1
+    raw_values.append(value_ra_expiration_date)
+    raw_values.append(extract_field_from_text_regex(finding.impact, "Environment"))
+    raw_values.append(extract_field_from_text_html(finding.description, "Cluster:"))
+    raw_values.append(extract_field_from_text_regex(finding.impact, "Registry"))
+    raw_values.append(extract_field_from_text_regex(finding.impact, "Repository"))
+    raw_values.append(extract_field_from_text_html(finding.description, "Namespaces:"))
+    raw_values.append(extract_field_from_text_html(finding.description, "Tag:"))
+    raw_values.append(extract_field_from_text_html(finding.description, "Cloud Id:"))
+    raw_values.append(extract_field_from_text_html(finding.description, "Custom Id:"))
+    raw_values.append(finding.test.engagement.name)
+    raw_values.append(extract_field_from_text_regex(finding.test.engagement.product.description, "AREA RESPONSABLE TI"))
+    raw_values.append(finding.test.engagement.product.name)
+    raw_values.append(finding.test.engagement.product.prod_type.name)
+    raw_values.append(extract_field_from_text_regex(finding.test.engagement.product.prod_type.description, "Environment"))
+    raw_values.append(extract_field_from_text_regex(finding.test.engagement.product.description, "COMPANY"))
 
     vulnerability_ids_value = ""
     for num_vulnerability_ids, vulnerability_id in enumerate(finding.vulnerability_ids):
@@ -200,35 +168,33 @@ def configure_values_excel(finding, worksheet, excludes_list, allowed_foreign_ke
     if finding.cve and vulnerability_ids_value.find(finding.cve) < 0:
         vulnerability_ids_value += finding.cve
     vulnerability_ids_value = vulnerability_ids_value.removesuffix("; \n")
-    worksheet.cell(row=row_num, column=col_num, value=vulnerability_ids_value)
-    col_num += 1
+    raw_values.append(vulnerability_ids_value)
     # tags
     tags_value = ""
     for tag in finding.tags.all():
         tags_value += f"{tag}; \n"
     tags_value = tags_value.removesuffix("; \n")
-    worksheet.cell(row=row_num, column=col_num, value=tags_value)
-    col_num += 1
+    raw_values.append(tags_value)
+    raw_values.append(finding.reporter.get_full_name() if finding.reporter else "")
+    raw_values.append(extract_field_from_text_regex(finding.test.engagement.description, "SYSTEM ENVIRONMENT"))
+    raw_values.append(extract_field_from_text_regex(finding.test.engagement.description, "ACCOUNT ID"))
     # classification
     if "tenable" in tags_value or "prisma" in tags_value:
         classification = extract_field_from_text_regex(finding.test.engagement.description, "ITEM")
     else:
         classification = extract_field_from_text_regex(finding.test.engagement.product.description, "ITEM")
-    worksheet.cell(row=row_num, column=col_num, value=classification)
-    col_num += 1
+    raw_values.append(classification)
+
+    if order is None:
+        order = range(len(raw_values))
+    for i in order:
+        worksheet.cell(row=row_num, column=col_num, value=raw_values[i])
+        col_num += 1
 
 def configure_headers_csv(finding, excludes_list, allowed_attributes, fields):
-    for key in dir(finding):
-        try:
-            if key not in excludes_list and (not callable(getattr(finding, key)) or key in allowed_attributes) and not key.startswith("_"):
-                if callable(getattr(finding, key)) and key not in allowed_attributes:
-                    continue
-                fields.append(key)
-        except Exception as exc:
-            logger.error("Error in attribute: " + str(exc))
-            fields.append(key)
-            continue
-    fields.extend((
+    generic_fields = get_generic_field_keys(finding, excludes_list, allowed_attributes)
+    raw_fields = list(generic_fields)
+    raw_fields.extend((
         "risk_acceptance_expiration_date",
         "environment_image",
         "cluster",
@@ -237,68 +203,60 @@ def configure_headers_csv(finding, excludes_list, allowed_attributes, fields):
         "namespace_image",
         "tag_image",
         "cloud_id",
-        "hostname",
         "custom_id",
-        "found_by",
         "engagement",
         "area_responsible",
         "product",
         "product_type",
         "product_type_environment",
         "company",
-        "endpoints",
         "vulnerability_ids",
         "tags",
-        "classification"
+        "reporter_name",
+        "environment_device",
+        "account_id_device",
+        "item_class",
+        "class_id"
     ))
+    order = get_column_order(raw_fields)
+    fields.extend(raw_fields[i] for i in order)
+    return generic_fields, order
 
-def configure_values_csv(finding, excludes_list, allowed_foreign_keys, allowed_attributes, fields, EXCEL_CHAR_LIMIT):
-    for key in dir(finding):
+def configure_values_csv(finding, excludes_list, allowed_foreign_keys, allowed_attributes, fields, EXCEL_CHAR_LIMIT, generic_fields=None, order=None):
+    if generic_fields is None:
+        generic_fields = get_generic_field_keys(finding, excludes_list, allowed_attributes)
+    raw_values = []
+    for key in generic_fields:
         try:
-            if key not in excludes_list and (not callable(getattr(finding, key)) or key in allowed_attributes) and not key.startswith("_"):
-                if not callable(getattr(finding, key)):
-                    value = finding.__dict__.get(key)
-                if (key in allowed_foreign_keys or key in allowed_attributes) and getattr(finding, key):
-                    if callable(getattr(finding, key)):
-                        func = getattr(finding, key)
-                        result = func()
-                        value = result
-                    else:
-                        value = str(getattr(finding, key))
-                if value and isinstance(value, str):
-                    value = value.replace("\n", " NEWLINE ").replace("\r", "")
-                fields.append(value)
+            attr_value = getattr(finding, key)
+            is_callable = callable(attr_value)
+            value = finding.__dict__.get(key) if not is_callable else None
+            if (key in allowed_foreign_keys or key in allowed_attributes) and attr_value:
+                value = attr_value() if is_callable else str(attr_value)
+            if value and isinstance(value, str):
+                value = value.replace("\n", " NEWLINE ").replace("\r", "")
+            raw_values.append(value)
         except Exception as exc:
             logger.error("Error in attribute: " + str(exc))
-            fields.append("Value not supported")
+            raw_values.append("Value not supported")
             continue
     
     value_ra_expiration_date = finding.risk_acceptance.expiration_date.strftime("%Y-%m-%d") if finding.risk_acceptance else ""
-    fields.append(value_ra_expiration_date)
-    fields.append(extract_field_from_text_regex(finding.impact, "Environment"))
-    fields.append(extract_field_from_text_html(finding.description, "Cluster:"))
-    fields.append(extract_field_from_text_regex(finding.impact, "Registry"))
-    fields.append(extract_field_from_text_regex(finding.impact, "Repository"))
-    fields.append(extract_field_from_text_html(finding.description, "Namespaces:"))
-    fields.append(extract_field_from_text_html(finding.description, "Tag:"))
-    fields.append(extract_field_from_text_html(finding.description, "Cloud Id:"))
-    fields.append(extract_field_from_text_html(finding.description, "Hostname:"))
-    fields.append(extract_field_from_text_html(finding.description, "Custom Id:"))
-    fields.append(finding.test.test_type.name)
-    fields.append(finding.test.engagement.name)
-    fields.append(extract_field_from_text_regex(finding.test.engagement.product.description, "AREA RESPONSABLE TI"))
-    fields.append(finding.test.engagement.product.name)
-    fields.append(finding.test.engagement.product.prod_type.name)
-    fields.append(extract_field_from_text_regex(finding.test.engagement.product.prod_type.description, "Environment"))
-    fields.append(extract_field_from_text_html(finding.description, "Company:"))
-
-    endpoint_value = ""
-    for endpoint in finding.endpoints.all():
-        endpoint_value += f"{endpoint}; "
-    endpoint_value = endpoint_value.removesuffix("; ")
-    if len(endpoint_value) > EXCEL_CHAR_LIMIT:
-        endpoint_value = endpoint_value[:EXCEL_CHAR_LIMIT - 3] + "..."
-    fields.append(endpoint_value)
+    raw_values.append(value_ra_expiration_date)
+    raw_values.append(extract_field_from_text_regex(finding.impact, "Environment"))
+    raw_values.append(extract_field_from_text_html(finding.description, "Cluster:"))
+    raw_values.append(extract_field_from_text_regex(finding.impact, "Registry"))
+    raw_values.append(extract_field_from_text_regex(finding.impact, "Repository"))
+    raw_values.append(extract_field_from_text_html(finding.description, "Namespaces:"))
+    raw_values.append(extract_field_from_text_html(finding.description, "Tag:"))
+    raw_values.append(extract_field_from_text_html(finding.description, "Cloud Id:"))
+    raw_values.append(extract_field_from_text_html(finding.description, "Custom Id:"))
+    raw_values.append(finding.test.engagement.name)
+    raw_values.append(extract_field_from_text_regex(finding.test.engagement.product.description, "AREA RESPONSABLE TI"))
+    raw_values.append(finding.test.engagement.product.name)
+    raw_values.append(finding.test.engagement.product.prod_type.name)
+    raw_values.append(extract_field_from_text_regex(finding.test.engagement.product.prod_type.description, "Environment"))
+    raw_values.append(extract_field_from_text_regex(finding.test.engagement.product.description, "COMPANY"))
 
     vulnerability_ids_value = ""
     for num_vulnerability_ids, vulnerability_id in enumerate(finding.vulnerability_ids):
@@ -309,7 +267,7 @@ def configure_values_csv(finding, excludes_list, allowed_foreign_keys, allowed_a
     if finding.cve and vulnerability_ids_value.find(finding.cve) < 0:
         vulnerability_ids_value += finding.cve
     vulnerability_ids_value = vulnerability_ids_value.removesuffix("; ")
-    fields.append(vulnerability_ids_value)
+    raw_values.append(vulnerability_ids_value)
     # Tags
     tags_value = ""
     for num_tags, tag in enumerate(finding.tags.all()):
@@ -318,10 +276,22 @@ def configure_values_csv(finding, excludes_list, allowed_foreign_keys, allowed_a
             break
         tags_value += f"{tag}; "
     tags_value = tags_value.removesuffix("; ")
-    fields.append(tags_value)
-    # Classification
-    if "tenable" in tags_value or "prisma" in tags_value:
-        classification = extract_field_from_text_regex(finding.test.engagement.description, "ITEM")
-    else:
+    raw_values.append(tags_value)
+    raw_values.append(finding.reporter.get_full_name() if finding.reporter else "")
+    raw_values.append(extract_field_from_text_regex(finding.test.engagement.description, "SYSTEM ENVIRONMENT"))
+    raw_values.append(extract_field_from_text_regex(finding.test.engagement.description, "ACCOUNT ID"))
+    # Item Class
+    classification = extract_field_from_text_regex(finding.test.engagement.description, "ITEM")
+    if not classification:
         classification = extract_field_from_text_regex(finding.test.engagement.product.description, "ITEM")
-    fields.append(classification)
+    raw_values.append(classification)
+
+    # Class ID
+    class_id = extract_field_from_text_regex(finding.test.engagement.description, "CLASSID")
+    if not class_id:
+        class_id = extract_field_from_text_regex(finding.test.engagement.product.description, "CLASSID")
+    raw_values.append(class_id)
+
+    if order is None:
+        order = range(len(raw_values))
+    fields.extend(raw_values[i] for i in order)

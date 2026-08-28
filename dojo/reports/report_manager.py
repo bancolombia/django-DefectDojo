@@ -30,6 +30,8 @@ class BaseReportManager(ABC):
         self.user = request.user
         self.excel_char_limit = 32767
         self.fields = None
+        self.generic_fields = None
+        self.column_order = None
         self.request = request
         self.findings = self.exclude_red_team(findings, request)
         self.bucket = GeneralSettings.get_value("BUCKET_NAME_REPORT", "")
@@ -39,7 +41,7 @@ class BaseReportManager(ABC):
         self.session_s3 = boto3.Session().client('s3', region_name=settings.AWS_REGION, config=Config(signature_version='s3v4'))
         self.buffer = io.StringIO()
         self.allowed_attributes = self.get_attributes()
-        self.allowed_foreign_keys = self.get_attributes()
+        self.allowed_foreign_keys = self.get_foreign_keys()
         self.first_row = True 
         self.url_presigned = ""
         self.findings_query = self.add_findings_data()
@@ -101,7 +103,7 @@ class BaseReportManager(ABC):
         findings = self.add_findings_data()
         excludes_list = helper_reports.get_excludes()
         allowed_attributes = self.get_attributes()
-        allowed_foreign_keys = self.get_attributes()
+        allowed_foreign_keys = self.get_foreign_keys()
         if self.findigns_all_counter <= self.chunk_size:
             logger.info(f"REPORT FINDING: Using SINGLE upload for {self.findigns_all_counter} findings")
             self._generate_single_upload(findings, excludes_list, allowed_attributes, allowed_foreign_keys)
@@ -142,9 +144,11 @@ class BaseReportManager(ABC):
     def _generate_single_upload(self, findings, excludes_list, allowed_attributes, allowed_foreign_keys):
         buffer_size_mb = sys.getsizeof(findings) / (1024 * 1024) 
         logger.info(f"REPORT FINDING: size of findings: {buffer_size_mb:.2f} MB")
-        for finding in findings.iterator(chunk_size=1000):
+        log_every = max(self.chunk_size // 10, 1)
+        for counter, finding in enumerate(findings.iterator(chunk_size=1000), start=1):
             self._add_finding_in_buffer(finding, excludes_list, allowed_attributes, allowed_foreign_keys)
-            logger.info(f"REPORT FINDING: buffer size: {sys.getsizeof(self.buffer)} bytes")
+            if counter % log_every == 0:
+                logger.info(f"REPORT FINDING: buffer size: {sys.getsizeof(self.buffer)} bytes ({counter} findings)")
         return True
 
     def _generate_multipart_upload(self, findings, excludes_list, allowed_attributes, allowed_foreign_keys):
@@ -153,24 +157,28 @@ class BaseReportManager(ABC):
             current_buffer_size = 0
             self.multipart_uploader.start_upload()
             self.first_row = True
+            # logging (and re-encoding the buffer) on every single finding is a major
+            # slowdown at scale, so only do it periodically instead of every iteration
+            log_every = max(self.chunk_size // 10, 1)
             for counter, finding in enumerate(findings.iterator(chunk_size=self.chunk_size), start=1):
-                logger.info(f"REPORT FINDING: Processing finding {counter} of {self.findigns_all_counter}")
                 self._add_finding_in_buffer(finding, excludes_list, allowed_attributes, allowed_foreign_keys)
+                if counter % log_every == 0:
+                    logger.info(f"REPORT FINDING: Processing finding {counter} of {self.findigns_all_counter}")
 
                 if counter % self.chunk_size == 0:
                     buffer_value = self.buffer.getvalue()
                     if isinstance(buffer_value, str):
-                        current_buffer_size = len(buffer_value.encode('utf-8'))
-                    elif isinstance(buffer_value, bytes):
-                        current_buffer_size = len(buffer_value)
-                    else:
+                        buffer_value = buffer_value.encode('utf-8')
+                    elif not isinstance(buffer_value, bytes):
                         logger.error(f"REPORT FINDING: Unknown buffer type: {type(buffer_value)}")
+                        buffer_value = b""
+                    current_buffer_size = len(buffer_value)
                     current_size_mb = current_buffer_size / (1024 * 1024)
                     logger.info(f"REPORT FINDING: Size report with {current_size_mb:.2f}MB ({counter} findings)")
                     if current_buffer_size >= self.MIN_PART_SIZE:
                         self.save_report()
                         logger.info(f"REPORT FINDING: Uploading part with {current_size_mb:.2f}MB ({counter} findings)")
-                        self.multipart_uploader.upload_part(self.buffer.getvalue())
+                        self.multipart_uploader.upload_part(buffer_value)
                         self.buffer.seek(0)
                         self.buffer.truncate(0)
                         logger.info("REPORT FINDING: cleand buffer after upload")
@@ -233,7 +241,7 @@ class CSVReportManager(BaseReportManager):
         if self.first_row:
             fields = []
             self.fields = fields
-            configure_headers_csv(finding, excludes_list, allowed_attributes, fields)
+            self.generic_fields, self.column_order = configure_headers_csv(finding, excludes_list, allowed_attributes, fields)
             self.fields = fields
             self.add_extra_headers()
 
@@ -242,7 +250,7 @@ class CSVReportManager(BaseReportManager):
         self.first_row = False
         if not self.first_row:
             fields = []
-            configure_values_csv(finding, excludes_list, allowed_foreign_keys, allowed_attributes, fields, self.excel_char_limit)
+            configure_values_csv(finding, excludes_list, allowed_foreign_keys, allowed_attributes, fields, self.excel_char_limit, self.generic_fields, self.column_order)
             self.fields = fields
             self.finding = finding
             self.add_extra_values()
@@ -290,14 +298,14 @@ class ExcelReportManager(BaseReportManager):
         ):
         if self.first_row:
             col_num = 1
-            configure_headers_excel(finding, self.worksheet, self.font_bold, excludes_list, allowed_attributes, self.row_num, col_num)
+            self.generic_fields, self.column_order = configure_headers_excel(finding, self.worksheet, self.font_bold, excludes_list, allowed_attributes, self.row_num, col_num)
             self.col_num = col_num
             self.row_num += 1
             self.add_extra_headers()
         self.first_row = False
         if not self.first_row:
             col_num = 1
-            configure_values_excel(finding, self.worksheet, excludes_list, allowed_foreign_keys, allowed_attributes, self.row_num, col_num, self.EXCEL_CHAR_LIMIT)
+            configure_values_excel(finding, self.worksheet, excludes_list, allowed_foreign_keys, allowed_attributes, self.row_num, col_num, self.EXCEL_CHAR_LIMIT, self.generic_fields, self.column_order)
             self.col_num = col_num
             self.row_num = self.row_num
             self.findings = finding

@@ -830,12 +830,14 @@ class CSVExportView(View):
         allowed_foreign_keys = get_foreign_keys()
         first_row = True
 
+        generic_fields = None
+        column_order = None
         for finding in findings:
             self.finding = finding
             if first_row:
                 fields = []
                 self.fields = fields
-                configure_headers_csv(finding, excludes_list, allowed_attributes, fields)
+                generic_fields, column_order = configure_headers_csv(finding, excludes_list, allowed_attributes, fields)
                 self.fields = fields
                 self.add_extra_headers()
 
@@ -844,7 +846,7 @@ class CSVExportView(View):
                 first_row = False
             if not first_row:
                 fields = []
-                configure_values_csv(finding, excludes_list, allowed_foreign_keys, allowed_attributes, fields, EXCEL_CHAR_LIMIT)
+                configure_values_csv(finding, excludes_list, allowed_foreign_keys, allowed_attributes, fields, EXCEL_CHAR_LIMIT, generic_fields, column_order)
                 self.fields = fields
                 self.finding = finding
                 self.add_extra_values()
@@ -928,11 +930,13 @@ class ExcelExportView(View):
         allowed_foreign_keys = get_foreign_keys()
 
         row_num = 1
+        generic_fields = None
+        column_order = None
         for finding in findings:
             logger.debug(f"processing finding: {finding.id}")
             if row_num == 1:
                 col_num = 1
-                configure_headers_excel(finding, worksheet, font_bold, excludes_list, allowed_attributes, row_num, col_num)
+                generic_fields, column_order = configure_headers_excel(finding, worksheet, font_bold, excludes_list, allowed_attributes, row_num, col_num)
                 self.row_num = row_num
                 self.col_num = col_num
                 self.add_extra_headers()
@@ -940,7 +944,7 @@ class ExcelExportView(View):
                 row_num = 2
             if row_num > 1:
                 col_num = 1
-                configure_values_excel(finding, worksheet, excludes_list, allowed_foreign_keys, allowed_attributes, row_num, col_num, EXCEL_CHAR_LIMIT)
+                configure_values_excel(finding, worksheet, excludes_list, allowed_foreign_keys, allowed_attributes, row_num, col_num, EXCEL_CHAR_LIMIT, generic_fields, column_order)
                 self.col_num = col_num
                 self.row_num = row_num
                 self.finding = finding
