@@ -180,7 +180,8 @@ def async_generate_findings_csv_export_api(request_data: dict):
     request = CustomRequest(**request_data)
     findings = get_authorized_findings(Permissions.Finding_View, user=request.user)
     if settings.ENABLE_FILTER_FOR_TAG_RED_TEAM:
-        findings = exclude_test_or_finding_with_tag(findings)
+        # crum has no request thread-local inside a celery worker, so pass the user explicitly
+        findings = exclude_test_or_finding_with_tag(findings, user=request.user)
     findings = ApiFindingFilter(request.GET, queryset=findings, request=request).qs
     findings = optimize_findings_for_report(findings)
     if findings.count() == 0:
