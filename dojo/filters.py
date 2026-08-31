@@ -3095,6 +3095,13 @@ class ApiRiskAcceptanceFilter(DojoFilter):
     expiration_date_before = DateFilter(field_name="expiration_date", lookup_expr="lte")
     expiration_date_after = DateFilter(field_name="expiration_date", lookup_expr="gte")
     expiring_within_days = NumberFilter(method='filter_expiring_within_days')
+    status = CharFilter(method='filter_status')
+
+    def filter_status(self, queryset, name, value):
+        if not value:
+            return queryset
+        return queryset.filter(accepted_findings__risk_status__icontains=value).distinct()
+
     
     def filter_accepted_by(self, queryset, name, value):
         if not value:

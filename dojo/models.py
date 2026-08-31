@@ -4243,13 +4243,18 @@ class Risk_Acceptance(models.Model):
     
     @property
     def status(self):
-        if self.is_expired:
-            return "Expired"
-        if self.accepted_date is not None:
-            return "Accepted"
-        if self.reviewed_date is not None:
-            return "Reviewed"
-        return "Draft"
+        """Status of the risk_acceptance based on the risk status of the findings in the risk acceptance"""
+        statuses = self.accepted_findings.values_list("risk_status", flat=True)
+        statuses = set(statuses)
+        if not statuses:        
+            return "No Findings"
+        if "Risk Pending" in statuses:
+            return "Risk Pending"
+        if "Risk Expired" in statuses:
+            return "Risk Expired"
+        if "Risk Rejected" in statuses:
+            return "Risk Rejected"
+        return statuses.pop()
 
     def copy(self, engagement=None):
         copy = _copy_model_util(self)
