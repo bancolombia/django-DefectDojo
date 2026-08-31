@@ -18,6 +18,7 @@ from dojo.api_v2.cross_approval.helpers import (
 from dojo.api_v2.cross_approval.models import CrossApprovalDiscussion, CrossApprovalExclusion, CrossApprovalRequest
 from dojo.api_v2.cross_approval.permissions import IsCrossApprovalReviewer, IsCrossApprovalSubmitter
 from dojo.api_v2.cross_approval.serializers import (
+    CrossApprovalExclusionSerializer,
     CrossApprovalDiscussionSerializer,
     CrossApprovalRequestSerializer,
 )
@@ -30,12 +31,34 @@ class CrossApprovalRequestViewSet(DeletePreviewModelMixin, ModelViewSet):
     serializer_class = CrossApprovalRequestSerializer
     permission_classes = (IsAuthenticated,)
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        request_id = self.request.query_params.get("id") if self.request else None
+        vulnerability_id = self.request.query_params.get("cve") if self.request else None
+        status = self.request.query_params.get("status") if self.request else None
+
+        if request_id:
+            queryset = queryset.filter(pk=request_id) if request_id.isdigit() else queryset.none()
+        if vulnerability_id:
+            queryset = queryset.filter(exclusions__vulnerability_id__icontains=vulnerability_id)
+        if status:
+            queryset = queryset.filter(status=status)
+        return queryset.distinct()
+
     def get_permissions(self):
         if self.action in {"approve", "reject"}:
             return [IsAuthenticated(), IsCrossApprovalReviewer()]
         if self.action in {"create", "update", "partial_update", "destroy", "expire", "expire_exclusion", "reopen_exclusion"}:
             return [IsAuthenticated(), IsCrossApprovalSubmitter()]
         return super().get_permissions()
+
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        notify_request_status(
+            instance,
+            "cross_approval_created",
+            f"Cross-approval request {instance.pk} created",
+        )
 
     @action(detail=False, methods=["get"], url_path="validate-vulnerability-id")
     def validate_vulnerability_id(self, request):
@@ -56,6 +79,62 @@ class CrossApprovalRequestViewSet(DeletePreviewModelMixin, ModelViewSet):
         ]
         return Response({"vulnerability_id": vulnerability_id, "conflicts": conflicts})
 
+    @action(detail=False, methods=["get"], url_path="base-images")
+    def base_images(self, request):
+        summaries = {}
+        image_name_filter = request.query_params.get("image_name", "").strip().casefold()
+        queryset = self.filter_queryset(self.get_queryset()).filter(status="approved").prefetch_related("exclusions")
+        today = timezone.localdate()
+        for cross_approval_request in queryset:
+            for exclusion in cross_approval_request.exclusions.all():
+                if not self._is_active_exclusion(exclusion, today):
+                    continue
+                for image_name in self._matching_image_names(exclusion, image_name_filter):
+                    self._add_base_image_summary(summaries, cross_approval_request, exclusion, image_name)
+        return Response(self._base_image_response(summaries))
+
+    def _is_active_exclusion(self, exclusion, today):
+        return not exclusion.expired_at and exclusion.expired_date >= today
+
+    def _matching_image_names(self, exclusion, image_name_filter):
+        image_names = set(exclusion.image_names or [])
+        if not image_name_filter:
+            return image_names
+        return [
+            image_name
+            for image_name in image_names
+            if image_name_filter in image_name.casefold()
+        ]
+
+    def _add_base_image_summary(self, summaries, cross_approval_request, exclusion, image_name):
+        summary = summaries.setdefault(
+            image_name,
+            {
+                "image_name": image_name,
+                "type": cross_approval_request.type,
+                "exclusion_count": 0,
+                "vulnerability_exclusions": {},
+            },
+        )
+        summary["exclusion_count"] += 1
+        vulnerability_id = exclusion.vulnerability_id
+        vulnerability_summary = summary["vulnerability_exclusions"].setdefault(
+            vulnerability_id,
+            {"vulnerability_id": vulnerability_id, "exclusions": []},
+        )
+        vulnerability_summary["exclusions"].append(
+            CrossApprovalExclusionSerializer(exclusion).data
+        )
+
+    def _base_image_response(self, summaries):
+        return [
+            {
+                **summary,
+                "vulnerability_exclusions": list(summary["vulnerability_exclusions"].values()),
+            }
+            for summary in summaries.values()
+        ]
+
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):
         return self._set_status(request, "approved")
@@ -70,6 +149,11 @@ class CrossApprovalRequestViewSet(DeletePreviewModelMixin, ModelViewSet):
         if instance.status != "approved":
             return Response({"detail": "Only approved requests can expire exclusions."}, status=400)
         expire_request_exclusions(instance)
+        notify_request_status(
+            instance,
+            "cross_approval_expired",
+            f"Cross-approval request {instance.pk} expired",
+        )
         return Response(self.get_serializer(instance).data)
 
     @action(detail=True, methods=["post"], url_path="expire-exclusion")
@@ -82,6 +166,11 @@ class CrossApprovalRequestViewSet(DeletePreviewModelMixin, ModelViewSet):
         if not exclusion:
             return Response({"detail": "Exclusion not found on this request."}, status=404)
         expire_cross_approval_exclusion(exclusion, request.user)
+        notify_request_status(
+            instance,
+            "cross_approval_expired",
+            f"Cross-approval request {instance.pk} exclusion expired",
+        )
         return Response(self.get_serializer(self.get_object()).data)
 
     @action(detail=True, methods=["post"], url_path="reopen-exclusion")
@@ -94,6 +183,11 @@ class CrossApprovalRequestViewSet(DeletePreviewModelMixin, ModelViewSet):
             return Response({"detail": "Exclusion not found on this request."}, status=404)
         if not reopen_cross_approval_exclusion(exclusion, request.user):
             return Response({"detail": "Only manually expired, non-expired exclusions can reopen."}, status=400)
+        notify_request_status(
+            instance,
+            "cross_approval_reopened",
+            f"Cross-approval request {instance.pk} exclusion reopened",
+        )
         return Response(self.get_serializer(self.get_object()).data)
 
     @action(detail=True, methods=["get", "post"])
@@ -134,4 +228,9 @@ class CrossApprovalRequestViewSet(DeletePreviewModelMixin, ModelViewSet):
             if instance.status == "approved":
                 for exclusion in instance.exclusions.all():
                     revert_cross_approval_exclusion(exclusion)
+            notify_request_status(
+                instance,
+                "cross_approval_deleted",
+                f"Cross-approval request {instance.pk} deleted",
+            )
             instance.delete()

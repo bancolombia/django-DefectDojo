@@ -1,8 +1,10 @@
 from contextlib import nullcontext
+from datetime import timedelta
 from unittest.mock import MagicMock, Mock, patch
 from types import SimpleNamespace
 
 from django.test import SimpleTestCase
+from django.utils import timezone
 from rest_framework.request import Request
 from rest_framework.test import APIRequestFactory
 
@@ -140,6 +142,113 @@ class CrossApprovalRequestValidationViewTest(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["conflicts"], [{"request_id": 9, "status": "rejected"}])
 
+    def test_filters_request_queryset_by_id_cve_and_status(self):
+        request = Request(APIRequestFactory().get(
+            "/api/v2/crossapproval_requests/",
+            {"id": "7", "cve": "CVE-1", "status": "approved"},
+        ))
+        queryset = MagicMock()
+        queryset.filter.return_value = queryset
+        queryset.distinct.return_value = queryset
+        view = CrossApprovalRequestViewSet()
+        view.request = request
+
+        with patch.object(CrossApprovalRequestViewSet, "queryset", queryset):
+            result = view.get_queryset()
+
+        self.assertEqual(result, queryset)
+        queryset.filter.assert_any_call(pk="7")
+        queryset.filter.assert_any_call(exclusions__vulnerability_id__icontains="CVE-1")
+        queryset.filter.assert_any_call(status="approved")
+        queryset.distinct.assert_called_once_with()
+
+    def test_invalid_request_id_filter_returns_empty_queryset(self):
+        request = Request(APIRequestFactory().get(
+            "/api/v2/crossapproval_requests/",
+            {"id": "not-a-number"},
+        ))
+        queryset = MagicMock()
+        queryset.none.return_value = queryset
+        queryset.distinct.return_value = queryset
+        view = CrossApprovalRequestViewSet()
+        view.request = request
+
+        with patch.object(CrossApprovalRequestViewSet, "queryset", queryset):
+            result = view.get_queryset()
+
+        self.assertEqual(result, queryset)
+        queryset.none.assert_called_once_with()
+
+    def test_groups_unique_base_images_across_requests(self):
+        active_expiration = timezone.localdate() + timedelta(days=1)
+        first_exclusion = SimpleNamespace(
+            vulnerability_id="VULN-1",
+            image_names=["registry.example.com/base:1.0", "registry.example.com/base:1.0"],
+            expired_at=None,
+            expired_date=active_expiration,
+        )
+        second_exclusion = SimpleNamespace(
+            vulnerability_id="VULN-2",
+            image_names=["registry.example.com/base:1.0", "registry.example.com/api:2.0"],
+            expired_at=None,
+            expired_date=active_expiration,
+        )
+        expired_exclusion = SimpleNamespace(
+            vulnerability_id="VULN-3",
+            image_names=["registry.example.com/base:1.0"],
+            expired_at=timezone.now(),
+            expired_date=active_expiration,
+        )
+        date_expired_exclusion = SimpleNamespace(
+            vulnerability_id="VULN-4",
+            image_names=["registry.example.com/base:1.0"],
+            expired_at=None,
+            expired_date=timezone.localdate() - timedelta(days=1),
+        )
+        requests = [
+            SimpleNamespace(
+                type="x86",
+                exclusions=SimpleNamespace(
+                    all=Mock(return_value=[first_exclusion, expired_exclusion])
+                ),
+            ),
+            SimpleNamespace(
+                type="ace",
+                exclusions=SimpleNamespace(
+                    all=Mock(return_value=[second_exclusion, date_expired_exclusion])
+                ),
+            ),
+        ]
+        queryset = MagicMock()
+        approved_queryset = MagicMock()
+        queryset.filter.return_value = approved_queryset
+        approved_queryset.prefetch_related.return_value = requests
+        view = CrossApprovalRequestViewSet()
+        view.get_queryset = Mock(return_value=queryset)
+        view.filter_queryset = Mock(return_value=queryset)
+
+        with patch(
+            "dojo.api_v2.cross_approval.views.CrossApprovalExclusionSerializer",
+            side_effect=lambda exclusion: SimpleNamespace(
+                data={"id": exclusion.vulnerability_id, "x86.image.name": exclusion.image_names}
+            ),
+        ):
+            response = view.base_images(Request(APIRequestFactory().get(
+                "/api/v2/crossapproval_requests/base-images/",
+                {"image_name": "base"},
+            )))
+
+        self.assertEqual(response.status_code, 200)
+        queryset.filter.assert_called_once_with(status="approved")
+        base_image = response.data[0]
+        self.assertEqual(base_image["image_name"], "registry.example.com/base:1.0")
+        self.assertEqual(base_image["type"], "x86")
+        self.assertEqual(base_image["exclusion_count"], 2)
+        self.assertEqual(
+            [item["vulnerability_id"] for item in base_image["vulnerability_exclusions"]],
+            ["VULN-1", "VULN-2"],
+        )
+
 
 class CrossApprovalPermissionTest(SimpleTestCase):
     def _user(self):
@@ -223,9 +332,25 @@ class CrossApprovalRequestWorkflowViewTest(SimpleTestCase):
         apply_exclusions.assert_called_once_with(instance)
         notify.assert_called_once()
 
+    def test_create_notifies_maintainers(self):
+        instance = SimpleNamespace(pk=7)
+        serializer = SimpleNamespace(save=Mock(return_value=instance))
+        view = CrossApprovalRequestViewSet()
+
+        with patch("dojo.api_v2.cross_approval.views.notify_request_status") as notify:
+            view.perform_create(serializer)
+
+        serializer.save.assert_called_once_with()
+        notify.assert_called_once_with(
+            instance,
+            "cross_approval_created",
+            "Cross-approval request 7 created",
+        )
+
     def test_destroy_reverts_approved_exclusions_before_deletion(self):
         exclusion = SimpleNamespace(pk=3)
         instance = SimpleNamespace(
+            pk=7,
             status="approved",
             exclusions=SimpleNamespace(all=Mock(return_value=[exclusion])),
             delete=Mock(),
@@ -235,15 +360,22 @@ class CrossApprovalRequestWorkflowViewTest(SimpleTestCase):
         with (
             patch("dojo.api_v2.cross_approval.views.transaction.atomic", return_value=nullcontext()),
             patch("dojo.api_v2.cross_approval.views.revert_cross_approval_exclusion") as revert,
+            patch("dojo.api_v2.cross_approval.views.notify_request_status") as notify,
         ):
             view.perform_destroy(instance)
 
         revert.assert_called_once_with(exclusion)
+        notify.assert_called_once_with(
+            instance,
+            "cross_approval_deleted",
+            "Cross-approval request 7 deleted",
+        )
         instance.delete.assert_called_once_with()
 
     def test_expire_exclusion_serializes_a_refreshed_request(self):
         exclusion = SimpleNamespace(pk=3)
         instance = SimpleNamespace(
+            pk=7,
             status="approved",
             exclusions=SimpleNamespace(
                 filter=Mock(return_value=SimpleNamespace(first=Mock(return_value=exclusion))),
@@ -254,15 +386,43 @@ class CrossApprovalRequestWorkflowViewTest(SimpleTestCase):
         view.get_object.side_effect = [instance, refreshed_instance]
         request = SimpleNamespace(data={"exclusion_id": 3}, user=SimpleNamespace())
 
-        with patch("dojo.api_v2.cross_approval.views.expire_cross_approval_exclusion"):
+        with (
+            patch("dojo.api_v2.cross_approval.views.expire_cross_approval_exclusion"),
+            patch("dojo.api_v2.cross_approval.views.notify_request_status") as notify,
+        ):
             response = view.expire_exclusion(request)
 
         self.assertEqual(response.status_code, 200)
+        notify.assert_called_once_with(
+            instance,
+            "cross_approval_expired",
+            "Cross-approval request 7 exclusion expired",
+        )
         view.get_serializer.assert_called_once_with(refreshed_instance)
+
+    def test_expire_request_notifies_maintainers(self):
+        instance = SimpleNamespace(pk=7, status="approved")
+        view = self._view_for(instance)
+        request = SimpleNamespace(user=SimpleNamespace())
+
+        with (
+            patch("dojo.api_v2.cross_approval.views.expire_request_exclusions") as expire_request,
+            patch("dojo.api_v2.cross_approval.views.notify_request_status") as notify,
+        ):
+            response = view.expire(request)
+
+        self.assertEqual(response.status_code, 200)
+        expire_request.assert_called_once_with(instance)
+        notify.assert_called_once_with(
+            instance,
+            "cross_approval_expired",
+            "Cross-approval request 7 expired",
+        )
 
     def test_reopen_exclusion_serializes_a_refreshed_request(self):
         exclusion = SimpleNamespace(pk=3)
         instance = SimpleNamespace(
+            pk=7,
             status="approved",
             exclusions=SimpleNamespace(
                 filter=Mock(return_value=SimpleNamespace(first=Mock(return_value=exclusion))),
@@ -273,11 +433,19 @@ class CrossApprovalRequestWorkflowViewTest(SimpleTestCase):
         view.get_object.side_effect = [instance, refreshed_instance]
         request = SimpleNamespace(data={"exclusion_id": 3}, user=SimpleNamespace())
 
-        with patch(
-            "dojo.api_v2.cross_approval.views.reopen_cross_approval_exclusion",
-            return_value=True,
+        with (
+            patch(
+                "dojo.api_v2.cross_approval.views.reopen_cross_approval_exclusion",
+                return_value=True,
+            ),
+            patch("dojo.api_v2.cross_approval.views.notify_request_status") as notify,
         ):
             response = view.reopen_exclusion(request)
 
         self.assertEqual(response.status_code, 200)
+        notify.assert_called_once_with(
+            instance,
+            "cross_approval_reopened",
+            "Cross-approval request 7 exclusion reopened",
+        )
         view.get_serializer.assert_called_once_with(refreshed_instance)
