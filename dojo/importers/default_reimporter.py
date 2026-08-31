@@ -150,7 +150,7 @@ class DefaultReImporter(BaseImporter, DefaultReImporterOptions):
             untouched_findings,
         )
         finding_ids = [finding.id for finding in findings_for_priority_update]
-        BaseImporter.update_priority_epss_kev.apply_async(args=(finding_ids, self.test))
+        BaseImporter.update_priority_epss_kev.apply_async(args=(finding_ids, self.test.id))
         logger.debug("REIMPORT_SCAN: Done")
         return (
             self.test,
