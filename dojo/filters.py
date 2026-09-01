@@ -1792,6 +1792,7 @@ class ApiFindingFilter(DojoFilter):
     test__engagement = NumberInFilter(field_name="test__engagement", lookup_expr="in")
     test__engagement__product = NumberInFilter(field_name="test__engagement__product", lookup_expr="in")
     test__engagement__product__prod_type = NumberInFilter(field_name="test__engagement__product__prod_type", lookup_expr="in")
+    test__test_import = NumberInFilter(field_name="test_import_finding_action__test_import", lookup_expr="in", label="Test Import")
     finding_group = NumberInFilter(field_name="finding_group", lookup_expr="in")
 
     # ReportRiskAcceptanceFilter

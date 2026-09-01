@@ -1593,11 +1593,28 @@ class TestImportSerializer(serializers.ModelSerializer):
         required=True,
         help_text="The test this import is associated with (required)"
     )
+    test_import_finding_action = serializers.SerializerMethodField(
+        help_text="Summary of finding actions, e.g. '20 untouched, 10 closed'",
+    )
 
     class Meta:
         model = Test_Import
         fields = "__all__"
         read_only_fields = ["id", "created", "modified", "findings_affected", "test_import_finding_action_set"]
+
+    def get_test_import_finding_action(self, obj):
+        action_counts = collections.Counter(action.action for action in obj.test_import_finding_action_set.all())
+        return ", ".join(
+            f"{action_counts[code]} {label}"
+            for code, label in IMPORT_ACTIONS
+            if action_counts.get(code)
+        )
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        ret.pop("test_import_finding_action_set", None)
+        ret.pop("findings_affected", None)
+        return ret
 
     def create(self, validated_data):
         """Create Test_Import and associated Test_Import_Finding_Action records"""
