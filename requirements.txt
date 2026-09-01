@@ -83,7 +83,7 @@ hyperframe==6.1.0
 hyperlink==21.0.0
 idna==3.19
 ijson==3.5.1
-importlib_metadata==8.7.1
+importlib_metadata==9.0.1
 inflection==0.5.1
 isal==1.8.0
 isodate==0.7.2
