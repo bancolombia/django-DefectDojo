@@ -1,0 +1,161 @@
+from datetime import datetime
+
+from rest_framework import serializers
+
+from dojo.api_v2.cross_approval.models import (
+    CrossApprovalDiscussion,
+    CrossApprovalExclusion,
+    CrossApprovalRequest,
+    CrossApprovalRequestLog,
+)
+from dojo.api_v2.serializers import UserStubSerializer
+
+
+def parse_cross_approval_date(value):
+    if isinstance(value, str):
+        for date_format in ("%d%m%Y", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(value, date_format).date()
+            except ValueError:
+                continue
+    raise serializers.ValidationError("Use DDMMYYYY or YYYY-MM-DD for dates.")
+
+
+class CrossApprovalExclusionSerializer(serializers.ModelSerializer):
+    exclusion_id = serializers.IntegerField(source="pk", read_only=True)
+    id = serializers.CharField(source="vulnerability_id")
+    x86_image_name = serializers.ListField(
+        source="image_names", child=serializers.CharField(), min_length=1
+    )
+    create_date = serializers.CharField()
+    expired_date = serializers.CharField()
+
+    class Meta:
+        model = CrossApprovalExclusion
+        fields = (
+            "exclusion_id", "id", "where", "create_date", "expired_date", "expired_at", "priority",
+            "severity", "hu", "reason", "x86_image_name",
+        )
+        read_only_fields = ("expired_at",)
+
+    def to_internal_value(self, data):
+        data = data.copy()
+        if "x86.image.name" in data and "x86_image_name" not in data:
+            data["x86_image_name"] = data.pop("x86.image.name")
+        return super().to_internal_value(data)
+
+    def validate_create_date(self, value):
+        return parse_cross_approval_date(value)
+
+    def validate_expired_date(self, value):
+        return parse_cross_approval_date(value)
+
+    def validate(self, attrs):
+        if attrs["expired_date"] < attrs["create_date"]:
+            raise serializers.ValidationError("expired_date must not precede create_date.")
+        return attrs
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["create_date"] = instance.create_date.strftime("%d%m%Y")
+        data["expired_date"] = instance.expired_date.strftime("%d%m%Y")
+        data["x86.image.name"] = data.pop("x86_image_name")
+        return data
+
+
+class CrossApprovalRequestSerializer(serializers.ModelSerializer):
+    created_by = UserStubSerializer(read_only=True)
+    status_updated_by = UserStubSerializer(read_only=True)
+    exclusions = CrossApprovalExclusionSerializer(many=True)
+    type = serializers.CharField(default="x86", required=False)
+    discussions = serializers.SerializerMethodField()
+    logs = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CrossApprovalRequest
+        fields = (
+            "id", "type", "status", "created_at", "created_by", "status_updated_by",
+            "status_updated_at", "exclusions", "discussions", "logs",
+        )
+        read_only_fields = (
+            "id", "status", "created_at", "created_by", "status_updated_by",
+            "status_updated_at",
+        )
+
+    def validate(self, attrs):
+        exclusions = attrs.get("exclusions", [])
+        vulnerability_ids = [exclusion["vulnerability_id"] for exclusion in exclusions]
+        duplicate_ids = {
+            vulnerability_id for vulnerability_id in vulnerability_ids
+            if vulnerability_ids.count(vulnerability_id) > 1
+        }
+        if duplicate_ids:
+            raise serializers.ValidationError({
+                "exclusions": f"Vulnerability ID {min(duplicate_ids)} is duplicated in this request.",
+            })
+
+        conflicts = CrossApprovalExclusion.objects.filter(
+            vulnerability_id__in=vulnerability_ids
+        )
+        if self.instance:
+            conflicts = conflicts.exclude(request=self.instance)
+        conflict = conflicts.select_related("request").first()
+        if conflict:
+            raise serializers.ValidationError({
+                "exclusions": (
+                    f"Vulnerability ID {conflict.vulnerability_id} already exists in request "
+                    f"{conflict.request_id} ({conflict.request.status})."
+                ),
+            })
+        return attrs
+
+    def create(self, validated_data):
+        exclusions = validated_data.pop("exclusions")
+        request = CrossApprovalRequest.objects.create(
+            created_by=self.context["request"].user, **validated_data
+        )
+        CrossApprovalExclusion.objects.bulk_create(
+            [CrossApprovalExclusion(request=request, **exclusion) for exclusion in exclusions]
+        )
+        return request
+
+    def get_discussions(self, instance):
+        return CrossApprovalDiscussionSerializer(
+            instance.discussions.all(), many=True, context=self.context
+        ).data
+
+    def get_logs(self, instance):
+        return CrossApprovalRequestLogSerializer(instance.logs.all(), many=True).data
+
+    def update(self, instance, validated_data):
+        exclusions = validated_data.pop("exclusions", None)
+        if exclusions is not None:
+            instance.exclusions.all().delete()
+            CrossApprovalExclusion.objects.bulk_create(
+                [CrossApprovalExclusion(request=instance, **exclusion) for exclusion in exclusions]
+            )
+        instance.type = validated_data.get("type", instance.type)
+        instance.save(update_fields=["type"])
+        return instance
+
+
+class CrossApprovalDiscussionSerializer(serializers.ModelSerializer):
+    author = UserStubSerializer(read_only=True)
+    is_mine = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CrossApprovalDiscussion
+        fields = ("id", "author", "content", "created_at", "updated_at", "is_mine")
+        read_only_fields = ("id", "author", "created_at", "updated_at", "is_mine")
+
+    def get_is_mine(self, instance):
+        request = self.context.get("request")
+        return bool(request and request.user == instance.author)
+
+
+class CrossApprovalRequestLogSerializer(serializers.ModelSerializer):
+    changed_by = UserStubSerializer(read_only=True)
+
+    class Meta:
+        model = CrossApprovalRequestLog
+        fields = ("id", "previous_status", "current_status", "changed_by", "changed_at")

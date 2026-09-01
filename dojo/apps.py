@@ -72,6 +72,7 @@ class DojoAppConfig(AppConfig):
         # Load any signals here that will be ready for runtime
         # Importing the signals file is good enough if using the reciever decorator
         import dojo.announcement.signals
+        import dojo.api_v2.cross_approval.helpers
         import dojo.benchmark.signals
         import dojo.cred.signals
         import dojo.endpoint.signals
