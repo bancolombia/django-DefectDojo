@@ -3,7 +3,7 @@ from rest_framework import serializers
 from datetime import timedelta
 from django.utils import timezone
 from dojo.authorization.roles_permissions import Permissions
-from dojo.api_v2.long_risk_acceptance.models import RiskAcceptanceEngagement, RiskAcceptanceExclusionRule
+from dojo.api_v2.long_risk_acceptance.models import RiskAcceptanceEngagement, RiskAcceptanceExclusionRule, RiskAcceptanceEngagementEconomicImpact
 from dojo.group.queries import get_users_for_group, get_users_for_group_by_role
 from dojo.utils import get_product, user_is_contacts
 from dojo.group.queries import users_with_permissions_to_approve_long_term_findings
@@ -59,6 +59,11 @@ class LongRiskAcceptanceToNotesSerializer(serializers.Serializer):
     )
     notes = NoteSerializer(many=True)
 
+class RiskAcceptanceEngagementBasicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RiskAcceptanceEngagement
+        fields = ["id", "description", "owner", "product"]
+
 class RiskAcceptanceEngagementSerializer(serializers.ModelSerializer):
     description = serializers.CharField(
         validators=[validators.valid_chars_validator],
@@ -84,42 +89,7 @@ class RiskAcceptanceEngagementSerializer(serializers.ModelSerializer):
         self.fields['cause'].choices = GeneralSettings.get_value("CAUSE_LONG_RISK_ACCEPTANCE", [])
     
     def to_representation(self, instance):
-        representation = super().to_representation(instance)
-        representation['permissions'] = []
-        risk_acceptance_eng = RiskAcceptanceEngagement.objects.get(id=representation.get("id"))
-        all_permissions = [
-            Permissions.Long_Risk_Acceptance_Eng_Add,
-            Permissions.Long_Risk_Acceptance_Eng_Edit,
-            Permissions.Long_Risk_Acceptance_Eng_Delete,
-            Permissions.Long_Risk_Acceptance_Eng_View,
-            Permissions.Risk_Acceptance_Eng_Render,
-            Permissions.Risk_Acceptance_Eng_Review,
-            Permissions.Risk_Acceptance_Eng_Reject,
-            Permissions.Risk_Acceptance_Eng_Note_View,
-            Permissions.Risk_Acceptance_Eng_Note_Delete,
-            Permissions.Risk_Acceptance_Eng_Note_Edit,
-            Permissions.Risk_Acceptance_Eng_Note_Add,
-            Permissions.Risk_Acceptance_Send_Email
-            ]
-        user = self.context["request"].user
-        for permission in all_permissions:
-            if user.is_superuser:
-                representation['permissions'].append(permission.name)
-
-            elif user_has_global_permission(user, permission):
-                representation['permissions'].append(permission.name)
-
-            elif user_is_contacts(user, risk_acceptance_eng.product):
-                representation['permissions'].append(permission.name)
-
-            elif user_has_permission(
-                    user,
-                    risk_acceptance_eng,
-                    permission):
-                    if permission == Permissions.Long_Risk_Acceptance_Eng_View:
-                        representation['permissions'].append(permission.name)
-
-        return representation
+        return super().to_representation(instance)
 
     def create(self, validated_data):
         validated_data["owner"] = self.context["request"].user
@@ -153,7 +123,45 @@ class RiskAcceptanceEngagementSerializer(serializers.ModelSerializer):
 
         return instance
 
-        
+class RiskAcceptanceEngagementRetrieveSerializer(RiskAcceptanceEngagementSerializer):
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        representation['permissions'] = []
+        all_permissions = [
+            Permissions.Long_Risk_Acceptance_Eng_Add,
+            Permissions.Long_Risk_Acceptance_Eng_Edit,
+            Permissions.Long_Risk_Acceptance_Eng_Delete,
+            Permissions.Long_Risk_Acceptance_Eng_View,
+            Permissions.Risk_Acceptance_Eng_Render,
+            Permissions.Risk_Acceptance_Eng_Review,
+            Permissions.Risk_Acceptance_Eng_Reject,
+            Permissions.Risk_Acceptance_Eng_Note_View,
+            Permissions.Risk_Acceptance_Eng_Note_Delete,
+            Permissions.Risk_Acceptance_Eng_Note_Edit,
+            Permissions.Risk_Acceptance_Eng_Note_Add,
+            Permissions.Risk_Acceptance_Send_Email,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_Add,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_Edit,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_Delete,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_View,
+        ]
+        user = self.context["request"].user
+        for permission in all_permissions:
+            if user.is_superuser:
+                representation['permissions'].append(permission.name)
+
+            elif user_has_global_permission(user, permission):
+                representation['permissions'].append(permission.name)
+
+            elif user_is_contacts(user, instance.product):
+                representation['permissions'].append(permission.name)
+
+            elif user_has_permission(user, instance, permission):
+                representation['permissions'].append(permission.name)
+
+        return representation
+
+
 class RiskAcceptanceExclusionRuleSerializer(serializers.ModelSerializer):
     ra_engagement = serializers.PrimaryKeyRelatedField(queryset=RiskAcceptanceEngagement.objects.all(), many=False)
     title = serializers.CharField(required=True)
@@ -173,19 +181,36 @@ class RiskAcceptanceExclusionRuleSerializer(serializers.ModelSerializer):
         ]
 
 class RiskAcceptanceEngagementEconomicImpactSerializer(serializers.ModelSerializer):
-    ra_engagement = serializers.PrimaryKeyRelatedField(queryset=RiskAcceptanceEngagement.objects.all(), many=False)
-    title = serializers.CharField(required=True)
-    include = serializers.JSONField(required=False, read_only=True, source="filters")
-    filters = serializers.JSONField(required=False, write_only=True)
+    title = serializers.CharField(
+        required=True,
+        allow_blank=False,
+    )
+    description = serializers.CharField(
+        required=True,
+        allow_blank=False,
+    )
+    control_effectiveness = serializers.IntegerField(
+        required=True,
+        allow_null=False,
+        min_value=0,
+        max_value=100,
+    )
+    economic_impact = serializers.IntegerField(
+        required=True,
+        allow_null=False,
+        min_value=0,
+    )
 
-
+    risk_acceptance_engagement = serializers.PrimaryKeyRelatedField(
+        queryset=RiskAcceptanceEngagement.objects.all(), many=False)
+        
     class Meta:
-        model = RiskAcceptanceExclusionRule
+        model = RiskAcceptanceEngagementEconomicImpact
         fields = [
             "id",
-            "ra_engagement",
             "title",
-            "include",
-            "filters",
-            "exclusions",
+            "description",
+            "control_effectiveness",
+            "economic_impact",
+            "risk_acceptance_engagement",
         ]

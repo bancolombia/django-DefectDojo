@@ -51,6 +51,11 @@ class RiskAcceptanceEngagementViewSet(prefetch.PrefetchListMixin,
     ] 
     pagination_class = LimitOffsetPagination
 
+    def get_serializer_class(self):
+        if self.action == "retrieve":
+            return RiskAcceptanceEngagementRetrieveSerializer
+        return super().get_serializer_class()
+
     def create(self, request, *args, **kwargs):
         serializer = RiskAcceptanceEngagementSerializer(data=request.data, context={"request": request})
         if serializer.is_valid():
@@ -276,7 +281,7 @@ class EconomicImpactViewSet(prefetch.PrefetchListMixin,
                              DojoModelViewSet):
     queryset = RiskAcceptanceEngagementEconomicImpact.objects.all() 
     permission_classes = (IsAuthenticated,
-                          permissions.UserHasLongRiskAcceptanceRulePermission,)
+                          permissions.UserHasImpactEconomicPermission,)
     serializer_class = RiskAcceptanceEngagementEconomicImpactSerializer 
     filter_backends = (DjangoFilterBackend,)
     filterset_fields = [
@@ -291,7 +296,7 @@ class EconomicImpactViewSet(prefetch.PrefetchListMixin,
             serializer.is_valid(raise_exception=True)
             instance = serializer.save()
             return http_response.ok(
-                message="Long Risk acceptance Rules Created Successfully",
+                message="Economic Impact Created Successfully",
                 data=RiskAcceptanceEngagementEconomicImpactSerializer(instance).data
             )
         except Exception as e:

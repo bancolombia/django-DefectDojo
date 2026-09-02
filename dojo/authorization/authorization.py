@@ -32,6 +32,7 @@ from dojo.models import (
     Risk_Acceptance,
     RiskAcceptanceEngagement,
     RiskAcceptanceExclusionRule,
+    RiskAcceptanceEngagementEconomicImpact,
 )
 from dojo.api_v2.scope.models import Input, InputSecret, InputFile, InputFlow
 from dojo.engine_tools.models import FindingExclusion
@@ -156,6 +157,8 @@ def user_has_permission(user, obj, permission):
         return user_has_permission(user, obj.transfer_findings, permission)
     if (isinstance(obj, Risk_Acceptance) and permission in Permissions.get_engagement_permissions()):
         return user_has_permission(user, obj.engagement, permission)
+    if (isinstance(obj, RiskAcceptanceEngagementEconomicImpact) and permission in Permissions.get_engagement_permissions()):
+        return user_has_permission(user, obj.risk_acceptance_engagement, permission)
     if (isinstance(obj, RiskAcceptanceEngagement) and permission in Permissions.get_engagement_permissions()):
         return user_has_permission(user, obj.product, permission)
     if isinstance(obj, RiskAcceptanceExclusionRule) and permission in Permissions.get_engagement_permissions():

@@ -19,7 +19,7 @@ from dojo.authorization.roles_permissions import Permissions
 from dojo.templatetags.authorization_tags import is_in_group
 from dojo.importers.auto_create_context import AutoCreateContextManager
 from dojo.engine_tools.helpers import Constants
-from dojo.api_v2.long_risk_acceptance.models import RiskAcceptanceEngagement
+from dojo.api_v2.long_risk_acceptance.models import RiskAcceptanceEngagement, RiskAcceptanceEngagementEconomicImpact
 from dojo.models import (
     Cred_Mapping,
     Dojo_Group,
@@ -1348,15 +1348,13 @@ class UserHasLongRiskAcceptanceRulePermission(permissions.BasePermission):
         )
 
 class UserHasImpactEconomicPermission(permissions.BasePermission):
-    path_post = re.compile(r"^/api/v2/long_risk_acceptance_rule/$")
-    path = re.compile(r"^/api/v2/long_risk_acceptance_rule/\d+/$")
+    path_post = re.compile(r"^/api/v2/economic_impact/$")
+    path = re.compile(r"^/api/v2/economic_impact/\d+/$")
 
     def has_permission(self, request, view):
-        if UserHasImpactEconomicPermission.path_post.match(
-            request.path,
-        ) or UserHasImpactEconomicPermission.path.match(request.path):
-            return check_post_permission(
-                request, RiskAcceptanceEngagement, "ra_engagement", Permissions.Long_Risk_Acceptance_Eng_View,
+        if UserHasImpactEconomicPermission.path_post.match(request.path):
+            return user_has_role_permission(
+                request.user, Permissions.Long_Risk_Acceptance_Impact_Economic_Add,
             )
         # related object only need object permission
         return True

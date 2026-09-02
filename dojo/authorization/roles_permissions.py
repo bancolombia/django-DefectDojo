@@ -264,6 +264,10 @@ class Permissions(IntEnum):
             Permissions.Input_View,
             Permissions.Input_Delete,
             Permissions.Input_Edit,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_Add,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_Edit,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_Delete,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_View,
 
 
         }.union(cls.get_test_permissions())
@@ -345,7 +349,12 @@ class Permissions(IntEnum):
 
     @classmethod
     def get_product_member_permissions(cls):
-        return {Permissions.Product_View, Permissions.Product_Manage_Members, Permissions.Product_Member_Delete, Permissions.Product_Tag_Red_Team}
+        return {
+            Permissions.Product_View,
+            Permissions.Product_Manage_Members,
+            Permissions.Product_Member_Delete,
+            Permissions.Product_Tag_Red_Team,
+            }
 
     @classmethod
     def get_product_type_member_permissions(cls):
