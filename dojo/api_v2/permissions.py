@@ -1347,6 +1347,41 @@ class UserHasLongRiskAcceptanceRulePermission(permissions.BasePermission):
             Permissions.Long_Risk_Acceptance_Rule_Eng_Delete,
         )
 
+class UserHasImpactEconomicPermission(permissions.BasePermission):
+    path_post = re.compile(r"^/api/v2/long_risk_acceptance_rule/$")
+    path = re.compile(r"^/api/v2/long_risk_acceptance_rule/\d+/$")
+
+    def has_permission(self, request, view):
+        if UserHasImpactEconomicPermission.path_post.match(
+            request.path,
+        ) or UserHasImpactEconomicPermission.path.match(request.path):
+            return check_post_permission(
+                request, RiskAcceptanceEngagement, "ra_engagement", Permissions.Long_Risk_Acceptance_Eng_View,
+            )
+        # related object only need object permission
+        return True
+
+    def has_object_permission(self, request, view, obj):
+        if UserHasImpactEconomicPermission.path_post.match(
+            request.path,
+        ) or UserHasImpactEconomicPermission.path.match(request.path):
+            return check_object_permission(
+                request,
+                obj,
+                Permissions.Long_Risk_Acceptance_Impact_Economic_View,
+                Permissions.Long_Risk_Acceptance_Impact_Economic_Edit,
+                Permissions.Long_Risk_Acceptance_Impact_Economic_Delete,
+                Permissions.Long_Risk_Acceptance_Impact_Economic_Add,
+            )
+        return check_object_permission(
+            request,
+            obj,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_View,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_Edit,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_Delete,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_Add,
+        )
+
 class UserHasTransferFindingFindingPermission(permissions.BasePermission):
     path_transfer_finding_finding_post = re.compile(r"^/api/v2/transfer_finding_findings/$")
     path_transfer_finding_finding = re.compile(r"^/api/v2/transfer_finding_findings/\d+/$")

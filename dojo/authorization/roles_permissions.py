@@ -198,11 +198,17 @@ class Permissions(IntEnum):
     Long_Risk_Acceptance_Rule_Eng_Edit = 6002
     Long_Risk_Acceptance_Rule_Eng_Delete = 6003
     Long_Risk_Acceptance_Rule_Eng_View = 6004
+
     
     Input_Flow_Add = 7001
     Input_Flow_Edit = 7002
     Input_Flow_Delete = 7003
     Input_Flow_View = 7004
+
+    Long_Risk_Acceptance_Impact_Economic_Add = 8001
+    Long_Risk_Acceptance_Impact_Economic_Edit = 8002
+    Long_Risk_Acceptance_Impact_Economic_Delete = 8003
+    Long_Risk_Acceptance_Impact_Economic_View = 8004
     
     @classmethod
     def has_value(cls, value):
@@ -433,6 +439,7 @@ def get_roles_with_permissions():
             Permissions.Metrics_Panel_Admin,
             Permissions.Metrics_Scan_Cycle,
             Permissions.Finding_Add_Recommendation,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_View
         },
         Roles.API_Importer: {
             Permissions.Product_Type_Add,
@@ -519,6 +526,7 @@ def get_roles_with_permissions():
             Permissions.Input_Flow_Add,
             Permissions.Input_Flow_Edit,
             Permissions.Input_Flow_View,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_View
             
         },
         Roles.Maintainer: {
@@ -655,7 +663,11 @@ def get_roles_with_permissions():
             Permissions.Input_Flow_Add,
             Permissions.Input_Flow_Edit,
             Permissions.Input_Flow_Delete,
-            Permissions.Input_Flow_View
+            Permissions.Input_Flow_View,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_View,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_Edit,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_Delete,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_Add,
         },
         Roles.Owner: {
             Permissions.Product_Type_Add_Product,
@@ -756,7 +768,8 @@ def get_roles_with_permissions():
             Permissions.Input_Flow_Add,
             Permissions.Input_Flow_Edit,
             Permissions.Input_Flow_Delete,
-            Permissions.Input_Flow_View
+            Permissions.Input_Flow_View,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_View,
 
         },
         Roles.Developer: {
@@ -798,8 +811,8 @@ def get_roles_with_permissions():
             Permissions.Risk_Acceptance_Eng_Note_Add,
             Permissions.Risk_Acceptance_Eng_Render,
             Permissions.Input_Flow_Add,
-            Permissions.Input_Flow_View
-
+            Permissions.Input_Flow_View,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_View,
         },
         Roles.Leader: {
             Permissions.Product_Type_View,
@@ -889,6 +902,11 @@ def get_roles_with_permissions():
             Permissions.Long_Risk_Acceptance_Rule_Eng_Edit,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Delete,
             Permissions.Long_Risk_Acceptance_Rule_Eng_View,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_View,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_Edit,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_Delete,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_Add,
+
         },
         Roles.Risk: {
             Permissions.Product_Type_View,
@@ -933,6 +951,10 @@ def get_roles_with_permissions():
             Permissions.Long_Risk_Acceptance_Rule_Eng_Edit,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Delete,
             Permissions.Long_Risk_Acceptance_Rule_Eng_View,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_View,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_Edit,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_Delete,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_Add,
 
         },
     }
