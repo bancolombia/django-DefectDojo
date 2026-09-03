@@ -2,6 +2,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient, APITestCase
+from dojo.models import GeneralSettings
 
 from dojo.api_v2.long_risk_acceptance.models import (
     RiskAcceptanceEngagement,
@@ -18,12 +19,19 @@ class EconomicImpactViewSetTestCase(APITestCase):
         self.client = APIClient()
         self.client.credentials(HTTP_AUTHORIZATION="Token " + token.key)
         self.url = reverse("economic_impact-list")
+        GeneralSettings.objects.get_or_create(
+            name_key='CAUSE_LONG_RISK_ACCEPTANCE',
+            defaults={
+                'value': 'CAUSE1,CAUSE2,CAUSE3',
+                'data_type': 'LIST'
+            }
+        )
 
         self.owner = Dojo_User.objects.get(username="admin")
         self.product = Product.objects.get(id=1)
         self.risk_acceptance_engagement = RiskAcceptanceEngagement.objects.create(
             description="Long risk acceptance for API tests",
-            cause="test",
+            cause="CAUSE1",
             owner=self.owner,
             product=self.product,
             reviewed_by=self.owner.username,
