@@ -1504,3 +1504,17 @@ class UserHasInputFlowPermission(permissions.BasePermission):
             )
         return True
 
+class UserHasIaRecommendationPermission(permissions.BasePermission):
+    path_post = re.compile(r"^/api/v2/metrics/ia_recommendation$")
+
+    def has_permission(self, request, view):
+        if (
+            UserHasIaRecommendationPermission.path_post.match(request.path)
+        ):
+            return check_post_permission(
+                request,
+                Engagement,
+                "engagement",
+                Permissions.Engagement_View,
+            )
+        return True

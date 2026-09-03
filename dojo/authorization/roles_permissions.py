@@ -85,6 +85,7 @@ class Permissions(IntEnum):
     Finding_Code_Review = 1408
     Finding_Bulk_Close = 1409
     Finding_Add_Recommendation = 1410
+    Finding_Recommendation_View = 1411
 
     Endpoint_View = 1502
     Endpoint_Add = 1503
@@ -302,6 +303,7 @@ class Permissions(IntEnum):
             Permissions.Transfer_Finding_Add,
             Permissions.Finding_Code_Review,
             Permissions.Finding_Add_Recommendation,
+            Permissions.Finding_Recommendation_View,
             Permissions.Transfer_Finding_Finding_Add,
         }.union(cls.get_finding_group_permissions())
 
@@ -448,6 +450,7 @@ def get_roles_with_permissions():
             Permissions.Metrics_Panel_Admin,
             Permissions.Metrics_Scan_Cycle,
             Permissions.Finding_Add_Recommendation,
+            Permissions.Finding_Recommendation_View,
             Permissions.Long_Risk_Acceptance_Impact_Economic_View
         },
         Roles.API_Importer: {
@@ -481,6 +484,7 @@ def get_roles_with_permissions():
             Permissions.Risk_Acceptance,
             Permissions.Risk_Acceptance_Add,
             Permissions.Finding_Add_Recommendation,
+            Permissions.Finding_Recommendation_View,
             Permissions.Risk_Acceptance_Bulk,
             Permissions.Risk_Acceptance_Send_Email
         },
@@ -528,6 +532,7 @@ def get_roles_with_permissions():
             Permissions.Credential_Edit,
             Permissions.Finding_Code_Review,
             Permissions.Finding_Add_Recommendation,
+            Permissions.Finding_Recommendation_View,
             Permissions.Input_View,
             Permissions.Input_Edit,
             Permissions.Input_Add,
@@ -535,7 +540,7 @@ def get_roles_with_permissions():
             Permissions.Input_Flow_Add,
             Permissions.Input_Flow_Edit,
             Permissions.Input_Flow_View,
-            Permissions.Long_Risk_Acceptance_Impact_Economic_View
+            Permissions.Long_Risk_Acceptance_Impact_Economic_View,
             
         },
         Roles.Maintainer: {
@@ -646,6 +651,7 @@ def get_roles_with_permissions():
             Permissions.Finding_Code_Review,
             Permissions.Finding_Bulk_Close,
             Permissions.Finding_Add_Recommendation,
+            Permissions.Finding_Recommendation_View,
             Permissions.General_Settings_View,
             Permissions.General_Settings_Edit,
             Permissions.General_Settings_Add,
@@ -766,6 +772,7 @@ def get_roles_with_permissions():
             Permissions.Credential_Delete,
             Permissions.Finding_Code_Review,
             Permissions.Finding_Add_Recommendation,
+            Permissions.Finding_Recommendation_View,
             Permissions.Input_View,
             Permissions.Input_Edit,
             Permissions.Input_Add,
@@ -807,6 +814,7 @@ def get_roles_with_permissions():
             Permissions.Transfer_Finding_Finding_Add,
             Permissions.Risk_Acceptance_Refresh_Permission_key,
             Permissions.Finding_Add_Recommendation,
+            Permissions.Finding_Recommendation_View,
             Permissions.Input_View,
             Permissions.Input_Edit,
             Permissions.Input_Add,
@@ -863,6 +871,7 @@ def get_roles_with_permissions():
             Permissions.Metrics_Panel_Admin,
             Permissions.Metrics_Scan_Cycle,
             Permissions.Finding_Add_Recommendation,
+            Permissions.Finding_Recommendation_View,
             Permissions.Input_View,
             Permissions.Input_Edit,
             Permissions.Input_Add,
@@ -899,6 +908,7 @@ def get_roles_with_permissions():
             Permissions.Metrics_Panel_Admin,
             Permissions.Metrics_Scan_Cycle,
             Permissions.Finding_Add_Recommendation,
+            Permissions.Finding_Recommendation_View,
             Permissions.Transfer_Finding_Add,
             Permissions.Transfer_Finding_View,
             Permissions.Transfer_Finding_Finding_View,

@@ -1,13 +1,13 @@
 import logging
 from dojo.api_v2.utils import http_response
 from django.shortcuts import get_object_or_404
-from dojo.models import Finding
+from dojo.models import Finding, Test
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.core.cache import cache
-from dojo.api_v2.ia_recommendation.serializers import IaRecommendationSerializer
+from dojo.api_v2.ia_recommendation.serializers import IaRecommendationSerializer, IaRemedationBulkRequestSerializer
 from dojo.api_v2.ia_recommendation.helper import get_ia_recommendation
 from dojo.api_v2.api_error import ApiError
 from drf_spectacular.utils import (
@@ -31,3 +31,20 @@ class IArecommendationApiView(APIView):
         finding = get_object_or_404(Finding, pk=id)
         ia_recommendation = get_ia_recommendation(str(finding.id), request.user)
         return ia_recommendation
+
+
+class IAremedationApiView(APIView):
+    permission_classes = (IsAuthenticated,
+                          permissions.UserHasTestPermission,)
+    serializer_class = IaRecommendationSerializer
+
+    @extend_schema(
+        request=IaRemedationBulkRequestSerializer,
+        responses={status.HTTP_200_OK: IaRecommendationSerializer},
+    )
+    def post(self, request, test_id):
+        Test = get_object_or_404(Test, pk=test_id)
+        serializer = IaRemedationBulkRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True) 
+
+
