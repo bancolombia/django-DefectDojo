@@ -18,6 +18,7 @@ class RiskAcceptanceEngagement(models.Model):
     reviewed_date = models.DateTimeField(default=None, null=True, blank=True, help_text=_("When the risk acceptance is reviewed"))
     accepted_date = models.DateTimeField(default=None, null=True, blank=True, help_text=_("When the risk acceptance is accepted"))
     expiration_date = models.DateTimeField(default=None, null=True, blank=True, help_text=_("When the risk acceptance expires, the findings will be reactivated (unless disabled below)."))
+    cause = models.CharField(max_length=500, blank=True, null=True, verbose_name=_("Cause"), help_text=_("The cause of the long risk acceptance."))
     expiration_date_warned = models.DateTimeField(default=None, null=True, blank=True, help_text=_("(readonly) Date at which notice about the risk acceptance expiration was sent."))
     expiration_date_handled = models.DateTimeField(default=None, null=True, blank=True, help_text=_("(readonly) When the risk acceptance expiration was handled (manually or by the daily job)."))
     reactivate_expired = models.BooleanField(null=False, blank=False, default=True, verbose_name=_("Reactivate findings on expiration"), help_text=_("Reactivate findings when risk acceptance expires?"))
@@ -63,5 +64,15 @@ class RiskAcceptanceExclusionRule(models.Model):
     filters = models.JSONField(blank=True, null=True)
     exclusions = models.JSONField(blank=True, null=True)
     type_rule =  models.CharField(choices=TYPE_RULE_CHOICES, default="CUSTOM")
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+
+class RiskAcceptanceEngagementEconomicImpact(models.Model):
+    title = models.CharField(max_length=255, blank=True, null=True, verbose_name=_("Title"), help_text=_("Title of the risk acceptance economic impact."))
+    description = models.TextField(blank=True, null=True, verbose_name=_("Description"), help_text=_("Description of the risk acceptance economic impact."))
+    control_effectiveness = models.IntegerField(null=True, blank=True, verbose_name=_("Control Effectiveness"), help_text=_("How effective is the control that mitigates the risk?"))
+    economic_impact = models.IntegerField(null=True, blank=True, verbose_name=_("Economic Impact"), help_text=_("What is the economic impact of the risk?"))
+    risk_acceptance_engagement = models.ForeignKey(RiskAcceptanceEngagement, on_delete=models.CASCADE, null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)

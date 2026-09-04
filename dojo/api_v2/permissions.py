@@ -19,7 +19,7 @@ from dojo.authorization.roles_permissions import Permissions
 from dojo.templatetags.authorization_tags import is_in_group
 from dojo.importers.auto_create_context import AutoCreateContextManager
 from dojo.engine_tools.helpers import Constants
-from dojo.api_v2.long_risk_acceptance.models import RiskAcceptanceEngagement
+from dojo.api_v2.long_risk_acceptance.models import RiskAcceptanceEngagement, RiskAcceptanceEngagementEconomicImpact
 from dojo.models import (
     Cred_Mapping,
     Dojo_Group,
@@ -1345,6 +1345,39 @@ class UserHasLongRiskAcceptanceRulePermission(permissions.BasePermission):
             Permissions.Long_Risk_Acceptance_Rule_Eng_View,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Edit,
             Permissions.Long_Risk_Acceptance_Rule_Eng_Delete,
+        )
+
+class UserHasImpactEconomicPermission(permissions.BasePermission):
+    path_post = re.compile(r"^/api/v2/economic_impact/$")
+    path = re.compile(r"^/api/v2/economic_impact/\d+/$")
+
+    def has_permission(self, request, view):
+        if UserHasImpactEconomicPermission.path_post.match(request.path):
+            return user_has_role_permission(
+                request.user, Permissions.Long_Risk_Acceptance_Impact_Economic_Add,
+            )
+        # related object only need object permission
+        return True
+
+    def has_object_permission(self, request, view, obj):
+        if UserHasImpactEconomicPermission.path_post.match(
+            request.path,
+        ) or UserHasImpactEconomicPermission.path.match(request.path):
+            return check_object_permission(
+                request,
+                obj,
+                Permissions.Long_Risk_Acceptance_Impact_Economic_View,
+                Permissions.Long_Risk_Acceptance_Impact_Economic_Edit,
+                Permissions.Long_Risk_Acceptance_Impact_Economic_Delete,
+                Permissions.Long_Risk_Acceptance_Impact_Economic_Add,
+            )
+        return check_object_permission(
+            request,
+            obj,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_View,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_Edit,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_Delete,
+            Permissions.Long_Risk_Acceptance_Impact_Economic_Add,
         )
 
 class UserHasTransferFindingFindingPermission(permissions.BasePermission):

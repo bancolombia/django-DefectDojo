@@ -51,6 +51,11 @@ class RiskAcceptanceEngagementViewSet(prefetch.PrefetchListMixin,
     ] 
     pagination_class = LimitOffsetPagination
 
+    def get_serializer_class(self):
+        if self.action == "retrieve":
+            return RiskAcceptanceEngagementRetrieveSerializer
+        return super().get_serializer_class()
+
     def create(self, request, *args, **kwargs):
         serializer = RiskAcceptanceEngagementSerializer(data=request.data, context={"request": request})
         if serializer.is_valid():
@@ -266,5 +271,35 @@ class RiskAcceptanceExclusionRuleViewSet(prefetch.PrefetchListMixin,
             )
         except Exception as e:
             logger.error(f"Validation error on POST long risk acceptance Rules")
+            return http_response.error(
+                message="Validation error occurred. ", data=serializer.errors) 
+
+
+@extend_schema(tags=["long_risk_acceptance"])
+class EconomicImpactViewSet(prefetch.PrefetchListMixin,
+                             prefetch.PrefetchRetrieveMixin,
+                             DojoModelViewSet):
+    queryset = RiskAcceptanceEngagementEconomicImpact.objects.all() 
+    permission_classes = (IsAuthenticated,
+                          permissions.UserHasImpactEconomicPermission,)
+    serializer_class = RiskAcceptanceEngagementEconomicImpactSerializer 
+    filter_backends = (DjangoFilterBackend,)
+    filterset_fields = [
+        "id",
+    ]
+    pagination_class = LimitOffsetPagination
+
+
+    def post(self, request, *args, **kwargs):
+        try:
+            serializer = RiskAcceptanceEngagementEconomicImpactSerializer(request)
+            serializer.is_valid(raise_exception=True)
+            instance = serializer.save()
+            return http_response.ok(
+                message="Economic Impact Created Successfully",
+                data=RiskAcceptanceEngagementEconomicImpactSerializer(instance).data
+            )
+        except Exception as e:
+            logger.error(f"Validation error on POST long risk acceptance Rules", str(e))
             return http_response.error(
                 message="Validation error occurred. ", data=serializer.errors) 
