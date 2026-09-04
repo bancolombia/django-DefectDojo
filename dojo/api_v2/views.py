@@ -2308,6 +2308,7 @@ class ProductTypeViewSet(
         product_type_data = serializer.data
         product_type_data.pop("authorization_groups")
         product_type_data.pop("members")
+        product_type_data.pop("environment")
         member = Product_Type_Member()
         member.user = self.request.user
         member.product_type = Product_Type(**product_type_data)
