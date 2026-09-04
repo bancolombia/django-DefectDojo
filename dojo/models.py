@@ -950,6 +950,11 @@ class Product_Type(models.Model):
     def unaccepted_open_findings(self):
         return Finding.objects.filter(risk_accepted=False, active=True, duplicate=False, test__engagement__product__prod_type=self)
 
+    @property
+    def environment(self):
+        from dojo.utils import extract_field_from_text_regex
+        return extract_field_from_text_regex(self.description, "Environment")
+
 
 class Product_Line(models.Model):
     name = models.CharField(max_length=300)
