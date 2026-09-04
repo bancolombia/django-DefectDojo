@@ -86,7 +86,10 @@ class RiskAcceptanceEngagementSerializer(serializers.ModelSerializer):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['cause'].choices = GeneralSettings.get_value("CAUSE_LONG_RISK_ACCEPTANCE", [])
+        try:
+            self.fields['cause'].choices = GeneralSettings.get_value("CAUSE_LONG_RISK_ACCELERATION", [])
+        except:
+            self.fields['cause'].choices = []
     
     def to_representation(self, instance):
         return super().to_representation(instance)
