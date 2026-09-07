@@ -1486,6 +1486,7 @@ class FindingGroupSerializer(serializers.ModelSerializer):
 class TestSerializer(serializers.ModelSerializer):
     tags = TagListSerializerField(required=False)
     test_type_name = serializers.ReadOnlyField()
+    permissions = serializers.SerializerMethodField(read_only=True, allow_null=True)
     finding_groups = FindingGroupSerializer(
         source="finding_group_set", many=True, read_only=True,
     )
@@ -1500,6 +1501,10 @@ class TestSerializer(serializers.ModelSerializer):
         if field_name == "files":
             return FileSerializer, {"many": True, "read_only": True}
         return super().build_relational_field(field_name, relation_info)
+    
+    @extend_schema_field(serializers.ListField())
+    def get_permissions(self, obj):
+        return authorization_helper.get_permissions(obj)
 
 
 class TestCreateSerializer(serializers.ModelSerializer):

@@ -2,6 +2,7 @@ import logging
 import requests
 import dojo.finding.helper as finding_helper
 from django.utils import timezone
+from dojo.celery import app
 from django.shortcuts import get_object_or_404
 from dojo.models import Finding
 from dojo.models import GeneralSettings
@@ -12,7 +13,8 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-def get_ia_recommendation(fid, user):
+@app.task
+def async_get_ia_recommendation(fid, user, save=True):
     version = GeneralSettings.get_value("HOST_IA_RECOMMENDATION_VERSION", "v1")
     error_response = {
     "status": "Ok",
@@ -107,13 +109,15 @@ def get_ia_recommendation(fid, user):
         error_response["status"] = "Error"
         return http_response.error(message="Error runs", data=error_response)
 
-    finding = get_object_or_404(Finding, id=fid)
-    data = response.json()
-    finding.ia_recommendation = {}
-    finding.ia_recommendation["data"] = data
-    finding.ia_recommendation["data"]["like_status"] = None
-    finding.ia_recommendation["data"]["user"] = user.username
-    finding.ia_recommendation["data"]["last_modified"] = str(timezone.now().date())
-    finding.save()
-    context = finding_helper.parser_ia_recommendation(finding.ia_recommendation)
+    context = None
+    if save:
+        finding = get_object_or_404(Finding, id=fid)
+        data = response.json()
+        finding.ia_recommendation = {}
+        finding.ia_recommendation["data"] = data
+        finding.ia_recommendation["data"]["like_status"] = None
+        finding.ia_recommendation["data"]["user"] = user.username
+        finding.ia_recommendation["data"]["last_modified"] = str(timezone.now().date())
+        finding.save()
+        context = finding_helper.parser_ia_recommendation(finding.ia_recommendation)
     return http_response.ok(message="OK", data=context) 
