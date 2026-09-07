@@ -6,7 +6,7 @@ class IaRecommendationSerializer(serializers.Serializer):
     ia_recommendations = serializers.CharField(required=True)
 
 
-class IaRemedationBulkRequestSerializer(serializers.Serializer):
+class IaRemediationBulkRequestSerializer(serializers.Serializer):
     finding_ids = serializers.ListField(
         child=serializers.IntegerField(min_value=1),
         allow_empty=False,

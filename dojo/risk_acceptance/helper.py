@@ -534,11 +534,13 @@ def get_matching_value(list_a, list_b):
     return matches[0] if matches else None
 
 def enable_flow_accept_risk(**kwargs):
-    if (
-        kwargs["finding"].risk_status in ["Risk Active", "Risk Expired", "Transfer Rejected"] and  kwargs["finding"].severity != "Info"
+    if(
+        isinstance(kwargs["finding"], Finding)
+        and kwargs["finding"].risk_status in ["Risk Active", "Risk Expired", "Transfer Rejected"] and  kwargs["finding"].severity != "Info"
         and kwargs["finding"].active is True 
         and not kwargs["finding"].risk_acceptance
-        and not kwargs["finding"].tags.filter(name__in=settings.DD_CUSTOM_TAG_PARSER.get("disable_ra", "").split("-")).exists()):
+        and not kwargs["finding"].tags.filter(name__in=settings.DD_CUSTOM_TAG_PARSER.get("disable_ra", "").split("-")).exists()
+    ):
         return True
     return False
 
