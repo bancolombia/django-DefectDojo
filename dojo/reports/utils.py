@@ -1,7 +1,7 @@
 from bs4 import BeautifulSoup
 from datetime import datetime
 import logging
-import re
+from dojo.utils import extract_field_from_text_regex
 logger = logging.getLogger(__name__)
 
 
@@ -24,14 +24,6 @@ def extract_field_from_text_html(text, field_name):
     if text_found:
         text_value = text_found.next_sibling.strip()
     return text_value
-
-def extract_field_from_text_regex(text, field_name):
-    pattern = rf'{field_name}:\s*(.+?)(?:\r?\n|$)'
-    match = re.search(pattern, text, re.IGNORECASE) if text else None
-    
-    if match:
-        return match.group(1).strip()
-    return ""
 
 def upload_s3(session_s3, buffer, bucket, key):
     try:

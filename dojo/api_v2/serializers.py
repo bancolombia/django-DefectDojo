@@ -1089,6 +1089,7 @@ class ProductTypeGroupSerializer(serializers.ModelSerializer):
 
 
 class ProductTypeSerializer(serializers.ModelSerializer):
+    environment = serializers.CharField(read_only=True)
     class Meta:
         model = Product_Type
         fields = "__all__"

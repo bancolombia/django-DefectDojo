@@ -74,7 +74,7 @@ class RiskAcceptanceEngagementSerializer(serializers.ModelSerializer):
     accepted_by = serializers.CharField(required=False)
     reviewed_by_id = serializers.PrimaryKeyRelatedField(source="reviewed_by", queryset=Dojo_User.objects.all(), many=False, required=False)
     reviewed_by = serializers.CharField(required=False)
-    cause = serializers.ChoiceField(required=True, choices=[])
+    cause = serializers.CharField(required=True, max_length=500)
     rules = RiskAcceptanceExclusionRuleSerializers(read_only=True, source="riskacceptanceexclusionrule_set", many=True)
     owner_id = serializers.PrimaryKeyRelatedField(source="owner", queryset=Dojo_User.objects.all(), many=False, required=False)
     owner = UserStubSerializer(required=False)
@@ -83,10 +83,6 @@ class RiskAcceptanceEngagementSerializer(serializers.ModelSerializer):
     class Meta:
         model = RiskAcceptanceEngagement
         fields = '__all__'
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields['cause'].choices = GeneralSettings.get_value("CAUSE_LONG_RISK_ACCEPTANCE", [])
     
     def to_representation(self, instance):
         return super().to_representation(instance)

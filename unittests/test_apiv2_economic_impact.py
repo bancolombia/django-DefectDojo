@@ -18,12 +18,11 @@ class EconomicImpactViewSetTestCase(APITestCase):
         self.client = APIClient()
         self.client.credentials(HTTP_AUTHORIZATION="Token " + token.key)
         self.url = reverse("economic_impact-list")
-
         self.owner = Dojo_User.objects.get(username="admin")
         self.product = Product.objects.get(id=1)
         self.risk_acceptance_engagement = RiskAcceptanceEngagement.objects.create(
             description="Long risk acceptance for API tests",
-            cause="test",
+            cause="CAUSE1",
             owner=self.owner,
             product=self.product,
             reviewed_by=self.owner.username,

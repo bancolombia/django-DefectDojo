@@ -180,25 +180,32 @@ class DefaultReImporter(BaseImporter, DefaultReImporterOptions):
         # we need to make sure there are no side effects such as closing findings
         # for findings with a different service value
         # https://github.com/DefectDojo/django-DefectDojo/issues/12754
-        # Defer large text fields — original_items is only used for status tracking
-        # and set arithmetic; loading full text blows work_mem and causes IO:BufFileWrite.
-        original_findings = (
-            self.test.finding_set.all()
-            .filter(service=self.service)
-            .defer(
-                "description",
-                "mitigation",
-                "impact",
-                "steps_to_reproduce",
-                "severity_justification",
-                "references",
-                "url",
-                "ia_recommendation",
+        # original_items only feeds self.to_mitigate, which close_old_findings() ignores
+        # when the toggle is off, so skip materializing the whole (potentially huge) Test
+        # finding set when nothing no old finding will be closed anyway.
+        if self.close_old_findings_toggle:
+            # Defer large text fields — original_items is only used for status tracking
+            # and set arithmetic; loading full text blows work_mem and causes IO:BufFileWrite.
+            original_findings = (
+                self.test.finding_set.all()
+                .filter(service=self.service)
+                .defer(
+                    "description",
+                    "mitigation",
+                    "impact",
+                    "steps_to_reproduce",
+                    "severity_justification",
+                    "references",
+                    "url",
+                    "ia_recommendation",
+                )
             )
-        )
-        logger.debug(f"original_findings_query: {original_findings.query}")
-        self.original_items = list(original_findings)
-        logger.debug(f"original_items: {[(item.id, item.hash_code) for item in self.original_items]}")
+            logger.debug(f"original_findings_query: {original_findings.query}")
+            self.original_items = list(original_findings)
+            logger.debug(f"number of original_items: {len(self.original_items)}")
+            logger.debug(f"original_items: {[(item.id, item.hash_code) for item in self.original_items]}")
+        else:
+            self.original_items = []
         self.new_items = []
         self.reactivated_items = []
         self.unchanged_items = []

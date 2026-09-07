@@ -3029,3 +3029,11 @@ def azure_devops_sprint_sla_start_date_enabled(test):
         )
         return False
     return True
+
+def extract_field_from_text_regex(text, field_name):
+    pattern = rf'{field_name}:\s*(.+?)(?:\r?\n|$)'
+    match = re.search(pattern, text, re.IGNORECASE) if text else None
+    
+    if match:
+        return match.group(1).strip()
+    return ""

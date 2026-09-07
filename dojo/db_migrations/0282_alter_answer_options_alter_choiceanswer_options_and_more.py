@@ -11,84 +11,10 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AlterModelOptions(
-            name='answer',
-            options={'base_manager_name': 'objects'},
-        ),
-        migrations.AlterModelOptions(
-            name='choiceanswer',
-            options={'base_manager_name': 'objects'},
-        ),
-        migrations.AlterModelOptions(
-            name='choicequestion',
-            options={'base_manager_name': 'objects'},
-        ),
-        migrations.AlterModelOptions(
-            name='hcparticipation',
-            options={'ordering': ['-create_date'], 'verbose_name': 'Specialized DevSecOps Testing Request', 'verbose_name_plural': 'Specialized DevSecOps Testing Requests'},
-        ),
-        migrations.AlterModelOptions(
-            name='textanswer',
-            options={'base_manager_name': 'objects'},
-        ),
-        migrations.AlterModelOptions(
-            name='textquestion',
-            options={'base_manager_name': 'objects'},
-        ),
         migrations.AddField(
             model_name='riskacceptanceengagement',
             name='cause',
             field=models.CharField(blank=True, help_text='The cause of the long risk acceptance.', max_length=500, null=True, verbose_name='Cause'),
-        ),
-        migrations.AlterField(
-            model_name='hcparticipation',
-            name='recommendation',
-            field=models.CharField(choices=[('postulated', 'Postulated to Specialized DevSecOps Tests'), ('postulated_manually', 'Postulated to Specialized DevSecOps Tests (manual)'), ('already_in_hc', 'Already in Specialized DevSecOps Tests'), ('not_eligible', 'Not eligible')], help_text='System recommendation based on business rules', max_length=20),
-        ),
-        migrations.AlterField(
-            model_name='sla_configuration',
-            name='critical',
-            field=models.IntegerField(default=7, help_text='The number of days to remediate a Critical finding.', verbose_name='Critical Finding SLA Days'),
-        ),
-        migrations.AlterField(
-            model_name='sla_configuration',
-            name='enforce_critical',
-            field=models.BooleanField(default=True, help_text='When enabled, Critical findings will be assigned an SLA expiration date based on the Critical finding SLA days within this SLA configuration.', verbose_name='Enforce Critical Finding SLA Days'),
-        ),
-        migrations.AlterField(
-            model_name='sla_configuration',
-            name='enforce_high',
-            field=models.BooleanField(default=True, help_text='When enabled, High findings will be assigned an SLA expiration date based on the High finding SLA days within this SLA configuration.', verbose_name='Enforce High Finding SLA Days'),
-        ),
-        migrations.AlterField(
-            model_name='sla_configuration',
-            name='enforce_low',
-            field=models.BooleanField(default=True, help_text='When enabled, Low findings will be assigned an SLA expiration date based on the Low finding SLA days within this SLA configuration.', verbose_name='Enforce Low Finding SLA Days'),
-        ),
-        migrations.AlterField(
-            model_name='sla_configuration',
-            name='enforce_medium',
-            field=models.BooleanField(default=True, help_text='When enabled, Medium findings will be assigned an SLA expiration date based on the Medium finding SLA days within this SLA configuration.', verbose_name='Enforce Medium Finding SLA Days'),
-        ),
-        migrations.AlterField(
-            model_name='sla_configuration',
-            name='high',
-            field=models.IntegerField(default=30, help_text='The number of days to remediate a High finding.', verbose_name='High Finding SLA Days'),
-        ),
-        migrations.AlterField(
-            model_name='sla_configuration',
-            name='low',
-            field=models.IntegerField(default=120, help_text='The number of days to remediate a Low finding.', verbose_name='Low Finding SLA Days'),
-        ),
-        migrations.AlterField(
-            model_name='sla_configuration',
-            name='medium',
-            field=models.IntegerField(default=90, help_text='The number of days to remediate a Medium finding.', verbose_name='Medium Finding SLA Days'),
-        ),
-        migrations.AlterField(
-            model_name='sla_configuration',
-            name='restart_sla_on_reactivation',
-            field=models.BooleanField(default=False, help_text='When enabled, findings that were previously mitigated but are reactivated during reimport will have their SLA period restarted.', verbose_name='Restart SLA when findings are reactivated'),
         ),
         migrations.CreateModel(
             name='RiskAcceptanceEngagementEconomicImpact',
