@@ -229,6 +229,7 @@ def create_finding_exclusion(request: HttpRequest) -> HttpResponse:
         "finding_exclusion": finding_exclusion,
         "form": form,
         "name": "Create finding exclusion",
+        "default_unique_id": default_unique_id,
     })
 
 
