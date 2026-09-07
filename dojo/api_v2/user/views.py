@@ -7,8 +7,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.core.cache import cache
-from dojo.api_v2.ia_recommendation.serializers import IaRecommendationSerializer
-from dojo.api_v2.ia_recommendation.helper import get_ia_recommendation
 from dojo.api_v2.api_error import ApiError
 from django.middleware.csrf import get_token
 from django.views.decorators.csrf import ensure_csrf_cookie

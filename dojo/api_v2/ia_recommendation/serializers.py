@@ -10,5 +10,5 @@ class IaRemedationBulkRequestSerializer(serializers.Serializer):
     finding_ids = serializers.ListField(
         child=serializers.IntegerField(min_value=1),
         allow_empty=False,
-        required=True,
+        required=False,
     )
