@@ -13,12 +13,13 @@ from django.contrib import messages
 from django.contrib.admin.utils import NestedObjects
 from django.core.paginator import Paginator
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.middleware.csrf import get_token
 from django.db import DEFAULT_DB_ALIAS, connection
 from django.db.models import Count, DateField, F, OuterRef, Prefetch, Q, Subquery, Sum
 from django.db.models.expressions import Value
 from django.db.models.functions import Coalesce
 from django.db.models.query import QuerySet
-from django.http import Http404, HttpRequest, HttpResponseRedirect, JsonResponse
+from django.http import Http404, HttpRequest, HttpResponseRedirect, JsonResponse, HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
@@ -2102,4 +2103,19 @@ def add_product_group(request, pid):
         "product": product,
         "form": group_form,
         "product_tab": product_tab,
+    })
+
+
+@dojo_ratelimit_view()
+def product_list(request: HttpRequest) -> HttpResponse:
+    page_name = ('product_list')
+    user = request.user.id
+    cookie_csrftoken = get_token(request)
+    cookie_sessionid = request.COOKIES.get('sessionid', '')
+    base_params = f"?csrftoken={cookie_csrftoken}&sessionid={cookie_sessionid}"
+    add_breadcrumb(title=page_name, top_level=False, request=request)
+    return render(request, 'dojo/generic_view.html', {
+        'name': page_name,
+        'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/product{base_params}",
+        'user': user,
     })

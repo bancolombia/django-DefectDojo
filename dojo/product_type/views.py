@@ -1,6 +1,7 @@
 import logging
 from functools import partial
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.admin.utils import NestedObjects
 from django.db import DEFAULT_DB_ALIAS
@@ -8,11 +9,13 @@ from django.db.models import Count, IntegerField, OuterRef, Subquery, Value
 from django.db.models.functions import Coalesce
 from django.db.models.query import QuerySet
 from django.http import HttpResponseRedirect
-from django.http import JsonResponse
+from django.middleware.csrf import get_token
+from django.http import JsonResponse, HttpResponse, HttpRequest
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils.translation import gettext as _
 
+from dojo.decorators import dojo_ratelimit_view
 from dojo.authorization.authorization import user_has_permission
 from dojo.authorization.authorization_decorators import user_has_global_permission, user_is_authorized
 from dojo.authorization.roles_permissions import Permissions
@@ -469,4 +472,18 @@ def delete_product_type_group(request, groupid):
         "name": page_name,
         "groupid": groupid,
         "form": groupform,
+    })
+
+@dojo_ratelimit_view()
+def product_type_list(request: HttpRequest) -> HttpResponse:
+    page_name = ('product_list')
+    user = request.user.id
+    cookie_csrftoken = get_token(request)
+    cookie_sessionid = request.COOKIES.get('sessionid', '')
+    base_params = f"?csrftoken={cookie_csrftoken}&sessionid={cookie_sessionid}"
+    add_breadcrumb(title=page_name, top_level=False, request=request)
+    return render(request, 'dojo/generic_view.html', {
+        'name': page_name,
+        'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/product/type{base_params}",
+        'user': user,
     })
