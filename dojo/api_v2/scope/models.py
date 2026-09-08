@@ -35,6 +35,7 @@ class InputFlow(models.Model):
     engagement = models.ForeignKey("Engagement", on_delete=models.CASCADE,null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
+    finding = models.ManyToManyField(Dojo_User, through="Dojo_Group_Member", related_name="finding", blank=True)
 
 class InputURL(models.Model):
     flow = models.ForeignKey("InputFlow",related_name="urls",on_delete=models.CASCADE)
