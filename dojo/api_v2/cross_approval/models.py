@@ -8,7 +8,7 @@ class CrossApprovalRequest(models.Model):
         ("rejected", "Rejected"),
     )
 
-    type = models.CharField(max_length=50, default="x86")
+    owner = models.CharField(max_length=50, default="x86")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(
@@ -41,7 +41,8 @@ class CrossApprovalExclusion(models.Model):
     severity = models.CharField(max_length=50, blank=True)
     hu = models.CharField(max_length=100)
     reason = models.TextField()
-    image_names = models.JSONField(default=list)
+    component_type = models.CharField(max_length=50, default="image")
+    component_values = models.JSONField(default=list)
     expired_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
