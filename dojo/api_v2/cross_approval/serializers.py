@@ -24,8 +24,10 @@ def parse_cross_approval_date(value):
 class CrossApprovalExclusionSerializer(serializers.ModelSerializer):
     exclusion_id = serializers.IntegerField(source="pk", read_only=True)
     id = serializers.CharField(source="vulnerability_id")
-    x86_image_name = serializers.ListField(
-        source="image_names", child=serializers.CharField(), min_length=1
+    where = serializers.CharField(default="all", allow_blank=True, required=False)
+    component_type = serializers.CharField(default="image", required=False)
+    component_values = serializers.ListField(
+        child=serializers.CharField(), min_length=1, required=False
     )
     create_date = serializers.CharField()
     expired_date = serializers.CharField()
@@ -34,18 +36,33 @@ class CrossApprovalExclusionSerializer(serializers.ModelSerializer):
         model = CrossApprovalExclusion
         fields = (
             "exclusion_id", "id", "where", "create_date", "expired_date", "expired_at", "priority",
-            "severity", "hu", "reason", "x86_image_name",
+            "severity", "hu", "reason", "component_type", "component_values",
         )
         read_only_fields = ("expired_at",)
 
     def to_internal_value(self, data):
         data = data.copy()
-        if "x86.image.name" in data and "x86_image_name" not in data:
-            data["x86_image_name"] = data.pop("x86.image.name")
+        if "cve_id" in data and "id" not in data:
+            data["id"] = data["cve_id"]
+        if "id" in data and "cve_id" in data and data["id"] != data["cve_id"]:
+            raise serializers.ValidationError(
+                {"cve_id": "cve_id must match id when both are provided."}
+            )
+
+        component = data.get("component")
+        if isinstance(component, dict):
+            if "type" in component:
+                data["component_type"] = component["type"]
+            if "values" in component:
+                data["component_values"] = component["values"]
+
         return super().to_internal_value(data)
 
     def validate_create_date(self, value):
         return parse_cross_approval_date(value)
+
+    def validate_where(self, value):
+        return value.strip() or "all"
 
     def validate_expired_date(self, value):
         return parse_cross_approval_date(value)
@@ -53,13 +70,26 @@ class CrossApprovalExclusionSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         if attrs["expired_date"] < attrs["create_date"]:
             raise serializers.ValidationError("expired_date must not precede create_date.")
+
+        if not attrs.get("component_values"):
+            raise serializers.ValidationError(
+                {"component": "component.values must include at least one value."}
+            )
+
         return attrs
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
         data["create_date"] = instance.create_date.strftime("%d%m%Y")
         data["expired_date"] = instance.expired_date.strftime("%d%m%Y")
-        data["x86.image.name"] = data.pop("x86_image_name")
+        data["cve_id"] = data["id"]
+        component_type = data.pop("component_type")
+        component_values = data.pop("component_values")
+        data["component"] = {
+            "type": component_type,
+            "values": component_values,
+        }
+
         return data
 
 
@@ -67,14 +97,14 @@ class CrossApprovalRequestSerializer(serializers.ModelSerializer):
     created_by = UserStubSerializer(read_only=True)
     status_updated_by = UserStubSerializer(read_only=True)
     exclusions = CrossApprovalExclusionSerializer(many=True)
-    type = serializers.CharField(default="x86", required=False)
+    owner = serializers.CharField(required=True)
     discussions = serializers.SerializerMethodField()
     logs = serializers.SerializerMethodField()
 
     class Meta:
         model = CrossApprovalRequest
         fields = (
-            "id", "type", "status", "created_at", "created_by", "status_updated_by",
+            "id", "owner", "status", "created_at", "created_by", "status_updated_by",
             "status_updated_at", "exclusions", "discussions", "logs",
         )
         read_only_fields = (
@@ -84,6 +114,7 @@ class CrossApprovalRequestSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         exclusions = attrs.get("exclusions", [])
+        owner = attrs.get("owner") or (self.instance.owner if self.instance else None)
         vulnerability_ids = [exclusion["vulnerability_id"] for exclusion in exclusions]
         duplicate_ids = {
             vulnerability_id for vulnerability_id in vulnerability_ids
@@ -95,7 +126,8 @@ class CrossApprovalRequestSerializer(serializers.ModelSerializer):
             })
 
         conflicts = CrossApprovalExclusion.objects.filter(
-            vulnerability_id__in=vulnerability_ids
+            vulnerability_id__in=vulnerability_ids,
+            request__owner=owner,
         )
         if self.instance:
             conflicts = conflicts.exclude(request=self.instance)
@@ -134,8 +166,8 @@ class CrossApprovalRequestSerializer(serializers.ModelSerializer):
             CrossApprovalExclusion.objects.bulk_create(
                 [CrossApprovalExclusion(request=instance, **exclusion) for exclusion in exclusions]
             )
-        instance.type = validated_data.get("type", instance.type)
-        instance.save(update_fields=["type"])
+        instance.owner = validated_data.get("owner", instance.owner)
+        instance.save(update_fields=["owner"])
         return instance
 
 
