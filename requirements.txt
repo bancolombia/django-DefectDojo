@@ -1,6 +1,6 @@
 amqp==5.3.1
 annotated-types==0.8.0
-anyio==4.15.0
+anyio==4.15.1
 appdirs==1.4.4
 argon2-cffi==25.1.0
 argon2-cffi-bindings==26.1.0
