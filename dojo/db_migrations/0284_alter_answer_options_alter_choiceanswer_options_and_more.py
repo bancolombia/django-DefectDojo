@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('dojo', '0282_alter_answer_options_alter_choiceanswer_options_and_more'),
+        ('dojo', '0283_crossapproval_owner_and_components'),
     ]
 
     operations = [
