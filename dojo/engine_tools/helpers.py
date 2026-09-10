@@ -53,6 +53,7 @@ class Constants(Enum):
     TAG_PRISMA = settings.FINDING_EXCLUSION_FILTER_TAGS.split(",")[0]
     TAG_TENABLE = settings.FINDING_EXCLUSION_FILTER_TAGS.split(",")[1]
     TAG_HACKING = settings.PROVIDERS.split("//")[0]
+    RISK_ACTIVE = "Risk Active"
 
 
 def get_reviewers_members():
@@ -295,7 +296,7 @@ def send_mail_to_cybersecurity(
 
 
 def remove_finding_from_list(finding: Finding, note: Notes, type: str) -> Finding:
-    finding.risk_status = None
+    finding.risk_status = Constants.RISK_ACTIVE.value
     finding.notes.add(note)
 
     if type == "white_list":
