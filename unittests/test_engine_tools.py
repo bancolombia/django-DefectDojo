@@ -18,6 +18,7 @@ from dojo.models import (
 )
 from dojo.engine_tools.models import FindingExclusion, FindingExclusionDiscussion
 from dojo.engine_tools.helpers import (
+    Constants,
     get_reviewers_members,
     get_approvers_members,
     get_note,
@@ -235,21 +236,21 @@ class RemoveFindingFromListTest(TestCase):
     def test_remove_from_whitelist(self):
         finding = remove_finding_from_list(self.finding, self.note, "white_list")
         self.assertTrue(finding.active)
-        self.assertIsNone(finding.risk_status)
+        self.assertEqual(finding.risk_status, Constants.RISK_ACTIVE.value)
         self.assertNotIn("white_list", finding.tags.get_tag_list())
 
     def test_remove_from_blacklist(self):
         self.finding.tags.add("black_list")
         self.finding.risk_status = "On Blacklist"
         finding = remove_finding_from_list(self.finding, self.note, "black_list")
-        self.assertIsNone(finding.risk_status)
+        self.assertEqual(finding.risk_status, Constants.RISK_ACTIVE.value)
         self.assertNotIn("black_list", finding.tags.get_tag_list())
     
-    def test_remove_from_blacklist(self):
+    def test_remove_from_zero_day(self):
         self.finding.tags.add("black_list")
         self.finding.risk_status = "On ZeroDay"
         finding = remove_finding_from_list(self.finding, self.note, "zero_day")
-        self.assertIsNone(finding.risk_status)
+        self.assertEqual(finding.risk_status, Constants.RISK_ACTIVE.value)
         self.assertNotIn("zero_day", finding.tags.get_tag_list())
 
 
