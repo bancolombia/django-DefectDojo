@@ -1,11 +1,12 @@
 from contextlib import nullcontext
-from datetime import timedelta
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock, Mock, patch
 from types import SimpleNamespace
 
 from django.test import SimpleTestCase
 from django.utils import timezone
 from rest_framework.request import Request
+from rest_framework.response import Response
 from rest_framework.test import APIRequestFactory
 
 from dojo.api_v2.cross_approval.permissions import IsCrossApprovalReviewer, IsCrossApprovalSubmitter
@@ -25,6 +26,7 @@ class CrossApprovalExclusionSerializerTest(SimpleTestCase):
     def valid_payload(self):
         return {
             "id": "#sym:vulnerability_id",
+            "cve_id": "#sym:vulnerability_id",
             "where": "all",
             "create_date": "2026-08-23",
             "expired_date": "2026-08-24",
@@ -32,7 +34,10 @@ class CrossApprovalExclusionSerializerTest(SimpleTestCase):
             "severity": "medium",
             "hu": "HU-1",
             "reason": "Supplier exception",
-            "x86.image.name": ["registry.example.com/base:1.0"],
+            "component": {
+                "type": "image",
+                "values": ["registry.example.com/base:1.0"],
+            },
         }
 
     def test_accepts_exclusion_payload(self):
@@ -40,7 +45,16 @@ class CrossApprovalExclusionSerializerTest(SimpleTestCase):
 
         self.assertTrue(serializer.is_valid(), serializer.errors)
         self.assertEqual(serializer.validated_data["vulnerability_id"], "#sym:vulnerability_id")
-        self.assertEqual(serializer.validated_data["image_names"], ["registry.example.com/base:1.0"])
+        self.assertEqual(serializer.validated_data["component_type"], "image")
+        self.assertEqual(serializer.validated_data["component_values"], ["registry.example.com/base:1.0"])
+
+    def test_defaults_empty_where_to_all(self):
+        payload = self.valid_payload()
+        payload["where"] = ""
+        serializer = CrossApprovalExclusionSerializer(data=payload)
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["where"], "all")
 
     def test_rejects_expired_date_before_create_date(self):
         payload = self.valid_payload()
@@ -50,9 +64,32 @@ class CrossApprovalExclusionSerializerTest(SimpleTestCase):
         self.assertFalse(serializer.is_valid())
         self.assertIn("non_field_errors", serializer.errors)
 
+    def test_representation_exposes_component_without_x86_image_name(self):
+        exclusion = SimpleNamespace(
+            pk=1,
+            vulnerability_id="CVE-2026-18374",
+            where="all",
+            create_date=datetime.strptime("07092026", "%d%m%Y").date(),
+            expired_date=datetime.strptime("06112026", "%d%m%Y").date(),
+            expired_at=None,
+            priority="high",
+            severity="medium",
+            hu="6580577",
+            reason="Ace base image vulnerability",
+            component_type="image",
+            component_values=[
+                "artifactory.apps.bancolombia.com/integracion/ace-mqclient:13.0.8.2-r1"
+            ],
+        )
+
+        data = CrossApprovalExclusionSerializer(exclusion).data
+
+        self.assertIn("component", data)
+        self.assertNotIn("x86.image.name", data)
+
 
 class CrossApprovalRequestSerializerTest(SimpleTestCase):
-    def test_defaults_request_type_to_x86(self):
+    def test_requires_owner(self):
         with patch(
             "dojo.api_v2.cross_approval.serializers.CrossApprovalExclusion.objects.filter"
         ) as exclusions_filter:
@@ -61,8 +98,21 @@ class CrossApprovalRequestSerializerTest(SimpleTestCase):
                 "exclusions": [CrossApprovalExclusionSerializerTest().valid_payload()],
             })
 
+            self.assertFalse(serializer.is_valid())
+            self.assertIn("owner", serializer.errors)
+
+    def test_accepts_owner_field(self):
+        with patch(
+            "dojo.api_v2.cross_approval.serializers.CrossApprovalExclusion.objects.filter"
+        ) as exclusions_filter:
+            exclusions_filter.return_value.select_related.return_value.first.return_value = None
+            serializer = CrossApprovalRequestSerializer(data={
+                "owner": "ace",
+                "exclusions": [CrossApprovalExclusionSerializerTest().valid_payload()],
+            })
+
             self.assertTrue(serializer.is_valid(), serializer.errors)
-            self.assertEqual(serializer.validated_data["type"], "x86")
+            self.assertEqual(serializer.validated_data["owner"], "ace")
 
     def test_allows_priority_and_severity_to_be_omitted(self):
         payload = CrossApprovalExclusionSerializerTest().valid_payload()
@@ -73,10 +123,31 @@ class CrossApprovalRequestSerializerTest(SimpleTestCase):
 
     def test_rejects_duplicate_vulnerability_ids_in_one_request(self):
         payload = CrossApprovalExclusionSerializerTest().valid_payload()
-        serializer = CrossApprovalRequestSerializer(data={"exclusions": [payload, payload]})
+        serializer = CrossApprovalRequestSerializer(data={
+            "owner": "x86",
+            "exclusions": [payload, payload],
+        })
 
         self.assertFalse(serializer.is_valid())
         self.assertIn("exclusions", serializer.errors)
+
+    def test_conflict_validation_is_scoped_by_owner(self):
+        payload = CrossApprovalExclusionSerializerTest().valid_payload()
+        with patch(
+            "dojo.api_v2.cross_approval.serializers.CrossApprovalExclusion.objects.filter"
+        ) as exclusions_filter:
+            exclusions_filter.return_value.select_related.return_value.first.return_value = None
+
+            serializer = CrossApprovalRequestSerializer(data={
+                "owner": "ace",
+                "exclusions": [payload],
+            })
+
+            self.assertTrue(serializer.is_valid(), serializer.errors)
+            exclusions_filter.assert_called_once_with(
+                vulnerability_id__in=["#sym:vulnerability_id"],
+                request__owner="ace",
+            )
 
 
 class CrossApprovalHelpersTest(SimpleTestCase):
@@ -92,19 +163,27 @@ class CrossApprovalHelpersTest(SimpleTestCase):
         findings = MagicMock()
         findings.prefetch_related.return_value = findings
         findings.filter.return_value = findings
+        findings.distinct.return_value = findings
         findings.__iter__ = Mock(return_value=iter([matching_finding, non_matching_finding]))
         exclusion = SimpleNamespace(
             vulnerability_id="VULN-1",
+            where="tenable, prisma, gitleaks",
             priority="high",
             severity="critical",
-            image_names=["registry.example.com/base:1.0"],
+            component_type="image",
+            component_values=["registry.example.com/base:1.0"],
         )
 
         with patch("dojo.api_v2.cross_approval.helpers.Finding.objects.filter", return_value=findings):
             result = _get_findings(exclusion)
 
         self.assertEqual(result, [matching_finding])
-        findings.filter.assert_called_once()
+        self.assertEqual(findings.filter.call_count, 2)
+        findings.distinct.assert_called_once_with()
+        self.assertIn("tags__name__iexact", str(findings.filter.call_args_list[1].args[0]))
+        self.assertIn("tenable", str(findings.filter.call_args_list[1].args[0]))
+        self.assertIn("prisma", str(findings.filter.call_args_list[1].args[0]))
+        self.assertIn("gitleaks", str(findings.filter.call_args_list[1].args[0]))
 
     def test_check_new_findings_queues_current_approved_exclusions(self):
         exclusions = [SimpleNamespace(pk=3), SimpleNamespace(pk=5)]
@@ -127,7 +206,7 @@ class CrossApprovalRequestValidationViewTest(SimpleTestCase):
     def test_reports_conflicting_request_id_and_status(self):
         request = Request(APIRequestFactory().get(
             "/api/v2/crossapproval_requests/validate-vulnerability-id/",
-            {"vulnerability_id": "VULN-1"},
+            {"vulnerability_id": "VULN-1", "owner": "x86"},
         ))
         exclusion = SimpleNamespace(
             request_id=9,
@@ -142,10 +221,76 @@ class CrossApprovalRequestValidationViewTest(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["conflicts"], [{"request_id": 9, "status": "rejected"}])
 
-    def test_filters_request_queryset_by_id_cve_and_status(self):
+    def test_requires_owner_to_validate_vulnerability_id(self):
+        request = Request(APIRequestFactory().get(
+            "/api/v2/crossapproval_requests/validate-vulnerability-id/",
+            {"vulnerability_id": "VULN-1"},
+        ))
+
+        response = CrossApprovalRequestViewSet().validate_vulnerability_id(request)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["detail"], "owner is required.")
+
+    def test_lists_owners_from_general_settings_list(self):
+        request = Request(APIRequestFactory().get(
+            "/api/v2/crossapproval_requests/owners/",
+        ))
+        with patch(
+            "dojo.api_v2.cross_approval.views.GeneralSettings.get_value",
+            return_value=["x86", " ace ", "", "x86"],
+        ):
+            response = CrossApprovalRequestViewSet().owners(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["owners"], ["x86", "ace"])
+
+    def test_lists_default_owners_when_general_settings_is_empty(self):
+        request = Request(APIRequestFactory().get(
+            "/api/v2/crossapproval_requests/owners/",
+        ))
+        with patch(
+            "dojo.api_v2.cross_approval.views.GeneralSettings.get_value",
+            return_value=[],
+        ):
+            response = CrossApprovalRequestViewSet().owners(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["owners"], ["x86", "ace"])
+
+    def test_lists_where_options_from_general_settings(self):
+        request = Request(APIRequestFactory().get(
+            "/api/v2/crossapproval_requests/where-options/",
+        ))
+        with patch(
+            "dojo.api_v2.cross_approval.views.GeneralSettings.get_value",
+            return_value=["engine_container", " engine_secret ", "", "engine_container"],
+        ):
+            response = CrossApprovalRequestViewSet().where_options(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["where_options"],
+            ["engine_container", "engine_secret"],
+        )
+
+    def test_lists_empty_where_options_when_general_settings_is_empty(self):
+        request = Request(APIRequestFactory().get(
+            "/api/v2/crossapproval_requests/where-options/",
+        ))
+        with patch(
+            "dojo.api_v2.cross_approval.views.GeneralSettings.get_value",
+            return_value=[],
+        ):
+            response = CrossApprovalRequestViewSet().where_options(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["where_options"], [])
+
+    def test_filters_request_queryset_by_id_cve_status_and_owner(self):
         request = Request(APIRequestFactory().get(
             "/api/v2/crossapproval_requests/",
-            {"id": "7", "cve": "CVE-1", "status": "approved"},
+            {"id": "7", "cve": "CVE-1", "status": "approved", "owner": "x86"},
         ))
         queryset = MagicMock()
         queryset.filter.return_value = queryset
@@ -160,6 +305,7 @@ class CrossApprovalRequestValidationViewTest(SimpleTestCase):
         queryset.filter.assert_any_call(pk="7")
         queryset.filter.assert_any_call(exclusions__vulnerability_id__icontains="CVE-1")
         queryset.filter.assert_any_call(status="approved")
+        queryset.filter.assert_any_call(owner__icontains="x86")
         queryset.distinct.assert_called_once_with()
 
     def test_invalid_request_id_filter_returns_empty_queryset(self):
@@ -179,41 +325,47 @@ class CrossApprovalRequestValidationViewTest(SimpleTestCase):
         self.assertEqual(result, queryset)
         queryset.none.assert_called_once_with()
 
-    def test_groups_unique_base_images_across_requests(self):
+    def test_groups_unique_components_across_requests(self):
         active_expiration = timezone.localdate() + timedelta(days=1)
         first_exclusion = SimpleNamespace(
             vulnerability_id="VULN-1",
-            image_names=["registry.example.com/base:1.0", "registry.example.com/base:1.0"],
+            component_type="image",
+            component_values=["registry.example.com/base:1.0", "registry.example.com/base:1.0"],
             expired_at=None,
             expired_date=active_expiration,
+            create_date=datetime.strptime("23082026", "%d%m%Y").date(),
         )
         second_exclusion = SimpleNamespace(
             vulnerability_id="VULN-2",
-            image_names=["registry.example.com/base:1.0", "registry.example.com/api:2.0"],
+            component_type="image",
+            component_values=["registry.example.com/base:1.0", "registry.example.com/api:2.0"],
             expired_at=None,
             expired_date=active_expiration,
+            create_date=datetime.strptime("24082026", "%d%m%Y").date(),
         )
         expired_exclusion = SimpleNamespace(
             vulnerability_id="VULN-3",
-            image_names=["registry.example.com/base:1.0"],
+            component_type="image",
+            component_values=["registry.example.com/base:1.0"],
             expired_at=timezone.now(),
             expired_date=active_expiration,
         )
         date_expired_exclusion = SimpleNamespace(
             vulnerability_id="VULN-4",
-            image_names=["registry.example.com/base:1.0"],
+            component_type="image",
+            component_values=["registry.example.com/base:1.0"],
             expired_at=None,
             expired_date=timezone.localdate() - timedelta(days=1),
         )
         requests = [
             SimpleNamespace(
-                type="x86",
+                owner="x86",
                 exclusions=SimpleNamespace(
                     all=Mock(return_value=[first_exclusion, expired_exclusion])
                 ),
             ),
             SimpleNamespace(
-                type="ace",
+                owner="ace",
                 exclusions=SimpleNamespace(
                     all=Mock(return_value=[second_exclusion, date_expired_exclusion])
                 ),
@@ -226,28 +378,155 @@ class CrossApprovalRequestValidationViewTest(SimpleTestCase):
         view = CrossApprovalRequestViewSet()
         view.get_queryset = Mock(return_value=queryset)
         view.filter_queryset = Mock(return_value=queryset)
+        view.paginate_queryset = Mock(return_value=[
+            {
+                "owner": "ace",
+                "component": {
+                    "type": "image",
+                    "values": ["registry.example.com/base:1.0"],
+                },
+                "added_date": "24082026",
+                "exclusion_count": 1,
+                "vulnerability_exclusions": [
+                    {"vulnerability_id": "VULN-2", "exclusions": [{"cve_id": "VULN-2"}]},
+                ],
+            },
+            {
+                "owner": "x86",
+                "component": {
+                    "type": "image",
+                    "values": ["registry.example.com/base:1.0"],
+                },
+                "added_date": "23082026",
+                "exclusion_count": 1,
+                "vulnerability_exclusions": [
+                    {"vulnerability_id": "VULN-1", "exclusions": [{"cve_id": "VULN-1"}]},
+                ],
+            },
+        ])
+        view.get_paginated_response = Mock(
+            return_value=Response(
+                {
+                    "count": 2,
+                    "next": None,
+                    "previous": None,
+                    "results": [
+                        {
+                            "owner": "ace",
+                            "component": {
+                                "type": "image",
+                                "values": ["registry.example.com/base:1.0"],
+                            },
+                            "added_date": "24082026",
+                            "exclusion_count": 1,
+                            "vulnerability_exclusions": [
+                                {"vulnerability_id": "VULN-2", "exclusions": [{"cve_id": "VULN-2"}]},
+                            ],
+                        },
+                        {
+                            "owner": "x86",
+                            "component": {
+                                "type": "image",
+                                "values": ["registry.example.com/base:1.0"],
+                            },
+                            "added_date": "23082026",
+                            "exclusion_count": 1,
+                            "vulnerability_exclusions": [
+                                {"vulnerability_id": "VULN-1", "exclusions": [{"cve_id": "VULN-1"}]},
+                            ],
+                        }
+                    ],
+                }
+            )
+        )
 
         with patch(
             "dojo.api_v2.cross_approval.views.CrossApprovalExclusionSerializer",
             side_effect=lambda exclusion: SimpleNamespace(
-                data={"id": exclusion.vulnerability_id, "x86.image.name": exclusion.image_names}
+                data={
+                    "id": exclusion.vulnerability_id,
+                    "component": {
+                        "type": exclusion.component_type,
+                        "values": exclusion.component_values,
+                    },
+                }
             ),
         ):
-            response = view.base_images(Request(APIRequestFactory().get(
-                "/api/v2/crossapproval_requests/base-images/",
-                {"image_name": "base"},
+            response = view.components(Request(APIRequestFactory().get(
+                "/api/v2/crossapproval_requests/components/",
+                {"component_value": "base", "component_type": "image"},
             )))
 
         self.assertEqual(response.status_code, 200)
         queryset.filter.assert_called_once_with(status="approved")
-        base_image = response.data[0]
-        self.assertEqual(base_image["image_name"], "registry.example.com/base:1.0")
-        self.assertEqual(base_image["type"], "x86")
-        self.assertEqual(base_image["exclusion_count"], 2)
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(response.data["next"], None)
+        self.assertEqual(response.data["previous"], None)
+        self.assertEqual(len(response.data["results"]), 2)
         self.assertEqual(
-            [item["vulnerability_id"] for item in base_image["vulnerability_exclusions"]],
-            ["VULN-1", "VULN-2"],
+            {result["owner"] for result in response.data["results"]},
+            {"ace", "x86"},
         )
+
+    def test_components_filters_by_owner_and_returns_added_date(self):
+        active_expiration = timezone.localdate() + timedelta(days=1)
+        x86_exclusion = SimpleNamespace(
+            vulnerability_id="VULN-1",
+            component_type="image",
+            component_values=["registry.example.com/base:1.0"],
+            expired_at=None,
+            expired_date=active_expiration,
+            create_date=datetime.strptime("23082026", "%d%m%Y").date(),
+        )
+        ace_exclusion = SimpleNamespace(
+            vulnerability_id="VULN-2",
+            component_type="image",
+            component_values=["registry.example.com/base:1.0"],
+            expired_at=None,
+            expired_date=active_expiration,
+            create_date=datetime.strptime("24082026", "%d%m%Y").date(),
+        )
+        requests = [
+            SimpleNamespace(
+                owner="x86",
+                exclusions=SimpleNamespace(all=Mock(return_value=[x86_exclusion])),
+            ),
+            SimpleNamespace(
+                owner="ace",
+                exclusions=SimpleNamespace(all=Mock(return_value=[ace_exclusion])),
+            ),
+        ]
+        queryset = MagicMock()
+        approved_queryset = MagicMock()
+        queryset.filter.return_value = approved_queryset
+        approved_queryset.prefetch_related.return_value = requests
+        view = CrossApprovalRequestViewSet()
+        view.get_queryset = Mock(return_value=queryset)
+        view.filter_queryset = Mock(return_value=queryset)
+        view.paginate_queryset = Mock(return_value=None)
+
+        with patch(
+            "dojo.api_v2.cross_approval.views.CrossApprovalExclusionSerializer",
+            side_effect=lambda exclusion: SimpleNamespace(
+                data={
+                    "id": exclusion.vulnerability_id,
+                    "cve_id": exclusion.vulnerability_id,
+                    "component": {
+                        "type": exclusion.component_type,
+                        "values": exclusion.component_values,
+                    },
+                }
+            ),
+        ):
+            response = view.components(Request(APIRequestFactory().get(
+                "/api/v2/crossapproval_requests/components/",
+                {"component_type": "image", "owner": "x86"},
+            )))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["owner"], "x86")
+        self.assertEqual(response.data[0]["added_date"], "23082026")
 
 
 class CrossApprovalPermissionTest(SimpleTestCase):
