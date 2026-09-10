@@ -13,16 +13,57 @@ from dojo.user.queries import get_user
 from .models import CrossApprovalExclusion, CrossApprovalRequestLog
 
 
+def _request_owner(cross_approval_request):
+    return cross_approval_request.owner
+
+
+def _component_values(exclusion):
+    return exclusion.component_values or []
+
+
+def _where_values(exclusion):
+    where_value = (exclusion.where or "").strip()
+    if not where_value or where_value.casefold() == "all":
+        return []
+
+    return [
+        item.strip()
+        for item in where_value.split(",")
+        if item.strip()
+    ]
+
+
+def _filter_findings_by_component(findings, exclusion):
+    component_values = _component_values(exclusion)
+
+    if not component_values:
+        return findings
+
+    component_filter = Q()
+    for component_value in component_values:
+        component_filter |= Q(description__icontains=component_value)
+    return findings.filter(component_filter)
+
+
+def _filter_findings_by_where(findings, exclusion):
+    where_values = _where_values(exclusion)
+
+    if not where_values:
+        return findings
+
+    where_filter = Q()
+    for where_value in where_values:
+        where_filter |= Q(tags__name__iexact=where_value)
+    return findings.filter(where_filter).distinct()
+
+
 def _get_findings(exclusion):
     findings = Finding.objects.filter(
         get_unique_ids_filter(exclusion.vulnerability_id),
         active=True,
     ).prefetch_related("tags", "notes")
-    if exclusion.image_names:
-        image_filter = Q()
-        for image_name in exclusion.image_names:
-            image_filter |= Q(description__icontains=image_name)
-        findings = findings.filter(image_filter)
+    findings = _filter_findings_by_component(findings, exclusion)
+    findings = _filter_findings_by_where(findings, exclusion)
 
     if exclusion.priority or exclusion.severity:
         priority = exclusion.priority.casefold()
@@ -54,8 +95,9 @@ def apply_cross_approval_exclusion(exclusion_id):
         system_user,
         f"Finding added by cross-approval request {exclusion.request_id}: {request_url}",
     )
+    request_owner = _request_owner(exclusion.request)
     for finding in _get_findings(exclusion):
-        finding.tags.add("white_list", exclusion.request.type)
+        finding.tags.add("white_list", request_owner)
         finding.active = False
         finding.risk_status = Constants.ON_WHITELIST.value
         finding.notes.add(note)
@@ -68,13 +110,14 @@ def revert_cross_approval_exclusion(exclusion):
         system_user,
         f"Finding removed from cross-approval request {exclusion.request_id}.",
     )
+    request_owner = _request_owner(exclusion.request)
     findings = Finding.objects.filter(
         get_unique_ids_filter(exclusion.vulnerability_id),
         risk_status=Constants.ON_WHITELIST.value,
-        tags__name=exclusion.request.type,
+        tags__name=request_owner,
     ).prefetch_related("tags")
     for finding in findings:
-        finding.tags.remove(exclusion.request.type)
+        finding.tags.remove(request_owner)
         if "white_list" in finding.tags:
             finding.tags.remove("white_list")
         if not finding.is_mitigated:
