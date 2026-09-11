@@ -476,7 +476,7 @@ def delete_product_type_group(request, groupid):
 
 @dojo_ratelimit_view()
 def product_type_list(request: HttpRequest) -> HttpResponse:
-    page_name = ('product_list')
+    page_name = ('product_type_list')
     user = request.user.id
     cookie_csrftoken = get_token(request)
     cookie_sessionid = request.COOKIES.get('sessionid', '')
