@@ -51,7 +51,9 @@ class TransferFindingFindingCreateSerializer(serializers.ModelSerializer):
         findings = validation_data.pop("findings")
         tf_list = []
         for finding in findings:
-            if finding.risk_status != "Risk Active":
+            if finding.risk_status is not None:
+                finding.risk_status = finding.risk_status.strip()
+            if finding.risk_status not in ["Risk Active", None, ""]:
                 raise ApiError.precondition_required("The finding status must be Risk Active, Finding ID: " + str(finding.id))
             if TransferFindingFinding.objects.filter(findings=finding.id).exists():
                 raise ApiError.precondition_required(

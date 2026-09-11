@@ -241,74 +241,90 @@
                                             </a>
                                         </li>
                                         <li>
-                                            <a rel="noopener noreferrer" id="product-side-menu" href="{% url 'product' %}" aria-expanded="false" aria-label="Products">
-                                                <i class="fa-solid fa-list-ul fa-fw"></i>
-                                                <span>{% trans "Products" %}</span>
-                                                <span class="glyphicon arrow"></span>
-                                            </a>
-                                            <ul class="nav nav-second-level">
-                                                <li>
-                                                    <a rel="noopener noreferrer" href="{% url 'product' %}">
-                                                        {% trans "All Products" %}
-                                                    </a>
-                                                </li>
-                                                {% if request.user|can_add_product %}
+                                            {% if "RENDER_NEW_VIEWS"|general_settings_get_value:"False" %}
+                                                <a rel="noopener noreferrer" id="product-side-menu" href="{% url 'product_list' %}" aria-expanded="false" aria-label="Products">
+                                                    <i class="fa-solid fa-list-ul fa-fw"></i>
+                                                    <span>{% trans "Products" %}</span>
+                                                    <span class="glyphicon arrow"></span>
+                                                </a>
+                                            {% else %}
+                                                <a rel="noopener noreferrer" id="product-side-menu" href="{% url 'product' %}" aria-expanded="false" aria-label="Products">
+                                                    <i class="fa-solid fa-list-ul fa-fw"></i>
+                                                    <span>{% trans "Products" %}</span>
+                                                    <span class="glyphicon arrow"></span>
+                                                </a>
+                                                <ul class="nav nav-second-level">
                                                     <li>
-                                                        <a rel="noopener noreferrer" href="{% url 'new_product' %}">
-                                                            {% trans "Add Product" %}
+                                                        <a rel="noopener noreferrer" href="{% url 'product' %}">
+                                                            {% trans "All Products" %}
                                                         </a>
                                                     </li>
-                                                {% endif %}
-                                                <li>
-                                                    <a rel="noopener noreferrer" href="{% url 'product_type' %}">
-                                                        {% trans "All Product Types" %}
-                                                    </a>
-                                                </li>
-                                                {% if "Product_Type_Add"|has_global_permission %}
+                                                    {% if request.user|can_add_product %}
+                                                        <li>
+                                                            <a rel="noopener noreferrer" href="{% url 'new_product' %}">
+                                                                {% trans "Add Product" %}
+                                                            </a>
+                                                        </li>
+                                                    {% endif %}
                                                     <li>
-                                                        <a rel="noopener noreferrer" id="pop-out-add-product-type" href="{% url 'add_product_type' %}">
-                                                            {% trans "Add Product Type" %}
+                                                        <a rel="noopener noreferrer" href="{% url 'product_type' %}">
+                                                            {% trans "All Product Types" %}
                                                         </a>
                                                     </li>
-                                                {% endif %}
-                                            </ul>
+                                                    {% if "Product_Type_Add"|has_global_permission %}
+                                                        <li>
+                                                            <a rel="noopener noreferrer" id="pop-out-add-product-type" href="{% url 'add_product_type' %}">
+                                                                {% trans "Add Product Type" %}
+                                                            </a>
+                                                        </li>
+                                                    {% endif %}
+                                                </ul>
+                                            {% endif %}
                                             <!-- /.nav-second-level -->
                                         </li>
                                         <li>
-                                            <a rel="noopener noreferrer" href="{% url 'engagement' %}" aria-expanded="false" aria-label="Engagements">
-                                                <i class="fa-solid fa-inbox fa-fw"></i>
-                                                <span>{% trans "Engagements" %}</span>
-                                                <span class="glyphicon arrow"></span>
-                                            </a>
-                                            <ul class="nav nav-second-level">
-                                                <li>
-                                                    <a rel="noopener noreferrer" href="{% url 'active_engagements' %}">
-                                                        {% trans "Active Engagements" %}
-                                                    </a>
-                                                </li>
-                                                <li>
-                                                    <a rel="noopener noreferrer" href="{% url 'all_engagements' %}">
-                                                        {% trans "All Engagements" %}
-                                                    </a>
-                                                </li>
-                                                <li>
-                                                    <a rel="noopener noreferrer" href="{% url 'engagements_all' %}">
-                                                        {% trans "Engagements by Product" %}
-                                                    </a>
-                                                </li>
-                                                <li>
-                                                    <a rel="noopener noreferrer" href="{% url 'test_type' %}">
-                                                        {% trans "Test Types" %}
-                                                    </a>
-                                                </li>
-                                                <li>
-                                                    <a rel="noopener noreferrer" href="{% url 'dev_env' %}">
-                                                        {% trans "Environments" %}
-                                                    </a>
-                                                </li>
-                                            </ul>
-                                            <!-- /.nav-second-level -->
+                                            {% if "RENDER_NEW_VIEWS"|general_settings_get_value:"False" %}
+                                                <a rel="noopener noreferrer" href="{% url 'engagement_list' %}" aria-expanded="false" aria-label="Engagements">
+                                                    <i class="fa-solid fa-inbox fa-fw"></i>
+                                                    <span>{% trans "Engagements" %}</span>
+                                                    <span class="glyphicon arrow"></span>
+                                                </a>
+                                            {% else %}
+                                                <a rel="noopener noreferrer" href="{% url 'engagements' %}" aria-expanded="false" aria-label="Engagements">
+                                                    <i class="fa-solid fa-inbox fa-fw"></i>
+                                                    <span>{% trans "Engagements" %}</span>
+                                                    <span class="glyphicon arrow"></span>
+                                                </a>
+                                                <ul class="nav nav-second-level">
+                                                    <li>
+                                                        <a rel="noopener noreferrer" href="{% url 'active_engagements' %}">
+                                                            {% trans "Active Engagements" %}
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a rel="noopener noreferrer" href="{% url 'all_engagements' %}">
+                                                            {% trans "All Engagements" %}
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a rel="noopener noreferrer" href="{% url 'engagements_all' %}">
+                                                            {% trans "Engagements by Product" %}
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a rel="noopener noreferrer" href="{% url 'test_type' %}">
+                                                            {% trans "Test Types" %}
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a rel="noopener noreferrer" href="{% url 'dev_env' %}">
+                                                            {% trans "Environments" %}
+                                                        </a>
+                                                    </li>
+                                                </ul>
+                                                <!-- /.nav-second-level -->
                                         </li>
+                                            {% endif %}
                                         {% if "RENDER_NEW_VIEWS"|general_settings_get_value:"False" %}
                                          <li>
                                                <a rel="noopener noreferrer" href="{% url 'view_all_risk_acceptance' %}" aria-expanded="false" aria-label="Findings">
