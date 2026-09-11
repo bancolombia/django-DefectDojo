@@ -36,6 +36,15 @@ class HCParticipationFilter(django_filters.FilterSet):
         choices=HCParticipation.BUSSINESS_CRITICALITY_CHOICES,
         label="Business Criticality"
     )
+
+    preselected = django_filters.ChoiceFilter(
+        choices=[
+            ("true", "Pre-selected"),
+            ("false", "Not pre-selected"),
+        ],
+        method="filter_preselected",
+        label="Pre-selection",
+    )
     
     class Meta:
         model = HCParticipation
@@ -44,6 +53,7 @@ class HCParticipationFilter(django_filters.FilterSet):
             "product_type",
             "status",
             "business_criticality",
+            "preselected",
         ]
 
     def filter_status(self, queryset, _name, value):
@@ -63,3 +73,15 @@ class HCParticipationFilter(django_filters.FilterSet):
             return queryset.filter(status="Rejected").exclude(recommendation="already_in_hc")
 
         return queryset.filter(status=value)
+
+    def filter_preselected(self, queryset, _name, value):
+        if not value:
+            return queryset
+
+        preselected_query = queryset.filter(
+            security_posture_data__is_preselected_for_hc=True,
+        )
+        if value == "true":
+            return preselected_query
+
+        return queryset.exclude(pk__in=preselected_query.values("pk"))
