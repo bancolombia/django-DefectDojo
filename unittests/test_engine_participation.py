@@ -26,12 +26,15 @@ from dojo.engine_participation.helpers import (
     get_manual_hc_postulation_eligibility_error,
     create_manual_hc_postulation,
     delete_hc_participation_records_by_date_range,
+    finalize_pending_hc_participation_requests,
     return_hc_participation_to_pending,
     InvalidHCParticipationTransition,
     approve_hc_participation,
     mark_hc_participation_reviewed,
     reject_hc_participation,
     set_hc_request_preselection,
+    is_hc_request_preselected,
+    is_hc_request_prioritized,
     _clear_general_setting_cache,
 )
 
@@ -1618,6 +1621,117 @@ class DeleteHCParticipationRecordsAPIViewTest(TestCase):
         self.assertEqual(response.data["status"], "success")
         self.assertEqual(response.data["data"]["matched_records"], 1)
         self.assertFalse(HCParticipation.objects.filter(pk=hc_in_range.pk).exists())
+
+
+class FinalizePendingHCParticipationRequestsAPIViewTest(TestCase):
+    """Tests for the finalize-pending API endpoint"""
+    fixtures = ['dojo_testdata.json']
+
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = Dojo_User.objects.get(username="admin")
+        token, _created = Token.objects.get_or_create(user=self.admin)
+        self.client.credentials(HTTP_AUTHORIZATION="Token " + token.key)
+
+        self.product = Product.objects.first()
+        HCParticipation.objects.filter(product=self.product).delete()
+        self.url = reverse("api_hc_finalize_pending")
+
+    def test_finalizes_pending_requests_by_recommendation(self):
+        postulated = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.admin,
+        )
+        already_in_hc = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="already_in_hc",
+            status="Pending",
+            created_by=self.admin,
+        )
+        not_eligible = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="not_eligible",
+            status="Pending",
+            created_by=self.admin,
+        )
+
+        response = self.client.post(self.url, data={}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], "success")
+        self.assertEqual(response.data["data"]["postulated_rejected"], 1)
+        self.assertEqual(response.data["data"]["already_in_hc_continues"], 1)
+        self.assertEqual(response.data["data"]["total"], 2)
+
+        postulated.refresh_from_db()
+        already_in_hc.refresh_from_db()
+        not_eligible.refresh_from_db()
+
+        self.assertEqual(postulated.status, "Rejected")
+        self.assertEqual(postulated.final_status, "Rejected")
+        self.assertEqual(
+            postulated.discussions.get().content,
+            "Not prioritized for this execution.",
+        )
+        self.assertEqual(already_in_hc.status, "Rejected")
+        self.assertEqual(already_in_hc.final_status, "Rejected")
+        self.assertEqual(
+            already_in_hc.discussions.get().content,
+            "The product continues in Specialized DevSecOps Tests.",
+        )
+        self.assertEqual(not_eligible.status, "Pending")
+        self.assertEqual(HCParticipationLog.objects.filter(current_status="Rejected").count(), 2)
+
+    def test_carries_over_preselected_pending_requests_as_prioritized(self):
+        _set_available_approvals_for_test(5)
+        preselected = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.admin,
+        )
+        set_hc_request_preselection(preselected, True)
+
+        response = self.client.post(self.url, data={}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["prioritized_carried_over"], 1)
+        self.assertEqual(response.data["data"]["postulated_rejected"], 0)
+        self.assertEqual(response.data["data"]["total"], 1)
+
+        preselected.refresh_from_db()
+        self.assertEqual(preselected.status, "Rejected")
+        self.assertIn(
+            "prioritized",
+            preselected.discussions.get().content.lower(),
+        )
+
+        carried_over = HCParticipation.objects.filter(
+            product=self.product,
+            status="Pending",
+        ).exclude(pk=preselected.pk).get()
+        self.assertEqual(carried_over.recommendation, "postulated")
+        self.assertTrue(is_hc_request_preselected(carried_over))
+        self.assertTrue(is_hc_request_prioritized(carried_over))
+
+    def test_forbids_non_staff_user(self):
+        regular_user = Dojo_User.objects.create_user(
+            username="hc_finalize_regular_user",
+            email="hc_finalize_regular_user@test.com",
+            password="testpass123",
+            is_staff=False,
+            is_superuser=False,
+        )
+        regular_token = Token.objects.create(user=regular_user)
+        api_client = APIClient()
+        api_client.credentials(HTTP_AUTHORIZATION="Token " + regular_token.key)
+
+        response = api_client.post(self.url, data={}, format="json")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data["status"], "forbidden")
 
 
 class ReturnHCParticipationToPendingAPIViewTest(TestCase):

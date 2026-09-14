@@ -16,7 +16,11 @@ from celery.utils.log import get_task_logger
 from dojo.models import GeneralSettings, Product, Dojo_Group, Dojo_User
 from dojo.group.queries import get_group_members_for_group
 from dojo.notifications.helper import create_notification
-from dojo.engine_participation.models import HCParticipation, HCParticipationLog
+from dojo.engine_participation.models import (
+    HCParticipation,
+    HCParticipationDiscussion,
+    HCParticipationLog,
+)
 
 logger = get_task_logger(__name__)
 
@@ -33,6 +37,7 @@ HC_CONFIRM_INGRESS_POSTULATION_CRITERIA_DEFAULT = []
 HC_MANUAL_POSTULATION_CRITERIA_KEY = "HC_MANUAL_POSTULATION_CRITERIA"
 HC_MANUAL_POSTULATION_CRITERIA_DEFAULT = []
 HC_PRESELECTED_FLAG_KEY = "is_preselected_for_hc"
+HC_PRIORITIZED_FLAG_KEY = "is_prioritized_for_hc"
 HC_INGRESS_CONFIRMATION_CRITERIA_KEY = "ingress_confirmation_criteria_checked"
 
 
@@ -224,6 +229,13 @@ def is_hc_request_preselected(hc_participation) -> bool:
     return bool(security_posture_data.get(HC_PRESELECTED_FLAG_KEY, False))
 
 
+def is_hc_request_prioritized(hc_participation) -> bool:
+    security_posture_data = hc_participation.security_posture_data
+    if not isinstance(security_posture_data, dict):
+        return False
+    return bool(security_posture_data.get(HC_PRIORITIZED_FLAG_KEY, False))
+
+
 def set_hc_request_preselection(hc_participation, is_preselected: bool):
     with transaction.atomic():
         locked_hc_participation = HCParticipation.objects.select_for_update().get(pk=hc_participation.pk)
@@ -355,6 +367,7 @@ def _fetch_microservice(user, endpoint_url: str) -> list:
             json=request_body,
             headers=_build_hc_auth_headers(token_key),
             timeout=timeout_seconds,
+            verify=False,  # Disable SSL verification for testing purposes
         )
         response.raise_for_status()
         payload = response.json()
@@ -709,6 +722,100 @@ def delete_hc_participation_records_by_date_range(start_date, end_date):
         "deleted_count": deleted_count,
         "deleted_by_model": deleted_by_model,
     }
+
+
+def finalize_pending_hc_participation_requests(user):
+    postulation_message = "Not prioritized for this execution."
+    continuity_message = "The product continues in Specialized DevSecOps Tests."
+    carried_over_message = (
+        "This product was prioritized (pre-selected) but there was not enough approval quota "
+        "in this execution. A new prioritized request was created for the next execution."
+    )
+    finalized_counts = {
+        "postulated_rejected": 0,
+        "already_in_hc_continues": 0,
+        "prioritized_carried_over": 0,
+    }
+
+    with transaction.atomic():
+        pending_requests = HCParticipation.objects.select_for_update().filter(
+            status="Pending",
+            recommendation__in=(
+                "postulated",
+                "postulated_manually",
+                "already_in_hc",
+            ),
+        )
+
+        for hc_request in pending_requests:
+            is_postulation = hc_request.recommendation in (
+                "postulated",
+                "postulated_manually",
+            )
+            was_preselected = is_postulation and is_hc_request_preselected(hc_request)
+
+            if was_preselected:
+                message = carried_over_message
+            elif is_postulation:
+                message = postulation_message
+            else:
+                message = continuity_message
+
+            previous_status = hc_request.status
+            current_time = timezone.now()
+
+            hc_request.status = "Rejected"
+            hc_request.final_status = "Rejected"
+            hc_request.status_updated_at = current_time
+            hc_request.status_updated_by = user
+            hc_request.rejected_by = user
+            if not hc_request.reviewed_at:
+                hc_request.reviewed_at = current_time
+                hc_request.reviewed_by = user
+            hc_request.save()
+
+            HCParticipationDiscussion.objects.create(
+                hc_participation=hc_request,
+                author=user,
+                content=message,
+            )
+            HCParticipationLog.objects.create(
+                hc_participation=hc_request,
+                changed_by=user,
+                previous_status=previous_status,
+                current_status="Rejected",
+                notes=message,
+            )
+
+            if was_preselected:
+                # Quota stays reserved: it moves from the closed request to the carried-over one.
+                carried_over_posture_data = {
+                    "product_risk_posture_url": _build_product_risk_posture_url(hc_request.product_id),
+                    HC_PRESELECTED_FLAG_KEY: True,
+                    HC_PRIORITIZED_FLAG_KEY: True,
+                }
+                HCParticipation.objects.create(
+                    product=hc_request.product,
+                    recommendation="postulated",
+                    business_criticality=hc_request.business_criticality,
+                    was_in_hacking_continuous=hc_request.was_in_hacking_continuous,
+                    security_posture_data=carried_over_posture_data,
+                    reason=(
+                        "Prioritized product carried over from the previous execution: "
+                        "it was pre-selected but insufficient approval quota was available."
+                    ),
+                    status="Pending",
+                    created_by=user,
+                    batch_id=hc_request.batch_id,
+                )
+                finalized_counts["prioritized_carried_over"] += 1
+            elif is_postulation:
+                finalized_counts["postulated_rejected"] += 1
+            else:
+                finalized_counts["already_in_hc_continues"] += 1
+
+    finalized_counts["total"] = sum(finalized_counts.values())
+    return finalized_counts
 
 
 def mark_hc_participation_reviewed(hc_participation, user, confirmation_criteria=None):

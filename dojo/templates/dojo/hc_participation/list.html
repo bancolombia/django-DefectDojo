@@ -107,6 +107,9 @@
                             <tr>
                                 <td>
                                     <a href="{% url 'hc_participation' hc.uuid %}">{{ hc.product.name }}</a>
+                                    {% if hc.is_prioritized_for_hc %}
+                                        <i class="fa-solid fa-star" style="color:#b97a0c;" title="Prioritized: pre-selected but quota was not available in the previous execution"></i>
+                                    {% endif %}
                                 </td>
                                 <td>{{ hc.product.prod_type.name }}</td>
                                 <td>{{ hc.business_criticality|default:"-" }}</td>

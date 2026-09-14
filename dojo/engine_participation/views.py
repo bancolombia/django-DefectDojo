@@ -32,6 +32,7 @@ from dojo.engine_participation.helpers import (
     has_valid_comments,
     get_hc_approvers_members,
     is_hc_request_preselected,
+    is_hc_request_prioritized,
     mark_hc_participation_reviewed,
     run_hc_participation_evaluation,
     set_hc_request_preselection,
@@ -68,6 +69,7 @@ def hc_participations(request: HttpRequest) -> HttpResponse:
 
     for hc_request in postulated_requests.object_list:
         hc_request.is_preselected_for_hc = is_hc_request_preselected(hc_request)
+        hc_request.is_prioritized_for_hc = is_hc_request_prioritized(hc_request)
     
     add_breadcrumb(
         title="Specialized DevSecOps Testing Requests",
