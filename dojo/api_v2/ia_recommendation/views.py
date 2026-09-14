@@ -1,12 +1,13 @@
 import logging
 from dojo.api_v2.utils import http_response
 from django.shortcuts import get_object_or_404
-from dojo.models import Finding, Test
+from dojo.models import Finding, Test, GeneralSettings
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.core.cache import cache
+from dojo.api_v2.ia_recommendation.helper import order_finding_by_rules
 from dojo.api_v2.ia_recommendation.serializers import IaRecommendationSerializer, IaRemediationBulkRequestSerializer
 from dojo.api_v2.ia_recommendation.helper import async_get_ia_recommendation
 from dojo.api_v2.api_error import ApiError
@@ -46,6 +47,8 @@ class IAremediationApiView(APIView):
         test = get_object_or_404(Test, pk=test_id)
         serializer = IaRemediationBulkRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True) 
-        findings = str(list(test.finding_set.filter(active=True, duplicate=False).values_list('id', flat=True))).replace("[", "").replace("]", "").replace(" ", "")
-        async_get_ia_recommendation.apply_async(args=[findings, request.user, False])
-        return http_response.ok(message="OK", data={"findings": findings})
+        max_results = GeneralSettings.get_value("IA_MAX_RESULTS", 10)
+        findings, order_by = order_finding_by_rules(test.finding_set.filter(active=True, risk_status="Risk Active", duplicate=False), max_results=max_results)
+        findings_ids = str(list(f.id for f in findings)).replace("[", "").replace("]", "").replace(" ", "")
+        async_get_ia_recommendation.apply_async(args=[findings_ids, request.user, False])
+        return http_response.ok(message="OK", data={"findings": findings_ids, "order_by": order_by})
