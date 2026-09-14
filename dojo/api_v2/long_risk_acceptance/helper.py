@@ -82,7 +82,7 @@ def render_rule(ra_engagement: RiskAcceptanceEngagement, reverse_query: bool):
         if finding_qr is None:
             finding_qr = to_execute_rule(query, rules, reverse_query)
         else:
-            finding_qr = finding_qr.union(to_execute_rule(query, rules))
+            finding_qr = finding_qr.union(to_execute_rule(query, rules, reverse_query))
 
     return finding_qr
 

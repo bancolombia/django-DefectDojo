@@ -75,5 +75,10 @@ urlpatterns = [
         views.long_risk_acceptance_list,
         name="long_risk_acceptance_list"
     ),
+    re_path(
+        r"^engagement/list$",
+        views.engagement_list,
+        name="engagement_list"
+    ),
 ]
 
