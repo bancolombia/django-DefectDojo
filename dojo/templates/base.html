@@ -242,8 +242,31 @@
                                         </li>
                                         <li>
                                             {% if "RENDER_NEW_VIEWS"|general_settings_get_value:"False" %}
-                                                <a rel="noopener noreferrer" id="product-side-menu" href="{% url 'product_list' %}" aria-expanded="false" aria-label="Products">
+                                                <ul class="nav nav-second-level">
+                                                    <li>
+                                                        <a rel="noopener noreferrer" href="{% url 'product_type_list' %}">
+                                                            {% trans "Products type" %}
+                                                        </a>
+                                                    </li>
+                                                </ul>
+                                                <a rel="noopener noreferrer" id="product-side-menu" href="{% url 'product_type_list' %}" aria-expanded="false" aria-label="Products">
                                                     <i class="fa-solid fa-list-ul fa-fw"></i>
+                                                    <span>{% trans "Products type" %}</span>
+                                                    <span class="glyphicon arrow"></span>
+                                                </a>
+                                            {% endif %}
+                                        </li>
+                                        <li>
+                                            {% if "RENDER_NEW_VIEWS"|general_settings_get_value:"False" %}
+                                                <ul class="nav nav-second-level">
+                                                    <li>
+                                                        <a rel="noopener noreferrer" href="{% url 'product_list' %}">
+                                                            {% trans "Products" %}
+                                                        </a>
+                                                    </li>
+                                                </ul>
+                                                <a rel="noopener noreferrer" id="product-side-menu" href="{% url 'product_list' %}" aria-expanded="false" aria-label="Products">
+                                                    <i class="fa-brands fa-product-hunt"></i>
                                                     <span>{% trans "Products" %}</span>
                                                     <span class="glyphicon arrow"></span>
                                                 </a>
@@ -284,6 +307,13 @@
                                         </li>
                                         <li>
                                             {% if "RENDER_NEW_VIEWS"|general_settings_get_value:"False" %}
+                                                <ul class="nav nav-second-level">
+                                                    <li>
+                                                        <a rel="noopener noreferrer" href="{% url 'engagement_list' %}">
+                                                            {% trans "Engagements" %}
+                                                        </a>
+                                                    </li>
+                                                </ul>
                                                 <a rel="noopener noreferrer" href="{% url 'engagement_list' %}" aria-expanded="false" aria-label="Engagements">
                                                     <i class="fa-solid fa-inbox fa-fw"></i>
                                                     <span>{% trans "Engagements" %}</span>
@@ -326,18 +356,33 @@
                                         </li>
                                             {% endif %}
                                         {% if "RENDER_NEW_VIEWS"|general_settings_get_value:"False" %}
-                                         <li>
-                                               <a rel="noopener noreferrer" href="{% url 'view_all_risk_acceptance' %}" aria-expanded="false" aria-label="Findings">
-                                                <i class="fa-solid fa-user-shield"></i>
-                                                <span>{% trans "Risk Acceptance All" %}</span>
-                                                <span class="glyphicon arrow"></span>
-                                                
-                                            </a>
+                                        <li>
+                                                <ul class="nav nav-second-level">
+                                                    <li>
+                                                        <a rel="noopener noreferrer" href="{% url 'view_all_risk_acceptance' %}">
+                                                            {% trans "Risk Acceptance All" %}
+                                                        </a>
+                                                    </li>
+                                                </ul>
+                                                <a rel="noopener noreferrer" href="{% url 'view_all_risk_acceptance' %}" aria-expanded="false" aria-label="Findings">
+                                                    <i class="fa-solid fa-user-shield"></i>
+                                                    <span>{% trans "Risk Acceptance All" %}</span>
+                                                    <span class="glyphicon arrow"></span>
+                                                    
+                                                </a>
                                         </li>
                                         {% endif %}
                                            {% if "RENDER_NEW_VIEWS"|general_settings_get_value:"False" %}
                                          <li>
-                                               <a rel="noopener noreferrer" href="{% url 'view_long_risk_acceptance_list' %}" aria-expanded="false" aria-label="Findings">
+                                             <ul class="nav nav-second-level">
+                                                    <li>
+                                                        <a rel="noopener noreferrer" href="{% url 'view_long_risk_acceptance_list' %}">
+                                                            {% trans "Long Risk Acceptance All" %}
+                                                        </a>
+                                                    </li>
+                                            </ul>
+
+                                            <a rel="noopener noreferrer" href="{% url 'view_long_risk_acceptance_list' %}" aria-expanded="false" aria-label="Findings">
                                                 <i class="fa-solid fa-file-shield"></i> 
                                                 <span>{% trans "Long Risk Acceptance All" %}</span>
                                                 <span class="glyphicon arrow"></span>
@@ -347,7 +392,15 @@
                                         {% endif %}
                                         {% if system_settings.enable_transfer_finding %}
                                          <li>
-                                               <a rel="noopener noreferrer" href="{% url 'view_all_transfer' %}" aria-expanded="false" aria-label="Findings">
+                                            <ul class="nav nav-second-level">
+                                                    <li>
+                                                        <a rel="noopener noreferrer" href="{% url 'view_all_transfer' %}">
+                                                            {% trans "Transfer Findings All" %}
+                                                        </a>
+                                                    </li>
+                                            </ul>
+
+                                            <a rel="noopener noreferrer" href="{% url 'view_all_transfer' %}" aria-expanded="false" aria-label="Findings">
                                                 <i class="fa-solid fa-shuffle"></i>
                                                 <span>{% trans "Transfer Findings All" %}</span>
                                                 <span class="glyphicon arrow"></span>
@@ -356,7 +409,14 @@
                                         {% endif %}
                                         {% if "RENDER_NEW_VIEWS"|general_settings_get_value:"False" %}
                                         <li>
-                                               <a rel="noopener noreferrer" href="{% url 'finding_list_frontend' %}" aria-expanded="false" aria-label="Findings">
+                                            <ul class="nav nav-second-level">
+                                                <li>
+                                                    <a rel="noopener noreferrer" href="{% url 'finding_list_frontend' %}">
+                                                        {% trans "Findings All" %}
+                                                    </a>
+                                                </li>
+                                            </ul>
+                                            <a rel="noopener noreferrer" href="{% url 'finding_list_frontend' %}" aria-expanded="false" aria-label="Findings">
                                                 <i class="fa-solid fa-bug fa-fw"></i>
                                                 <span>{% trans "Findings" %}</span>
                                                 <span class="glyphicon arrow"></span>
