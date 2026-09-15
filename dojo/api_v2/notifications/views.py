@@ -32,6 +32,7 @@ class NotificationEmailApiView(GenericAPIView):
         - message: message body
         - copy: email in copy (optional)
         - attachment: attachment (optional)
+        - ia_remediation_result: dictionary or list of dictionaries with IA remediation results (optional)
     """
     permission_classes = (IsAuthenticated, permissions.UserHasPermissionSendEmail,)
     serializer_class = SerializerEmailNotificationRiskAcceptance
@@ -65,6 +66,7 @@ class NotificationEmailApiView(GenericAPIView):
         long_risk_acceptance = data.get("long_risk_acceptance")
         attachment = request.FILES.get("attachment")
         risk_acceptance_eng_id = data.get("risk_acceptance_eng_id")
+        ia_remediation_result = data.get("ia_remediation_result")
 
         if event == "url_report_finding":
             notification_kwargs = {
@@ -76,6 +78,7 @@ class NotificationEmailApiView(GenericAPIView):
                 "recipients": recipients,
                 "icon": icon,
                 "color_icon": color_icon,
+                "ia_remediation_result": ia_remediation_result,
             }
 
             if expiration_time_hours:
@@ -129,6 +132,7 @@ class NotificationEmailApiView(GenericAPIView):
             long_risk_acceptance=long_risk_acceptance,
             enable_acceptance_risk_for_email=enable_acceptance_risk_for_email,
             template=template,
+            ia_remediation_result=ia_remediation_result,
         )
 
         if risk_acceptance_id:
@@ -144,5 +148,4 @@ class NotificationEmailApiView(GenericAPIView):
 
         return http_response.ok(
             message="Risk acceptance email sent successfully")
-
 

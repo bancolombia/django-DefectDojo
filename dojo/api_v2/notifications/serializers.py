@@ -24,6 +24,7 @@ class SerializerEmailNotificationRiskAcceptance(serializers.Serializer):
     product_id = serializers.IntegerField(required=False, allow_null=True)
     engagement_id = serializers.IntegerField(required=False, allow_null=True)
     finding_id = serializers.IntegerField(required=False, allow_null=True)
+    ia_remediation_result = serializers.JSONField(required=False, allow_null=True)
 
     def validate_copy(self, value):
         if not value:
@@ -75,3 +76,17 @@ class SerializerEmailNotificationRiskAcceptance(serializers.Serializer):
                 })
 
         return attrs
+
+    def validate_ia_remediation_result(self, value):
+        if value is None:
+            return value
+
+        if isinstance(value, dict):
+            return value
+
+        if isinstance(value, list) and all(isinstance(item, dict) for item in value):
+            return value
+
+        raise serializers.ValidationError(
+            "ia_remediation_result must be a dictionary or a list of dictionaries.",
+        )

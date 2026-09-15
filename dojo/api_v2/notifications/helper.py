@@ -31,6 +31,7 @@ def send_risk_acceptance_email_task(
         risk_acceptance_eng_id,
         enable_acceptance_risk_for_email,
         template,
+        ia_remediation_result,
     ):
     
     try:
@@ -88,7 +89,8 @@ def send_risk_acceptance_email_task(
             icon="bell",
             owner=risk_pending.owner,
             color_icon="#A7A40B",
-            url=reverse('view_risk_acceptance', args=(risk_pending.engagement.id, risk_pending.id,)))
+            url=reverse('view_risk_acceptance', args=(risk_pending.engagement.id, risk_pending.id,)),
+            ia_remediation_result=ia_remediation_result)
     
     elif isinstance(risk_pending, RiskAcceptanceEngagement):
         create_notification(
@@ -108,4 +110,5 @@ def send_risk_acceptance_email_task(
             icon="bell",
             owner=risk_pending.owner,
             color_icon="#A7A40B",
-            url=reverse('view_long_risk_acceptance_details', args=(risk_pending.id,)))
+            url=reverse('view_long_risk_acceptance_details', args=(risk_pending.id,)),
+            ia_remediation_result=ia_remediation_result)
