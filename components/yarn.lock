@@ -161,10 +161,10 @@ datatables.net-buttons@4.0.2:
   dependencies:
     datatables.net "^3"
 
-datatables.net-colreorder@^3.0.1:
-  version "3.0.1"
-  resolved "https://registry.yarnpkg.com/datatables.net-colreorder/-/datatables.net-colreorder-3.0.1.tgz#c735ecc1cbf626df9f6382e7f218813be9a3f7e2"
-  integrity sha512-UGP55V8Yjlj0HHqtYKCYN3W+IHlsqyjPtH0bCmKxPUj3CwngPTdYsonmweKxb7tDe9iTexFSMqBiPpFzlVPsUg==
+datatables.net-colreorder@^3.0.2:
+  version "3.0.2"
+  resolved "https://registry.yarnpkg.com/datatables.net-colreorder/-/datatables.net-colreorder-3.0.2.tgz#08fdcd30f11464f2f72e3c625ca729f11ddba390"
+  integrity sha512-Yo4yjX2fpE9U8vCgDStR7KXEwDVdPxvTnShZMbnNNGDNjX8AY0MomDOWj217ZGZiNqL09g5g1liui7fwzFq5nQ==
   dependencies:
     datatables.net "^3"
 
