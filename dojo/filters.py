@@ -1438,6 +1438,10 @@ class ApiEngagementFilter(DojoFilter):
         method="filter_has_findings",
         label="Has findings",
         help_text="Filter engagements that do, or do not, have any findings")
+    provider = CharFilter(field_name="description", lookup_expr="icontains", help_text="Provider contains")
+    class_id = CharFilter(field_name="description", lookup_expr="icontains", help_text="Class ID contains")
+    item_class_id = CharFilter(field_name="description", lookup_expr="icontains", help_text="Item Class ID contains")
+    last_time_scanned = CharFilter(field_name="description", lookup_expr="icontains", help_text="Last Time Scanned contains")
 
     o = OrderingFilter(
         # tuple-mapping retains order
