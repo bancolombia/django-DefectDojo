@@ -1,15 +1,13 @@
 import logging
 from django.conf import settings
-from django.core.exceptions import ObjectDoesNotExist
-from django.core.cache import cache
 from rest_framework.generics import GenericAPIView
 from dojo.api_v2.utils import http_response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from dojo.user.queries import get_user
-from dojo.home.helper import encode_string
+from dojo.models import Risk_Acceptance
 from dojo.api_v2.notifications.serializers import SerializerEmailNotificationRiskAcceptance
-from dojo.models import Risk_Acceptance, Product, Engagement, Finding
+import dojo.api_v2.notifications.helper as notifications_helper
 from dojo.api_v2.long_risk_acceptance.models import RiskAcceptanceEngagement
 from drf_spectacular.utils import (
     extend_schema,
@@ -45,9 +43,9 @@ class NotificationEmailApiView(GenericAPIView):
         serializer = SerializerEmailNotificationRiskAcceptance(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-
         event = data.get("event", "risk_acceptance")
         recipients = data.get("recipients")
+        emails = data.get("emails")
         title = data.get("title")
         template = data.get("template")
         copy_email = data.get("copy")
@@ -68,46 +66,44 @@ class NotificationEmailApiView(GenericAPIView):
         risk_acceptance_eng_id = data.get("risk_acceptance_eng_id")
         ia_remediation_result = data.get("ia_remediation_result")
 
+        if event == "ia_remediation_result":
+            notifications_helper.send_ia_remediation_notification_email(
+                event=event,
+                subject=subject,
+                title=title,
+                description=description,
+                url=url,
+                emails=emails,
+                icon=icon,
+                color_icon=color_icon,
+                ia_remediation_result=ia_remediation_result,
+            )
+            return http_response.ok(
+                        message="Report finding email sent successfully"
+                )
+
+
+
+
         if event == "url_report_finding":
-            notification_kwargs = {
-                "event": event,
-                "subject": subject,
-                "title": title,
-                "description": description,
-                "url": url,
-                "recipients": recipients,
-                "icon": icon,
-                "color_icon": color_icon,
-                "ia_remediation_result": ia_remediation_result,
-            }
-
-            if expiration_time_hours:
-                notification_kwargs["expiration_time"] = f"{expiration_time_hours} hours"
-
-            encoded_url = encode_string(url)
-            key = f"report_finding:{recipients[0]}:{encoded_url}"
-            logger.debug(f"REPORT FINDING: calculate key url path {key}")
-            expiration_time_seconds = expiration_time_hours * 3600 if expiration_time_hours else None
-            cache.set(key, url, expiration_time_seconds)
-
-            notification_kwargs["url"] = f"{settings.SITE_URL}/url_presigned/{encoded_url}"
-
-            try:
-                if product_id:
-                    notification_kwargs["product"] = Product.objects.get(id=product_id)
-                if engagement_id:
-                    notification_kwargs["engagement"] = Engagement.objects.get(id=engagement_id)
-                if finding_id:
-                    notification_kwargs["finding"] = Finding.objects.get(id=finding_id)
-            except ObjectDoesNotExist as exc:
-                return http_response.bad_request(message=str(exc))
-
-            try:
-                create_notification(**notification_kwargs)
-                return http_response.ok(message="Report download notification sent successfully")
-            except Exception as exc:
-                logger.exception("Error sending report download notification")
-                return http_response.bad_request(message=f"Error sending notification: {exc}")
+            notifications_helper.send_report_notification_email(
+                event=event,
+                subject=subject,
+                title=title,
+                description=description,
+                url=url,
+                emails=emails,
+                icon=icon,
+                color_icon=color_icon,
+                ia_remediation_result=ia_remediation_result,
+                expiration_time_hours=expiration_time_hours,
+                product_id=product_id,
+                engagement_id=engagement_id,
+                finding_id=finding_id,
+            )
+            return http_response.ok(
+                message="Report finding email sent successfully"
+            )
         
         attachment_data = None
         attachment_name = None
@@ -118,8 +114,7 @@ class NotificationEmailApiView(GenericAPIView):
             attachment_name = attachment.name
             attachment_content_type = attachment.content_type
         
-        from dojo.api_v2.notifications.helper import send_risk_acceptance_email_task
-        send_risk_acceptance_email_task(
+        notifications_helper.send_risk_acceptance_email_task(
             recipients=recipients,
             subject=subject,
             message=message,

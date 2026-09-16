@@ -1,15 +1,17 @@
 from dojo.celery import app
-from django.core.mail import EmailMessage
 from dojo.notifications.helper import create_notification
+from dojo.notifications.helper import EmailNotificationManger
+from django.core.exceptions import ObjectDoesNotExist
+from dojo.api_v2.utils import http_response
+from django.core.cache import cache
 from django.urls import reverse
 from dojo.api_v2.api_error import ApiError 
+from dojo.home.helper import encode_string
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from django.conf import settings
-from dojo.models import Risk_Acceptance
+from dojo.models import Risk_Acceptance, Product, Engagement, Finding
 from dojo.api_v2.long_risk_acceptance.models import RiskAcceptanceEngagement
-from dojo.aws import ses_email
-from dojo.models import System_Settings
 from dojo.risk_acceptance.helper import update_or_create_url_risk_acceptance
 from dojo.risk_acceptance.notification import Notification as ra_notification
 import logging
@@ -112,3 +114,92 @@ def send_risk_acceptance_email_task(
             color_icon="#A7A40B",
             url=reverse('view_long_risk_acceptance_details', args=(risk_pending.id,)),
             ia_remediation_result=ia_remediation_result)
+
+def send_report_notification_email(
+        event,
+        subject,
+        title,
+        description,
+        url,
+        recipients,
+        icon,
+        color_icon,
+        ia_remediation_result,
+        expiration_time_hours=None,
+        product_id=None,
+        engagement_id=None,
+        finding_id=None
+    ):
+
+    notification_kwargs = {
+        "event": event,
+        "subject": subject,
+        "title": title,
+        "description": description,
+        "url": url,
+        "recipients": recipients,
+        "icon": icon,
+        "color_icon": color_icon,
+        "ia_remediation_result": ia_remediation_result,
+    }
+
+    if expiration_time_hours:
+        notification_kwargs["expiration_time"] = f"{expiration_time_hours} hours"
+
+    encoded_url = encode_string(url)
+    key = f"report_finding:{recipients[0]}:{encoded_url}"
+    logger.debug(f"REPORT FINDING: calculate key url path {key}")
+    expiration_time_seconds = expiration_time_hours * 3600 if expiration_time_hours else None
+    cache.set(key, url, expiration_time_seconds)
+
+    notification_kwargs["url"] = f"{settings.SITE_URL}/url_presigned/{encoded_url}"
+
+    try:
+        if product_id:
+            notification_kwargs["product"] = Product.objects.get(id=product_id)
+        if engagement_id:
+            notification_kwargs["engagement"] = Engagement.objects.get(id=engagement_id)
+        if finding_id:
+            notification_kwargs["finding"] = Finding.objects.get(id=finding_id)
+    except ObjectDoesNotExist as exc:
+        return http_response.bad_request(message=str(exc))
+
+    try:
+        create_notification(**notification_kwargs)
+        return http_response.ok(message="Report download notification sent successfully")
+    except Exception as exc:
+        logger.exception("Error sending report download notification")
+        return http_response.bad_request(message=f"Error sending notification: {exc}")
+
+
+def send_ia_remediation_notification_email(
+        event,
+        subject,
+        title,
+        description,
+        url,
+        emails,
+        icon,
+        color_icon,
+        ia_remediation_result,
+    ):
+
+    notification_kwargs = {
+        "event": event,
+        "subject": subject,
+        "title": title,
+        "description": description,
+        "url": url,
+        "recipient": emails,
+        "icon": icon,
+        "color_icon": color_icon,
+        "ia_remediation_result": ia_remediation_result,
+    }
+
+    if ia_remediation_result:
+        try:
+            EmailNotificationManger().send_mail_notification(**notification_kwargs)
+            return http_response.ok(message="Notification sent successfully")
+        except Exception as exc:
+            logger.exception("Error sending IA remediation notification")
+            return http_response.bad_request(message=f"Error sending notification: {exc}")
