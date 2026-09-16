@@ -27,7 +27,7 @@ def view_long_risk_acceptance_list(request: HttpRequest) -> HttpResponse:
     cookie_csrftoken = get_token(request)
     cookie_sessionid = request.COOKIES.get('sessionid', '')
     base_params = f"?csrftoken={cookie_csrftoken}&sessionid={cookie_sessionid}"
-    add_breadcrumb(title=page_name, request=request, top_level=False)
+    add_breadcrumb(title=page_name, request=request, top_level=True)
     return render(request, 'dojo/generic_view.html', {
         'actions': page_name,
         'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/long-term-acceptance/list{base_params}",
