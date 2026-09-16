@@ -35,6 +35,7 @@ from dojo.engine_participation.helpers import (
     set_hc_request_preselection,
     is_hc_request_preselected,
     is_hc_request_prioritized,
+    get_hc_participation_summary,
     _clear_general_setting_cache,
 )
 
@@ -46,6 +47,15 @@ def _set_available_approvals_for_test(value: int) -> None:
         defaults={"value": str(value), "data_type": "INT", "status": True},
     )
     _clear_general_setting_cache("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE")
+
+
+def _set_current_execution_started_at_for_test(started_at) -> None:
+    """Set the HC current-execution boundary in DB and purge Redis cache between tests."""
+    GeneralSettings.objects.update_or_create(
+        name_key="HC_CURRENT_EXECUTION_STARTED_AT",
+        defaults={"value": started_at.isoformat(), "data_type": "STRING", "status": True},
+    )
+    _clear_general_setting_cache("HC_CURRENT_EXECUTION_STARTED_AT")
 
 
 def _set_confirm_ingress_criteria_for_test(criteria: list[str]) -> None:
@@ -687,6 +697,80 @@ class GetLatestEvaluationTest(TestCase):
         self.assertEqual(result["status"], "Approved")
 
 
+class HCParticipationSummaryScopeTest(TestCase):
+    """Summary counters (except available_approvals) must reset per execution cycle"""
+    fixtures = ['dojo_testdata.json']
+
+    def setUp(self):
+        self.user = Dojo_User.objects.get(username="admin")
+        self.product = Product.objects.first()
+        HCParticipation.objects.filter(product=self.product).delete()
+        _set_available_approvals_for_test(3)
+
+    def test_summary_excludes_requests_before_current_execution(self):
+        """Older postulated/preselected requests must not count once a new execution starts"""
+        boundary = datetime.datetime.now(datetime.timezone.utc)
+        _set_current_execution_started_at_for_test(boundary)
+
+        old_hc = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.user,
+            security_posture_data={"is_preselected_for_hc": True},
+        )
+        HCParticipation.objects.filter(pk=old_hc.pk).update(
+            create_date=boundary - datetime.timedelta(days=1)
+        )
+
+        summary = get_hc_participation_summary()
+
+        self.assertEqual(summary["postulated_products"], 0)
+        self.assertEqual(summary["preselected_products"], 0)
+        self.assertEqual(summary["available_approvals"], 3)
+
+    def test_summary_includes_requests_from_current_execution(self):
+        """New requests created after the boundary must be reflected in the summary"""
+        boundary = datetime.datetime.now(datetime.timezone.utc)
+        _set_current_execution_started_at_for_test(boundary)
+
+        new_hc = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.user,
+            security_posture_data={"is_preselected_for_hc": True},
+        )
+        HCParticipation.objects.filter(pk=new_hc.pk).update(
+            create_date=boundary + datetime.timedelta(minutes=5)
+        )
+
+        summary = get_hc_participation_summary()
+
+        self.assertEqual(summary["postulated_products"], 1)
+        self.assertEqual(summary["preselected_products"], 1)
+
+    def test_summary_keeps_pending_carry_over_regardless_of_create_date(self):
+        """Pending carry-over requests still count even if created before the new boundary"""
+        old_boundary = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=2)
+        carry_over_hc = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.user,
+            security_posture_data={"is_preselected_for_hc": True, "is_prioritized_for_hc": True},
+        )
+        HCParticipation.objects.filter(pk=carry_over_hc.pk).update(create_date=old_boundary)
+
+        new_boundary = datetime.datetime.now(datetime.timezone.utc)
+        _set_current_execution_started_at_for_test(new_boundary)
+
+        summary = get_hc_participation_summary()
+
+        self.assertEqual(summary["postulated_products"], 1)
+        self.assertEqual(summary["preselected_products"], 1)
+
+
 class HCParticipationViewsTest(TestCase):
     """Tests for HC Participation views"""
     fixtures = ['dojo_testdata.json']
@@ -717,6 +801,78 @@ class HCParticipationViewsTest(TestCase):
         
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.product.name)
+
+    def test_list_view_does_not_include_execution_date_filter(self):
+        """Execution Date filter must only be available in the history view"""
+        from django.test import Client
+        client = Client()
+        client.force_login(self.user)
+
+        response = client.get(reverse("hc_participations"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("execution_date", response.context["filtered"].form.fields)
+
+    def test_list_view_excludes_requests_before_current_execution(self):
+        """Main view only shows requests belonging to the latest execution cycle"""
+        from django.test import Client
+
+        boundary = datetime.datetime.now(datetime.timezone.utc)
+        _set_current_execution_started_at_for_test(boundary)
+
+        old_hc = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.user,
+        )
+        HCParticipation.objects.filter(pk=old_hc.pk).update(
+            create_date=boundary - datetime.timedelta(days=1)
+        )
+
+        new_hc = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.user,
+        )
+        HCParticipation.objects.filter(pk=new_hc.pk).update(
+            create_date=boundary + datetime.timedelta(minutes=5)
+        )
+
+        client = Client()
+        client.force_login(self.user)
+        response = client.get(reverse("hc_participations"))
+
+        postulated_ids = [hc.pk for hc in response.context["postulated_requests"].object_list]
+        self.assertNotIn(old_hc.pk, postulated_ids)
+        self.assertIn(new_hc.pk, postulated_ids)
+
+    def test_list_view_keeps_pending_carry_over_regardless_of_create_date(self):
+        """Pending prioritized carry-over requests must stay in the main view even
+        after a newer execution boundary is set, since they still need review"""
+        from django.test import Client
+
+        old_boundary = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=2)
+        carry_over_hc = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.user,
+            security_posture_data={"is_preselected_for_hc": True, "is_prioritized_for_hc": True},
+        )
+        HCParticipation.objects.filter(pk=carry_over_hc.pk).update(create_date=old_boundary)
+
+        # A newer execution starts after the carry-over request was created.
+        new_boundary = datetime.datetime.now(datetime.timezone.utc)
+        _set_current_execution_started_at_for_test(new_boundary)
+
+        client = Client()
+        client.force_login(self.user)
+        response = client.get(reverse("hc_participations"))
+
+        postulated_ids = [hc.pk for hc in response.context["postulated_requests"].object_list]
+        self.assertIn(carry_over_hc.pk, postulated_ids)
 
     def test_list_view_includes_hc_summary(self):
         """List view shows summary panel with available approvals and counters"""
@@ -1156,6 +1312,54 @@ class ManualHCPostulationEligibilityTest(TestCase):
 
         self.assertEqual(error, "This product is already in SDT.")
 
+    @override_settings(HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"])
+    def test_requests_from_previous_execution_do_not_block_eligibility(self):
+        """Old-cycle requests (already_in_hc/pending postulation) must not count
+        once a new execution has started, per business rule"""
+        old_boundary = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=2)
+
+        old_already_in_hc = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="already_in_hc",
+            status="Reviewed",
+            created_by=self.user,
+        )
+        HCParticipation.objects.filter(pk=old_already_in_hc.pk).update(create_date=old_boundary)
+
+        old_pending_postulation = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated_manually",
+            status="Pending",
+            created_by=self.user,
+        )
+        HCParticipation.objects.filter(pk=old_pending_postulation.pk).update(create_date=old_boundary)
+
+        _set_current_execution_started_at_for_test(datetime.datetime.now(datetime.timezone.utc))
+
+        error = get_manual_hc_postulation_eligibility_error(self.product)
+
+        self.assertIsNone(error)
+
+    @override_settings(HC_PARTICIPATION_POSTULATED_CLASSID=["BMC_APPLICATION"])
+    def test_pending_carry_over_from_previous_execution_still_blocks_eligibility(self):
+        """Pending prioritized carry-over requests must still block eligibility
+        regardless of their create_date, since they still need review"""
+        old_boundary = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=2)
+        carry_over_hc = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.user,
+            security_posture_data={"is_preselected_for_hc": True, "is_prioritized_for_hc": True},
+        )
+        HCParticipation.objects.filter(pk=carry_over_hc.pk).update(create_date=old_boundary)
+
+        _set_current_execution_started_at_for_test(datetime.datetime.now(datetime.timezone.utc))
+
+        error = get_manual_hc_postulation_eligibility_error(self.product)
+
+        self.assertEqual(error, "A pending HC postulation already exists for this product.")
+
 
 class CreateManualHCPostulationTest(TestCase):
     """Tests for create_manual_hc_postulation"""
@@ -1381,6 +1585,97 @@ class ManualHCPostulationViewTest(TestCase):
         self.assertEqual(HCParticipation.objects.filter(product=self.product).count(), 1)
         page_messages = list(response.context["messages"])
         self.assertTrue(any("pending HC postulation already exists" in str(m) for m in page_messages))
+
+
+class HCParticipationHistoryViewTest(TestCase):
+    """Tests for the execution history view"""
+    fixtures = ['dojo_testdata.json']
+
+    def setUp(self):
+        self.user = Dojo_User.objects.get(username="admin")
+        self.product = Product.objects.first()
+        HCParticipation.objects.filter(product=self.product).delete()
+
+    def test_history_view_includes_execution_date_filter(self):
+        """Execution Date filter must be available in the history view"""
+        client = Client()
+        client.force_login(self.user)
+
+        response = client.get(reverse("hc_participation_history"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("execution_date", response.context["filtered"].form.fields)
+
+    def test_history_view_empty_when_no_execution_marked(self):
+        """Without a recorded execution boundary, there is no history to show"""
+        HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.user,
+        )
+
+        client = Client()
+        client.force_login(self.user)
+        response = client.get(reverse("hc_participation_history"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No previous execution history found.")
+
+    def test_history_view_shows_only_requests_before_current_execution(self):
+        """History view only shows requests created before the latest execution started"""
+        boundary = datetime.datetime.now(datetime.timezone.utc)
+        _set_current_execution_started_at_for_test(boundary)
+
+        old_hc = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Rejected",
+            created_by=self.user,
+        )
+        HCParticipation.objects.filter(pk=old_hc.pk).update(
+            create_date=boundary - datetime.timedelta(days=1)
+        )
+
+        new_hc = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.user,
+        )
+        HCParticipation.objects.filter(pk=new_hc.pk).update(
+            create_date=boundary + datetime.timedelta(minutes=5)
+        )
+
+        client = Client()
+        client.force_login(self.user)
+        response = client.get(reverse("hc_participation_history"))
+
+        postulated_ids = [hc.pk for hc in response.context["postulated_requests"].object_list]
+        self.assertIn(old_hc.pk, postulated_ids)
+        self.assertNotIn(new_hc.pk, postulated_ids)
+
+    def test_history_view_excludes_pending_carry_over_requests(self):
+        """Pending prioritized carry-over requests must not appear in history until reviewed"""
+        old_boundary = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=2)
+        carry_over_hc = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.user,
+            security_posture_data={"is_preselected_for_hc": True, "is_prioritized_for_hc": True},
+        )
+        HCParticipation.objects.filter(pk=carry_over_hc.pk).update(create_date=old_boundary)
+
+        new_boundary = datetime.datetime.now(datetime.timezone.utc)
+        _set_current_execution_started_at_for_test(new_boundary)
+
+        client = Client()
+        client.force_login(self.user)
+        response = client.get(reverse("hc_participation_history"))
+
+        postulated_ids = [hc.pk for hc in response.context["postulated_requests"].object_list]
+        self.assertNotIn(carry_over_hc.pk, postulated_ids)
 
 
 class HCParticipationFilterTest(TestCase):

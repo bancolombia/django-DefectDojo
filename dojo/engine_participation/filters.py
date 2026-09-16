@@ -1,5 +1,28 @@
 import django_filters
+from django import forms
+from django_filters.widgets import RangeWidget
 from dojo.engine_participation.models import HCParticipation
+
+
+class HCExecutionDateRangeWidget(RangeWidget):
+    """Renders the execution date range as two native calendar (date) inputs."""
+
+    def __init__(self, attrs=None):
+        widgets = (forms.DateInput(attrs={"type": "date"}), forms.DateInput(attrs={"type": "date"}))
+        forms.MultiWidget.__init__(self, widgets, attrs)
+
+
+class HCExecutionDateRangeFilter(django_filters.DateFromToRangeFilter):
+    """Filters create_date by calendar day, ignoring time-of-day, inclusive on both ends."""
+
+    def filter(self, queryset, value):
+        if not value:
+            return queryset
+        if value.start:
+            queryset = queryset.filter(create_date__date__gte=value.start)
+        if value.stop:
+            queryset = queryset.filter(create_date__date__lte=value.stop)
+        return queryset
 
 
 class HCParticipationFilter(django_filters.FilterSet):
@@ -45,7 +68,7 @@ class HCParticipationFilter(django_filters.FilterSet):
         method="filter_preselected",
         label="Pre-selection",
     )
-    
+
     class Meta:
         model = HCParticipation
         fields = [
@@ -85,3 +108,16 @@ class HCParticipationFilter(django_filters.FilterSet):
             return preselected_query
 
         return queryset.exclude(pk__in=preselected_query.values("pk"))
+
+
+class HCParticipationHistoryFilter(HCParticipationFilter):
+    """Adds the execution date range filter, only relevant for the history view"""
+
+    execution_date = HCExecutionDateRangeFilter(
+        field_name="create_date",
+        label="Execution Date",
+        widget=HCExecutionDateRangeWidget,
+    )
+
+    class Meta(HCParticipationFilter.Meta):
+        fields = HCParticipationFilter.Meta.fields + ["execution_date"]
