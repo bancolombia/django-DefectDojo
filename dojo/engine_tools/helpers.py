@@ -504,6 +504,7 @@ def update_finding_prioritization_per_cve(
     ransomware_used,
     kev_date_added,
     priority_zero,
+    sla_start_date_filter=None,
 ) -> None:
 
     priority_cve_severity_filter = Q()
@@ -576,6 +577,15 @@ def update_finding_prioritization_per_cve(
             active=settings.CELERY_CRON_STATUS_FINDINGS_PRIORIZATION
         )
 
+    if sla_start_date_filter:
+        findings = findings.filter(sla_start_date=sla_start_date_filter)
+        logger.info(
+            "Applying sla_start_date filter %s for prioritization update (CVE %s, scan_type %s).",
+            sla_start_date_filter,
+            vulnerability_id,
+            scan_type,
+        )
+
     # Process in chunks to avoid memory issues
     MAX_BATCH_SIZE = 5000
     findings_iterator = findings.iterator(chunk_size=1000)
@@ -637,12 +647,14 @@ def update_finding_prioritization_per_cve(
     return message
 
 
-def identify_priority_vulnerabilities(findings, priority_zero) -> int:
+def identify_priority_vulnerabilities(findings, priority_zero, sla_start_date_filter=None) -> int:
     """
     Identifies priority vulnerabilities based on risk score and adds them to the blacklist.
 
     Args:
         findings (QuerySet): Set of vulnerabilities from the Finding model
+        sla_start_date_filter (date, optional): When provided, restricts the update step to
+            findings whose sla_start_date matches this value (used for gated prioritization).
     """
     system_user = get_user(settings.SYSTEM_USER)
 
@@ -673,6 +685,7 @@ def identify_priority_vulnerabilities(findings, priority_zero) -> int:
                 ransomware_used,
                 kev_date_added,
                 priority_zero,
+                sla_start_date_filter,
             ),
         )
 
@@ -1086,7 +1099,8 @@ def check_priorization():
         if should_run_gated_tags:
             gated_vulnerabilities = (
                 Finding.objects.filter(
-                    active=settings.CELERY_CRON_STATUS_FINDINGS_PRIORIZATION
+                    active=settings.CELERY_CRON_STATUS_FINDINGS_PRIORIZATION,
+                    sla_start_date=next_sprint_start_date,
                 )
                 .filter(vulnerability_identifier_filter)
                 .filter(build_priority_filter(gated_priority_tags))
@@ -1097,7 +1111,7 @@ def check_priorization():
                 "Identified %s vulnerabilities for gated prioritization (sprint start date match).",
                 gated_vulnerabilities.count(),
             )
-            identify_priority_vulnerabilities(gated_vulnerabilities, False)
+            identify_priority_vulnerabilities(gated_vulnerabilities, False, sla_start_date_filter=next_sprint_start_date)
         elif use_sprint_start_date_for_gated_tags:
             logger.info(
                 "Skipping gated prioritization tags %s. Today (%s) does not match azure_devops_next_sprint_start_date (%s).",
