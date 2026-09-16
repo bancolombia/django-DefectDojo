@@ -755,7 +755,7 @@ class EngagementViewSet(
     def engagement_by_product(self, request, pk):
         engagement_name = request.query_params.get("engagement_name")
         paginator = self.pagination_class()
-        queryset = Engagement.objects.filter(product=pk)
+        queryset = Engagement.objects.filter(product=pk, active=True)
         if engagement_name:
             queryset = queryset.filter(name__icontains=engagement_name)
         data = queryset.values("id", "name")
@@ -3640,9 +3640,12 @@ class TransferFindingViewSet(prefetch.PrefetchListMixin,
         obj_transfer_finding_findings = TransferFindingFinding.objects.filter(transfer_findings=int(pk))
         for transfer_finding_finding in obj_transfer_finding_findings:
             helper_tf.reset_finding_related(transfer_finding_finding.findings)
-        NotificationTransferFinding.transfer_finding_remove(transfer_finding)
+        try:
+            NotificationTransferFinding.transfer_finding_remove(transfer_finding)
+        except Exception as e:
+            logger.error(f"Failed to remove transfer finding {transfer_finding.id} notification: {str(e)}")
         super().destroy(request, pk)
-        return http_response.no_content(message="TransferFinding Deleted")
+        return http_response.ok(message="TransferFinding Deleted")
     
 
     @action(

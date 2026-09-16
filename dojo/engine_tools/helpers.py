@@ -295,7 +295,7 @@ def send_mail_to_cybersecurity(
 
 
 def remove_finding_from_list(finding: Finding, note: Notes, type: str) -> Finding:
-    finding.risk_status = None
+    finding.risk_status = "Risk Active"
     finding.notes.add(note)
 
     if type == "white_list":
