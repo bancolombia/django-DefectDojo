@@ -531,16 +531,18 @@ class ApproveRejectHCTest(TestCase):
         available_after_review = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
         self.assertEqual(int(available_after_review), 1)
 
-    def test_review_postulated_preselected_fails_when_approvals_negative(self):
-        """When available approvals is negative, no postulated request can be reviewed (including pre-selected ones)."""
-        pending_postulation = HCParticipation.objects.create(
+    def test_review_postulated_preselected_only_up_to_real_capacity(self):
+        """Pre-selecting can over-commit the bag (setUp leaves 2 available
+        approvals here, 3 requests get pre-selected). Only as many pre-selected
+        requests as real remaining capacity can be reviewed, in processing
+        order; the rest stay Pending to be carried over at finalize."""
+        first_postulation = HCParticipation.objects.create(
             product=self.product,
             recommendation="postulated",
             status="Pending",
             created_by=self.user,
         )
-
-        set_hc_request_preselection(pending_postulation, True)
+        set_hc_request_preselection(first_postulation, True)
 
         second_postulation = HCParticipation.objects.create(
             product=self.product,
@@ -561,13 +563,35 @@ class ApproveRejectHCTest(TestCase):
         available_approvals = GeneralSettings.get_value("HACKING_CONTINUOUS_APPROVAL_BAG_SIZE", 0)
         self.assertLess(int(available_approvals), 0)
 
-        # Pre-selected products are still blocked when count is negative;
-        # reviewer must remove some pre-selections first.
-        with self.assertRaises(InvalidHCParticipationTransition):
-            mark_hc_participation_reviewed(pending_postulation, self.user)
+        # First two (matching the real capacity of 2) succeed in order.
+        mark_hc_participation_reviewed(first_postulation, self.user)
+        first_postulation.refresh_from_db()
+        self.assertEqual(first_postulation.status, "Reviewed")
 
-        pending_postulation.refresh_from_db()
-        self.assertEqual(pending_postulation.status, "Pending")
+        mark_hc_participation_reviewed(second_postulation, self.user)
+        second_postulation.refresh_from_db()
+        self.assertEqual(second_postulation.status, "Reviewed")
+
+        # The third one exceeds real capacity and must stay blocked.
+        with self.assertRaises(InvalidHCParticipationTransition):
+            mark_hc_participation_reviewed(third_postulation, self.user)
+
+        third_postulation.refresh_from_db()
+        self.assertEqual(third_postulation.status, "Pending")
+
+        # A brand-new non-preselected request must remain blocked while the bag stays negative.
+        non_preselected_postulation = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.user,
+        )
+
+        with self.assertRaises(InvalidHCParticipationTransition):
+            mark_hc_participation_reviewed(non_preselected_postulation, self.user)
+
+        non_preselected_postulation.refresh_from_db()
+        self.assertEqual(non_preselected_postulation.status, "Pending")
 
     def test_preselect_and_remove_preselection_adjust_approvals(self):
         """Pre-select decreases available approvals and removing pre-selection increases them"""

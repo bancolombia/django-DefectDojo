@@ -900,14 +900,30 @@ def mark_hc_participation_reviewed(hc_participation, user, confirmation_criteria
         is_already_in_hc_request = locked_hc_participation.recommendation == "already_in_hc"
         was_preselected = is_hc_request_preselected(locked_hc_participation)
 
-        current_available_approvals = get_hc_available_approvals()
-        if is_postulation_request and current_available_approvals < 0:
-            raise InvalidHCParticipationTransition(
-                "Available approvals is negative. Remove pre-selections or review already_in_hc removals before reviewing more postulated requests."
-            )
-
         if is_postulation_request and not was_preselected:
+            current_available_approvals = get_hc_available_approvals()
+            if current_available_approvals < 0:
+                raise InvalidHCParticipationTransition(
+                    "Available approvals is negative. Remove pre-selections or review already_in_hc removals before reviewing more postulated requests."
+                )
             _consume_hc_available_approval()
+
+        if is_postulation_request and was_preselected:
+            # Pre-selecting can over-commit the bag; only as many pre-selected
+            # requests as real remaining capacity can be reviewed, in the order
+            # they are processed. The rest stay Pending and become carry-over
+            # once the execution is finalized.
+            pending_preselected_count = HCParticipation.objects.filter(
+                status="Pending",
+                recommendation__in=("postulated", "postulated_manually"),
+                security_posture_data__is_preselected_for_hc=True,
+            ).count()
+            real_capacity_for_preselected = get_hc_available_approvals() + pending_preselected_count
+            if real_capacity_for_preselected <= 0:
+                raise InvalidHCParticipationTransition(
+                    "No approval capacity left for pre-selected requests. This request will "
+                    "be carried over to the next execution if it stays pending."
+                )
 
         if is_postulation_request and was_preselected:
             security_posture_data = locked_hc_participation.security_posture_data
