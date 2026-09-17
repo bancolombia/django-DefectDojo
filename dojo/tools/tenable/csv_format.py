@@ -246,7 +246,7 @@ class TenableCSVParser:
         if "Name" not in reader.fieldnames and "Plugin Name" not in reader.fieldnames and "asset.name" not in reader.fieldnames:
             msg = "Invalid CSV file: missing 'Name', 'Plugin Name' or 'asset.name' field"
             raise ValueError(msg)
-        dupes = {}
+        findings = []
         # Iterate over each line and create findings
         for row in reader:
             # title: Could come from "Name" or "Plugin Name"
@@ -296,69 +296,60 @@ class TenableCSVParser:
             references += "\nPlugin Information: " + row.get("Plugin Name", "N/A")
             references += "\nPlugin Publication Date: " + row.get("Plugin Publication Date", "N/A")
             references += "\nPlugin Modification Date: " + row.get("Plugin Modification Date", "N/A")
-            # Determine if the current row has already been processed
-            dupe_key = (
-                severity
-                + title
-                + row.get("Host", row.get("asset.host_name", "No host"))
-                + str(row.get("Port", row.get("asset.port", "No port")))
-                + row.get("Synopsis", row.get("definition.synopsis", "No synopsis"))
+
+
+            # Create the finding object
+            find = Finding(
+                title=title,
+                test=test,
+                description=description,
+                severity=severity,
+                # cwe=cwe,
+                epss_score=epss_score,
+                mitigation=mitigation,
+                references=references,
+                severity_justification=severity_justification,
             )
-            # Finding has not been detected in the current report. Proceed with
-            # parsing
-            if dupe_key not in dupes:
-                # Create the finding object
-                find = Finding(
-                    title=title,
-                    test=test,
-                    description=description,
-                    severity=severity,
-                    # cwe=cwe,
-                    epss_score=epss_score,
-                    mitigation=mitigation,
-                    references=references,
-                    severity_justification=severity_justification,
+
+            # manage CWE
+            cwe = row.get("CWE", row.get("definition.cwe", ""))
+            if cwe != "":
+                find.cwe = cwe
+
+            # manage CVSS vector (only v3.x for now)
+            cvss_vector = row.get("CVSS V3 Vector", "")
+            if cvss_vector != "":
+                find.cvssv3 = CVSS3(
+                    "CVSS:3.0/" + str(cvss_vector),
+                ).clean_vector(output_prefix=True)
+
+            # Add CVSS score if present
+            cvssv3 = row.get("CVSSv3", row.get("definition.cvss3.base_score", ""))
+            if cvssv3 != "":
+                find.cvssv3_score = cvssv3
+            # manage CPE data
+            detected_cpe = self._format_cpe(str(row.get("CPE", row.get("definition.cpe", ""))))
+            if detected_cpe:
+                # TODO: support more than one CPE in Nessus CSV parser
+                if len(detected_cpe) > 1:
+                    LOGGER.debug(
+                        "more than one CPE for a finding. NOT supported by Nessus CSV parser",
+                    )
+                cpe_decoded = re.sub(r'[\n\r\t\\+]', '', str(detected_cpe[0]))
+                cpe_decoded = CPE(cpe_decoded)
+                find.component_name = (
+                    cpe_decoded.get_product()[0]
+                    if len(cpe_decoded.get_product()) > 0
+                    else None
+                )
+                find.component_version = (
+                    cpe_decoded.get_version()[0]
+                    if len(cpe_decoded.get_version()) > 0
+                    else None
                 )
 
-                # manage CVSS vector (only v3.x for now)
-                cvss_vector = row.get("CVSS V3 Vector", "")
-                if cvss_vector != "":
-                    find.cvssv3 = CVSS3(
-                        "CVSS:3.0/" + str(cvss_vector),
-                    ).clean_vector(output_prefix=True)
-
-                # Add CVSS score if present
-                cvssv3 = row.get("CVSSv3", row.get("definition.cvss3.base_score", ""))
-                if cvssv3 != "":
-                    find.cvssv3_score = cvssv3
-                # manage CPE data
-                detected_cpe = self._format_cpe(str(row.get("CPE", row.get("definition.cpe", ""))))
-                if detected_cpe:
-                    # TODO: support more than one CPE in Nessus CSV parser
-                    if len(detected_cpe) > 1:
-                        LOGGER.debug(
-                            "more than one CPE for a finding. NOT supported by Nessus CSV parser",
-                        )
-                    cpe_decoded = re.sub(r'[\n\r\t\\+]', '', str(detected_cpe[0]))
-                    cpe_decoded = CPE(cpe_decoded)
-                    find.component_name = (
-                        cpe_decoded.get_product()[0]
-                        if len(cpe_decoded.get_product()) > 0
-                        else None
-                    )
-                    find.component_version = (
-                        cpe_decoded.get_version()[0]
-                        if len(cpe_decoded.get_version()) > 0
-                        else None
-                    )
-
-                find.unsaved_endpoints = []
-                find.unsaved_vulnerability_ids = []
-                dupes[dupe_key] = find
-            else:
-                # This is a duplicate. Update the description of the original
-                # finding
-                find = dupes[dupe_key]
+            find.unsaved_endpoints = []
+            find.unsaved_vulnerability_ids = []
 
             # Process any CVEs
             detected_cve = self._format_cve(str(row.get("CVE", row.get("definition.cve", ""))))
@@ -383,7 +374,17 @@ class TenableCSVParser:
             endpoint = Endpoint.from_uri(host) if "://" in host else Endpoint(protocol=protocol, host=host, port=port)
             # Add the list to be processed later
             find.unsaved_endpoints.append(endpoint)
-            find.unsaved_tags = [row.get("Custom Tag", settings.DD_CUSTOM_TAG_PARSER.get("tenable"))]
+            find.unsaved_tags = self.get_tags(row)
             find.unique_id_from_tool = row.get("Custom Id", "No Custom Id")
+            findings.append(find)
 
-        return list(dupes.values())
+        return findings
+
+    def get_tags(self, row):
+        tags = row.get("Custom Tag", None)
+        if (tags is not None) and "," in str(tags):
+            return str(tags).split(",")
+        elif tags is not None:
+            return [tags]
+        else:
+            return [settings.DD_CUSTOM_TAG_PARSER.get("tenable")]

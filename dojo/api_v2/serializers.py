@@ -1139,6 +1139,12 @@ class ProductContactsSerializer(serializers.Serializer):
 
 class EngagementSerializer(serializers.ModelSerializer):
     tags = TagListSerializerField(required=False)
+    product_name = serializers.CharField(read_only=True, required=False)
+    product_type_name = serializers.CharField(read_only=True, required=False)
+    provider = serializers.CharField(read_only=True, required=False)
+    class_id = serializers.CharField(read_only=True, required=False)
+    item_class_id = serializers.CharField(read_only=True, required=False)
+    last_time_scanned = serializers.CharField(read_only=True, required=False)
 
     class Meta:
         model = Engagement

@@ -64,14 +64,14 @@ class TestTenableParser(DojoTestCase):
             for finding in findings:
                 for endpoint in finding.unsaved_endpoints:
                     endpoint.clean()
-            self.assertEqual(29, len(findings))
+            self.assertEqual(30, len(findings))
             finding = findings[0]
             self.assertIn(finding.severity, Finding.SEVERITIES)
             self.assertEqual("Info", finding.severity)
             self.assertEqual(0, len(finding.unsaved_vulnerability_ids))
             self.assertEqual(0, finding.cwe)
             self.assertEqual("HTTP Server Type and Version", finding.title)
-            finding = findings[25]
+            finding = findings[26]
             self.assertIn(finding.severity, Finding.SEVERITIES)
             self.assertEqual("SSL Certificate Signed Using Weak Hashing Algorithm (Known CA)", finding.title)
             self.assertEqual("Info", finding.severity)
@@ -86,14 +86,14 @@ class TestTenableParser(DojoTestCase):
             for finding in findings:
                 for endpoint in finding.unsaved_endpoints:
                     endpoint.clean()
-            self.assertEqual(29, len(findings))
+            self.assertEqual(30, len(findings))
             finding = findings[0]
             self.assertIn(finding.severity, Finding.SEVERITIES)
             self.assertEqual("Info", finding.severity)
             self.assertEqual(0, len(finding.unsaved_vulnerability_ids))
             self.assertEqual(0, finding.cwe)
             self.assertEqual("HTTP Server Type and Version", finding.title)
-            finding = findings[25]
+            finding = findings[26]
             self.assertIn(finding.severity, Finding.SEVERITIES)
             self.assertEqual("SSL Certificate Signed Using Weak Hashing Algorithm (Known CA)", finding.title)
             self.assertEqual("Info", finding.severity)
@@ -285,7 +285,7 @@ class TestTenableParser(DojoTestCase):
             for finding in findings:
                 for endpoint in finding.unsaved_endpoints:
                     endpoint.clean()
-            self.assertEqual(9, len(findings))
+            self.assertEqual(20, len(findings))
             finding = findings[0]
             self.assertIn(finding.severity, Finding.SEVERITIES)
             self.assertEqual("Info", finding.severity)
@@ -326,7 +326,7 @@ class TestTenableParser(DojoTestCase):
             for finding in findings:
                 for endpoint in finding.unsaved_endpoints:
                     endpoint.clean()
-            self.assertEqual(2, len(findings))
+            self.assertEqual(3, len(findings))
             self.assertEqual("Critical", findings[0].severity)
 
     def test_parse_issue_11102(self):
@@ -336,7 +336,7 @@ class TestTenableParser(DojoTestCase):
             for finding in findings:
                 for endpoint in finding.unsaved_endpoints:
                     endpoint.clean()
-            self.assertEqual(2, len(findings))
+            self.assertEqual(3, len(findings))
             self.assertEqual("Reconfigure the affected application if possible to avoid use of medium strength ciphers.", findings[0].mitigation)
 
     def test_parse_issue_11127(self):

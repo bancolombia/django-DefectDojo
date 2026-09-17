@@ -121,3 +121,9 @@ def async_get_ia_recommendation(fid, user, save=True):
         finding.save()
         context = finding_helper.parser_ia_recommendation(finding.ia_recommendation)
     return http_response.ok(message="OK", data=context) 
+
+def order_finding_by_rules(findings, max_results=10):
+    findings = sorted(findings, key=lambda f: (f.priority, f.sla_expiration_date), reverse=True)
+    if len(findings) > max_results:
+        findings = findings[:max_results]
+    return (findings, ["Priority", "SLA Expiration Date"])

@@ -1736,6 +1736,34 @@ class Engagement(models.Model):
     @property
     def is_ci_cd(self):
         return self.engagement_type == "CI/CD"
+
+    @property
+    def product_name(self):
+        return self.product.name
+
+    @property
+    def product_type_name(self):
+        return self.product.prod_type.name
+
+    @property
+    def provider(self):
+        from dojo.utils import extract_field_from_text_regex
+        return extract_field_from_text_regex(self.description, "PROVIDER")
+
+    @property
+    def class_id(self):
+        from dojo.utils import extract_field_from_text_regex
+        return extract_field_from_text_regex(self.description, "CLASSID")
+
+    @property
+    def item_class_id(self):
+        from dojo.utils import extract_field_from_text_regex
+        return extract_field_from_text_regex(self.description, "ITEM")
+
+    @property
+    def last_time_scanned(self):
+        from dojo.utils import extract_field_from_text_regex
+        return extract_field_from_text_regex(self.description, "LAST TIME SCANNED")
     
     def delete(self, *args, **kwargs):
         logger.debug("%d engagement delete", self.id)

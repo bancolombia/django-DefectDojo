@@ -122,7 +122,7 @@ def revert_cross_approval_exclusion(exclusion):
             finding.tags.remove("white_list")
         if not finding.is_mitigated:
             finding.active = True
-        finding.risk_status = None
+        finding.risk_status = "Risk Active"
         finding.notes.add(note)
         finding.save(update_fields=["active", "risk_status"])
 

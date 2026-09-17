@@ -1,10 +1,13 @@
+import json
+
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import EmailValidator
 from rest_framework import serializers
 
 
 class SerializerEmailNotificationRiskAcceptance(serializers.Serializer):
-    recipients = serializers.ListField(child=serializers.CharField(), required=True)
+    recipients = serializers.ListField(child=serializers.CharField(), required=False)
+    emails = serializers.ListField(child=serializers.CharField(), required=False)
     copy = serializers.CharField(required=False, allow_blank=True)
     subject = serializers.CharField(required=True, max_length=255)
     event = serializers.CharField(required=False, default="risk_acceptance")
@@ -12,7 +15,7 @@ class SerializerEmailNotificationRiskAcceptance(serializers.Serializer):
     message = serializers.CharField(required=False, allow_blank=True)
     template = serializers.CharField(required=False, allow_blank=True)
     is_async = serializers.BooleanField(required=False, default=True)
-    long_risk_acceptance = serializers.BooleanField(default=True)
+    long_risk_acceptance = serializers.BooleanField(default=False)
     risk_acceptance_id = serializers.IntegerField(required=False)
     enable_acceptance_risk_for_email = serializers.BooleanField(required=False, default=False) 
     risk_acceptance_eng_id = serializers.IntegerField(required=False)
@@ -24,6 +27,7 @@ class SerializerEmailNotificationRiskAcceptance(serializers.Serializer):
     product_id = serializers.IntegerField(required=False, allow_null=True)
     engagement_id = serializers.IntegerField(required=False, allow_null=True)
     finding_id = serializers.IntegerField(required=False, allow_null=True)
+    ia_remediation_result = serializers.JSONField(required=False, allow_null=True)
 
     def validate_copy(self, value):
         if not value:
@@ -75,3 +79,25 @@ class SerializerEmailNotificationRiskAcceptance(serializers.Serializer):
                 })
 
         return attrs
+
+    def validate_ia_remediation_result(self, value):
+        if value is None or value == "":
+            return None
+
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except (TypeError, ValueError):
+                raise serializers.ValidationError(
+                    "ia_remediation_result must be a valid JSON object or array string.",
+                )
+
+        if isinstance(value, dict):
+            return value
+
+        if isinstance(value, list) and all(isinstance(item, dict) for item in value):
+            return value
+
+        raise serializers.ValidationError(
+            "ia_remediation_result must be a dictionary or a list of dictionaries.",
+        )
