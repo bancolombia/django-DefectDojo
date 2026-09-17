@@ -107,6 +107,7 @@ from dojo.models import (
     ExclusivePermission,
     Role,
     GeneralSettings,
+    InputFlow,
 )
 from dojo.group.queries import get_users_for_group, get_users_for_group_by_role
 from dojo.product.queries import get_authorized_products
@@ -1570,6 +1571,10 @@ class AddFindingForm(forms.ModelForm):
             "required": "Select valid choice: In Progress, On Hold, Completed",
             "invalid_choice": EFFORT_FOR_FIXING_INVALID_CHOICE})
     mitigation = forms.CharField(widget=forms.Textarea, required=False)
+    scenarios = forms.ModelChoiceField(queryset=InputFlow.objects.none(),
+        required=False,
+        widget=forms.widgets.Select(),
+        help_text="Select which Input_flow")
     impact = forms.CharField(widget=forms.Textarea, required=False)
     request = forms.CharField(widget=forms.Textarea, required=False)
     response = forms.CharField(widget=forms.Textarea, required=False)
@@ -1590,7 +1595,7 @@ class AddFindingForm(forms.ModelForm):
     priority = forms.FloatField(label="Priority (Auto-calculated)", required=False, disabled=True, help_text="Priority will be calculated based on EPSS, KEV, and severity data")
 
     # the only reliable way without hacking internal fields to get predicatble ordering is to make it explicit
-    field_order = ("title", "date", "cwe", "vulnerability_ids", "severity", "cvssv3", "cvssv3_score", "cvssv4", "cvssv4_score", "description", "mitigation", "impact", "request", "response", "steps_to_reproduce",
+    field_order = ("title", "date", "cwe", "vulnerability_ids", "severity", "cvssv3", "cvssv3_score", "cvssv4", "cvssv4_score", "description", "mitigation","scenarios", "impact", "request", "response", "steps_to_reproduce",
                    "severity_justification", "endpoints", "endpoints_to_add", "references", "priority", "active", "verified", "false_p", "duplicate", "out_of_scope",
                    "risk_accepted", "under_defect_review")
 
@@ -1605,6 +1610,7 @@ class AddFindingForm(forms.ModelForm):
 
         if product:
             self.fields["endpoints"].queryset = Endpoint.objects.filter(product=product)
+            self.fields["scenarios"].queryset = InputFlow.objects.filter(engagement__product=product)
 
         if req_resp:
             self.fields["request"].initial = req_resp[0]
@@ -1836,6 +1842,7 @@ class FindingForm(forms.ModelForm):
         disabled=True)
 
     cvssv3 = forms.CharField(label="CVSS3 Vector", max_length=117, required=False, widget=forms.TextInput(attrs={"class": "cvsscalculator", "data-toggle": "dropdown", "aria-haspopup": "true", "aria-expanded": "false"}))
+    
     cvssv3_score = forms.FloatField(label="CVSS3 Score", required=False, max_value=10.0, min_value=0.0)
     cvssv4 = forms.CharField(label="CVSS4 Vector", max_length=255, required=False)
     cvssv4_score = forms.FloatField(label="CVSS4 Score", required=False, max_value=10.0, min_value=0.0)
@@ -1846,7 +1853,14 @@ class FindingForm(forms.ModelForm):
         error_messages={
             "required": "Select valid choice: In Progress, On Hold, Completed",
             "invalid_choice": "Select valid choice: Critical,High,Medium,Low"})
+    
     mitigation = forms.CharField(widget=forms.Textarea, required=False)
+    scenarios = forms.ModelChoiceField(queryset=InputFlow.objects.none(),
+        required=False,
+        widget=forms.widgets.Select(),
+        help_text="Select which Input_flow")
+ 
+   
     impact = forms.CharField(widget=forms.Textarea, required=False)
     request = forms.CharField(widget=forms.Textarea, required=False)
     response = forms.CharField(widget=forms.Textarea, required=False)
@@ -1871,7 +1885,7 @@ class FindingForm(forms.ModelForm):
 
     # the only reliable way without hacking internal fields to get predicatble ordering is to make it explicit
     field_order = ("title", "group", "date", "sla_start_date", "sla_expiration_date", "cwe", "vulnerability_ids", "severity", "cvss_info", "cvssv3",
-                   "cvssv3_score", "cvssv4", "cvssv4_score", "description", "mitigation", "impact", "request", "response", "steps_to_reproduce", "severity_justification",
+                   "cvssv3_score", "cvssv4", "cvssv4_score", "description", "mitigation","scenarios", "impact", "request", "response", "steps_to_reproduce", "severity_justification",
                    "endpoints", "endpoints_to_add", "references", "active", "mitigated", "mitigated_by", "verified", "false_p", "duplicate",
                    "out_of_scope", "risk_accept", "under_defect_review")
 
@@ -1888,6 +1902,9 @@ class FindingForm(forms.ModelForm):
 
         self.fields["endpoints"].queryset = Endpoint.objects.filter(product=self.instance.test.engagement.product)
         self.fields["mitigated_by"].queryset = get_authorized_users(Permissions.Test_Edit)
+        self.fields["scenarios"].queryset = InputFlow.objects.filter(engagement=self.instance.test.engagement)
+        if self.instance.pk:
+            self.fields["scenarios"].initial = self.instance.Input_flows.first()
 
         # do not show checkbox if finding is not accepted and simple risk acceptance is disabled
         # if checked, always show to allow unaccept also with full risk acceptance enabled
