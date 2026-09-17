@@ -592,7 +592,7 @@
         </div>
         {% endif %}
     {% endif %}
-    {% if finding.service or finding.file_path or finding.line > 0 or finding.has_jira_configured or finding.has_jira_issue or finding.github_issue or finding.github_conf_new or finding.finding_group or finding.component_name or finding.nb_occurences > 1 %}
+    {% if finding.service or finding.file_path or finding.line > 0 or finding.has_jira_configured or finding.has_jira_issue or finding.github_issue or finding.github_conf_new or finding.finding_group or finding.component_name or finding.nb_occurences > 1 or finding.Input_flows.exists %}
     <div class="panel panel-default">
         <table id="error_notes" class="table-striped table table-condensed table-hover centered">
             <tr>
@@ -613,6 +613,9 @@
                 {% endif %}
                 {% if finding.component_version %}
                 <th>Component Version</th>
+                {% endif %}
+                {% if finding.Input_flows.exists %}
+                <th>Scenario</th>
                 {% endif %}
                 {% if finding.has_jira_configured or finding.jira_issue %}
                 <th>JIRA</th>
@@ -670,6 +673,13 @@
                 <td>
                     <span>
                         {{ finding.component_version }}
+                    </span>
+                </td>
+                {% endif %}
+                {% if finding.Input_flows.exists %}
+                <td>
+                    <span>
+                        {% for flow in finding.Input_flows.all %}{{ flow.flowName }}{% if not forloop.last %}, {% endif %}{% endfor %}
                     </span>
                 </td>
                 {% endif %}
