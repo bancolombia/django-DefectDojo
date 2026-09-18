@@ -1408,8 +1408,13 @@
                             });
 
                             if (data.length > 0) {
+                                {% if "RENDER_NEW_VIEWS"|general_settings_get_value:"False" %}
+                                $('.dropdown-alerts').append('<li><a rel="noopener noreferrer" class="text-center" href="{% url "notifications_all" %}"><strong>{% trans "See All Alerts" %}</strong>' +
+                                                            '<i class="fa-solid fa-angle-right"></i></a></li>');
+                                {% else %}
                                 $('.dropdown-alerts').append('<li><a rel="noopener noreferrer" class="text-center" href="{% url "alerts" %}"><strong>{% trans "See All Alerts" %}</strong>' +
                                                             '<i class="fa-solid fa-angle-right"></i></a></li>');
+                                {% endif %}
                                 $('.dropdown-alerts').append('<li><a rel="noopener noreferrer" class="text-center" href="{% url "delete_alerts" %}"><strong>{% trans "Clear All Alerts" %}</strong>' +
                                                         '<i class="fa-solid fa-angle-right"></i></a></li>');
                             }
