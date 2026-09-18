@@ -92,6 +92,7 @@ class NotificationEmailApiView(GenericAPIView):
                 title=title,
                 description=description,
                 url=url,
+                recipients=recipients,
                 icon=icon,
                 color_icon=color_icon,
                 ia_remediation_result=ia_remediation_result,
