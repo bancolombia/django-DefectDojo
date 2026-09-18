@@ -146,6 +146,9 @@ def transfer_findings(transfer_finding_findings: TransferFindingFinding, seriali
                         "Risk Expired",]):
                     finding.risk_status = dict_findings["risk_status"]
                     finding.active = False
+                    if not transfer_finding_obj.expiration_date:
+                        __, transfer_finding_obj.expiration_date, __ = get_sla_expiration_transfer_finding(finding)
+                        transfer_finding_obj.save()
                     if not transfer_finding_obj.destination_engagement:
                         engagement = Engagement.objects.get(id=serializer.validated_data["engagement_id"])
                         transfer_finding_obj.destination_engagement = engagement
@@ -372,6 +375,8 @@ def get_sla_expiration_transfer_finding(finding):
             priority
         )
     )
+    # Convert date to datetime since expiration_date is DateTimeField
+    expiration_date = timezone.make_aware(timezone.datetime.combine(expiration_date, timezone.datetime.min.time()))
     created_date = timezone.now().date()
     return expiration_delta_days.get(priority), expiration_date, created_date
 

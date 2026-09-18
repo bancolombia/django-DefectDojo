@@ -1,14 +1,17 @@
 import logging
-
+from django.conf import settings
 import requests
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.http import Http404, HttpRequest, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
+from dojo.decorators import dojo_ratelimit_view
 from django.urls import reverse
 from django.utils.translation import gettext as _
 from django.views import View
-
+from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
+from django.http import Http404, HttpRequest, HttpResponseRedirect
+from django.middleware.csrf import get_token
 from dojo.forms import DeleteNotificationsWebhookForm, NotificationsForm, NotificationsWebhookForm
 from dojo.models import Notification_Webhooks, Notifications
 from dojo.notifications.helper import NotificationManagerHelpers, WebhookNotificationManger
@@ -420,3 +423,18 @@ class DeleteNotificationWebhooksView(NotificationWebhooksView):
         request = self.set_breadcrumbs(request)
         # Render the page
         return render(request, self.template, context)
+
+
+@dojo_ratelimit_view()
+def notifications_all(request: HttpRequest) -> HttpResponse:
+    page_name = ('notifications_all')
+    user = request.user.id
+    cookie_csrftoken = get_token(request)
+    cookie_sessionid = request.COOKIES.get('sessionid', '')
+    base_params = f"?csrftoken={cookie_csrftoken}&sessionid={cookie_sessionid}"
+    add_breadcrumb(title=page_name, top_level=True, request=request)
+    return render(request, 'dojo/generic_view.html', {
+        'name': page_name,
+        'url': f"{settings.MF_FRONTEND_DEFECT_DOJO_URL}/notifications{base_params}",
+        'user': user,
+    })
