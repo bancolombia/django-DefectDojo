@@ -216,6 +216,10 @@
             syncUniqueIdTextarea();
         });
 
+        {% if default_unique_id %}
+        $('#id_unique_id_from_tool').prop('readonly', true);
+        {% endif %}
+
         $('form').on('submit', function () {
             if (multiUniqueIdActive) {
                 syncUniqueIdTextarea();
