@@ -26,7 +26,7 @@ from dojo.engine_participation.models import (
 
 logger = get_task_logger(__name__)
 
-ACTIVE_HC_REQUEST_STATUSES = ("Pending", "Reviewed")
+ACTIVE_HC_REQUEST_STATUSES = ("Pending",)
 HC_STATUS_TRANSITIONS = {
     "Reviewed": {"Pending"},
     "Approved": {"Reviewed"},
