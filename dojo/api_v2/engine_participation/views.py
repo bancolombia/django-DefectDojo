@@ -15,6 +15,7 @@ from dojo.api_v2.utils import http_response
 from dojo.engine_participation.models import HCParticipation
 from dojo.engine_participation.helpers import (
     delete_hc_participation_records_by_date_range,
+    finalize_pending_hc_participation_requests,
     return_hc_participation_to_pending,
     run_hc_participation_evaluation,
     InvalidHCParticipationTransition,
@@ -89,6 +90,33 @@ class DeleteHCParticipationRecordsAPIView(APIView):
             logger.exception("HC participation records deletion failed: %s", exc)
             return http_response.error(
                 message=f"HC participation records deletion failed: {str(exc)}",
+                data={},
+            )
+
+
+class FinalizePendingHCParticipationRequestsAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    @extend_schema(request=None, responses={status.HTTP_200_OK: dict})
+    def post(self, request):
+        if not request.user.is_superuser and not request.user.is_staff:
+            return http_response.custom_response(
+                code=status.HTTP_403_FORBIDDEN,
+                status="forbidden",
+                message="Only staff or superuser can finalize pending HC participation requests.",
+                data={},
+            )
+
+        try:
+            result = finalize_pending_hc_participation_requests(request.user)
+            return http_response.ok(
+                message="Pending HC participation requests finalized successfully.",
+                data=result,
+            )
+        except Exception as exc:
+            logger.exception("Finalizing pending HC participation requests failed: %s", exc)
+            return http_response.error(
+                message=f"Finalizing pending HC participation requests failed: {str(exc)}",
                 data={},
             )
 

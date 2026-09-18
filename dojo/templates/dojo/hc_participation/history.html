@@ -34,7 +34,7 @@
                         {% endfor %}
                         <div class="text-center">
                             <input type="submit" class="btn btn-secondary inline top" label="submit" value="Apply"/><br/><br/>
-                            <a href="{% url 'hc_participations' %}"> [Clear Filters] </a>
+                            <a href="{% url 'hc_participation_history' %}"> [Clear Filters] </a>
                         </div>
                     </form>
                 {% endif %}
@@ -43,57 +43,26 @@
         <div class="col-md-10">
             <div class="panel panel-default">
                 <div class="panel-heading">
-                    <span class="fa-solid fa-bullseye"></span> {{ name }}
+                    <span class="fa-solid fa-clock-rotate-left"></span> {{ name }}
                     <span class="pull-right">
-                        {% if can_run_hc_evaluation %}
-                            <form method="post" action="{% url 'run_hc_evaluation' %}" style="display: inline; margin-right: 10px;">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-primary btn-sm">
-                                    <i class="fa fa-play"></i> Run Evaluation
-                                </button>
-                            </form>
-                        {% endif %}
-                        <a href="{% url 'hc_participation_history' %}" class="btn btn-secondary btn-sm" style="margin-right: 10px;">
-                            <i class="fa fa-clock-rotate-left"></i> Execution History
+                        <a href="{% url 'hc_participations' %}" class="btn btn-secondary btn-sm">
+                            <i class="fa fa-bullseye"></i> Back to current execution
                         </a>
-                        <span class="text-muted small">
-                            <i class="fa fa-clock"></i> Monthly automatic evaluation (1st day, 6:00 AM)
-                        </span>
                     </span>
                 </div>
-            </div>
-            <div class="panel panel-default">
-                <div class="panel-heading"><strong>SDT Participation Summary</strong></div>
-                <div class="panel-body">
-                    {% if hc_summary.available_approvals < 0 %}
-                        <div class="alert alert-danger" role="alert" style="margin-bottom: 15px;">
-                            Available approvals is negative. Remove pre-selections or review already_in_hc removals before reviewing more postulated requests.
-                        </div>
-                    {% endif %}
-                    <div class="row text-center">
-                        <div class="col-sm-3">
-                            <h4 {% if hc_summary.available_approvals < 0 %}style="color: #d11d38;"{% endif %}>{{ hc_summary.available_approvals|default:0 }}</h4>
-                            <p class="text-muted">Available approvals</p>
-                        </div>
-                        <div class="col-sm-3">
-                            <h4>{{ hc_summary.postulated_products|default:0 }}</h4>
-                            <p class="text-muted">Postulated products</p>
-                        </div>
-                        <div class="col-sm-3">
-                            <h4>{{ hc_summary.preselected_products|default:0 }}</h4>
-                            <p class="text-muted">Pre-selected products</p>
-                        </div>
-                        <div class="col-sm-3">
-                            <h4>{{ hc_summary.products_in_hc|default:0 }}</h4>
-                            <p class="text-muted">Products in SDT</p>
-                        </div>
+                {% if current_execution_started_at %}
+                    <div class="panel-body">
+                        <span class="text-muted small">
+                            <i class="fa fa-info-circle"></i>
+                            Showing requests created before {{ current_execution_started_at|date:"d M Y H:i" }} (start of the current execution).
+                        </span>
                     </div>
-                </div>
+                {% endif %}
             </div>
             {% if has_hc_requests %}
             <div class="panel panel-default table-responsive">
                 <div class="panel-heading"><strong>Postulated Requests</strong></div>
-                <table id="hc-requests" class="tablesorter-bootstrap table table-condensed table-striped">
+                <table id="hc-requests-history" class="tablesorter-bootstrap table table-condensed table-striped">
                     <thead>
                         <tr>
                             <th>Product</th>
@@ -111,7 +80,7 @@
                                 <td>
                                     <a href="{% url 'hc_participation' hc.uuid %}">{{ hc.product.name }}</a>
                                     {% if hc.is_prioritized_for_hc %}
-                                        <i class="fa-solid fa-star" style="color:#b97a0c;" title="Prioritized: pre-selected but quota was not available in the previous execution"></i>
+                                        <i class="fa-solid fa-star" style="color:#b97a0c;" title="Prioritized: pre-selected but quota was not available"></i>
                                     {% endif %}
                                 </td>
                                 <td>{{ hc.product.prod_type.name }}</td>
@@ -139,21 +108,7 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if can_preselect_hc and hc.status == 'Pending' %}
-                                        {% if hc.is_preselected_for_hc %}
-                                            <form method="post" action="{% url 'remove_hc_preselection' hc.uuid %}" style="display:inline;">
-                                                {% csrf_token %}
-                                                <input type="hidden" name="next" value="{{ request.get_full_path }}" />
-                                                <button type="submit" class="btn btn-xs btn-warning">Remove pre-selection</button>
-                                            </form>
-                                        {% else %}
-                                            <form method="post" action="{% url 'preselect_hc_participation' hc.uuid %}" style="display:inline;">
-                                                {% csrf_token %}
-                                                <input type="hidden" name="next" value="{{ request.get_full_path }}" />
-                                                <button type="submit" class="btn btn-xs btn-secondary">Pre-select</button>
-                                            </form>
-                                        {% endif %}
-                                    {% elif hc.is_preselected_for_hc %}
+                                    {% if hc.is_preselected_for_hc %}
                                         <span class="label label-warning">Pre-selected</span>
                                     {% else %}
                                         -
@@ -173,7 +128,7 @@
             </div>
             <div class="panel panel-default table-responsive">
                 <div class="panel-heading"><strong>Already in Specialized DevSecOps Tests - Review Requests</strong></div>
-                <table id="hc-requests-already" class="tablesorter-bootstrap table table-condensed table-striped">
+                <table id="hc-requests-already-history" class="tablesorter-bootstrap table table-condensed table-striped">
                     <thead>
                         <tr>
                             <th>Product</th>
@@ -231,7 +186,7 @@
                 </div>
             </div>
             {% else %}
-                No SDT participation requests found.
+                No previous execution history found.
             {% endif %}
         </div>
     </div>   
