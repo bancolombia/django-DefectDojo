@@ -11,4 +11,5 @@ urlpatterns = [
     re_path(r"^notifications/webhooks/add$", views.AddNotificationWebhooksView.as_view(), name="add_notification_webhook"),
     re_path(r"^notifications/webhooks/(?P<nwhid>\d+)/edit$", views.EditNotificationWebhooksView.as_view(), name="edit_notification_webhook"),
     re_path(r"^notifications/webhooks/(?P<nwhid>\d+)/delete$", views.DeleteNotificationWebhooksView.as_view(), name="delete_notification_webhook"),
+    re_path(r"^notifications/all$", views.notifications_all, name="notifications_all"),
 ]
