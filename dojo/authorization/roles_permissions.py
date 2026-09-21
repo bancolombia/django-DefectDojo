@@ -451,7 +451,8 @@ def get_roles_with_permissions():
             Permissions.Metrics_Scan_Cycle,
             Permissions.Finding_Add_Recommendation,
             Permissions.Finding_Remediation_Add,
-            Permissions.Long_Risk_Acceptance_Impact_Economic_View
+            Permissions.Long_Risk_Acceptance_Impact_Economic_View,
+            Permissions.Risk_Acceptance_Send_Email
         },
         Roles.API_Importer: {
             Permissions.Product_Type_Add,
@@ -863,7 +864,6 @@ def get_roles_with_permissions():
             Permissions.Transfer_Finding_View,
             Permissions.Transfer_Finding_Delete,
             Permissions.Transfer_Finding_Finding_View,
-            Permissions.Transfer_Finding_Finding_Edit,
             Permissions.Transfer_Finding_Finding_Delete,
             Permissions.Transfer_Finding_Finding_Add,
             Permissions.Transfer_Finding_Finding_Accept,

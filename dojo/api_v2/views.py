@@ -53,6 +53,7 @@ from dojo.transfer_findings.serializers import (
     TransferFindingFindingSerializer,
     TransferFindingFindingsSerializer,
     TransferFindingCreateSerializer,
+    TransferFindingUpdateSerializer,
     TransferFindingSerializer,
     TransferFindingBasicSerializer,
     TransferFindingFindingCreateSerializer,)
@@ -3726,6 +3727,15 @@ class TransferFindingViewSet(prefetch.PrefetchListMixin,
             logger.error(f"Failed to remove transfer finding {transfer_finding.id} notification: {str(e)}")
         super().destroy(request, pk)
         return http_response.ok(message="TransferFinding Deleted")
+
+    def partial_update(self, request, pk=None):
+        transfer_finding = get_object_or_404(TransferFinding, id=pk)
+        serializer = TransferFindingUpdateSerializer(transfer_finding, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return http_response.ok(message="Transfer Finding Updated", data=serializer.data)
+        else:
+            return http_response.bad_request(data=serializer.errors)
     
 
     @action(

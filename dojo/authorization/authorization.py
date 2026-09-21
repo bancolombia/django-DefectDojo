@@ -390,18 +390,25 @@ def custom_permissions_transfer_findings(user, obj, permission):
     def rule_permissions_transferfinding_accepted(obj, permission):
         transfer_finding_finding = obj.transfer_findings.filter(findings__risk_status__in=["Transfer Expired", "Transfer Rejected", "Transfer Pending", "Risk Active"])
         if transfer_finding_finding:
-            if permission in [Permissions.Transfer_Finding_View,
-                              Permissions.Transfer_Finding_Finding_View,
-                              Permissions.Transfer_Finding_Finding_Accept,
-                              Permissions.Transfer_Finding_Finding_Reject,
-                              Permissions.Transfer_Finding_Finding_Delete]:
+            if permission in [
+                Permissions.Transfer_Finding_View,
+                Permissions.Transfer_Finding_Finding_View,
+                Permissions.Transfer_Finding_Finding_View,
+                Permissions.Transfer_Finding_Finding_Accept,
+                Permissions.Transfer_Finding_Finding_Reject,
+                Permissions.Transfer_Finding_Finding_Delete
+                ]:
+
                 return True
         elif permission in [
-                            Permissions.Transfer_Finding_Finding_Add,
-                            Permissions.Transfer_Finding_View,
-                            Permissions.Transfer_Finding_Edit,
-                            Permissions.Transfer_Finding_Delete,
-                            Permissions.Transfer_Finding_Add]:
+            Permissions.Transfer_Finding_Finding_Add,
+            Permissions.Transfer_Finding_Finding_View,
+            Permissions.Transfer_Finding_View,
+            Permissions.Transfer_Finding_Edit,
+            Permissions.Transfer_Finding_Delete,
+            Permissions.Transfer_Finding_Add
+            ]:
+
             return True
         else:
             return False
