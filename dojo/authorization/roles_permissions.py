@@ -863,7 +863,6 @@ def get_roles_with_permissions():
             Permissions.Transfer_Finding_View,
             Permissions.Transfer_Finding_Delete,
             Permissions.Transfer_Finding_Finding_View,
-            Permissions.Transfer_Finding_Finding_Edit,
             Permissions.Transfer_Finding_Finding_Delete,
             Permissions.Transfer_Finding_Finding_Add,
             Permissions.Transfer_Finding_Finding_Accept,
