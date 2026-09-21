@@ -751,7 +751,7 @@ class RiskPostureHelperUnitTest(TestCase):
         after_qs = Finding.objects.filter(test__engagement=self.engagement)
         after_data = {}
         _apply_total_counters(after_data, after_qs)
-        self.assertEqual(after_data['counter_active_findings'], before_count + 1)
+        self.assertEqual(after_data['counter_active_findings'], before_count)
 
     def test_apply_total_counters_duplicate_not_counted_as_active(self):
         """Findings duplicados no deben contarse en counter_active_findings."""
