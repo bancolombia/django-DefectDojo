@@ -1168,6 +1168,8 @@ class EngagementDirectFilterHelper(FilterSet):
             ("product__name", "product__name"),
             ("product__prod_type__name", "product__prod_type__name"),
             ("lead__first_name", "lead__first_name"),
+            ("updated", "updated"),
+            ("created", "created"),
         ),
         field_labels={
             "target_start": "Start date",
@@ -1175,6 +1177,8 @@ class EngagementDirectFilterHelper(FilterSet):
             "product__name": "Product Name",
             "product__prod_type__name": "Product Type",
             "lead__first_name": "Lead",
+            "updated": "Last updated",
+            "created": "Created",
         },
     )
 
@@ -1359,9 +1363,13 @@ class ProductEngagementFilterHelper(FilterSet):
             ("target_end", "target_end"),
             ("status", "status"),
             ("lead", "lead"),
+            ("updated", "updated"),
+            ("created", "created"),
         ),
         field_labels={
             "name": "Engagement Name",
+            "updated": "Last updated",
+            "created": "Created",
         },
     )
 
