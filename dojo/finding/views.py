@@ -1125,10 +1125,17 @@ class EditFinding(View):
                 new_finding.save(push_to_jira=push_to_jira, dedupe_option=False)
             else:
                 new_finding.save(push_to_jira=push_to_jira)
+                
+                
+                
+            if "scenarios" in context["form"].cleaned_data:
+                selected_flow = context["form"].cleaned_data["scenarios"]
+                new_finding.Input_flows.set([selected_flow] if selected_flow else [])
             # we only push the group after storing the finding to make sure
             # the updated data of the finding is pushed as part of the group
             if push_to_jira and finding.finding_group:
                 jira_helper.push_to_jira(finding.finding_group)
+            
 
         return request, all_forms_valid
 
