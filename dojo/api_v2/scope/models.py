@@ -35,6 +35,10 @@ class InputFlow(models.Model):
     engagement = models.ForeignKey("Engagement", on_delete=models.CASCADE,null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
+    findings = models.ManyToManyField("Finding", blank=True, related_name="Input_flows")
+
+    def __str__(self):
+        return self.flowName
 
 class InputURL(models.Model):
     flow = models.ForeignKey("InputFlow",related_name="urls",on_delete=models.CASCADE)
