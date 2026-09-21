@@ -38,8 +38,6 @@ class InputFlow(models.Model):
     findings = models.ManyToManyField( "Finding", blank=True,related_name="Input_flows",
 )
 
-    def __str__(self):
-        return self.flowName
 
 class InputURL(models.Model):
     flow = models.ForeignKey("InputFlow",related_name="urls",on_delete=models.CASCADE)
