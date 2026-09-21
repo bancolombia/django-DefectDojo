@@ -5,10 +5,12 @@ from urllib.parse import urlencode
 import requests
 
 from django.db import transaction
+from django.db.models import Q
 from django.conf import settings
 from django.core.cache import cache
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework.authtoken.models import Token
 
 from celery.utils.log import get_task_logger
@@ -16,11 +18,15 @@ from celery.utils.log import get_task_logger
 from dojo.models import GeneralSettings, Product, Dojo_Group, Dojo_User
 from dojo.group.queries import get_group_members_for_group
 from dojo.notifications.helper import create_notification
-from dojo.engine_participation.models import HCParticipation, HCParticipationLog
+from dojo.engine_participation.models import (
+    HCParticipation,
+    HCParticipationDiscussion,
+    HCParticipationLog,
+)
 
 logger = get_task_logger(__name__)
 
-ACTIVE_HC_REQUEST_STATUSES = ("Pending", "Reviewed")
+ACTIVE_HC_REQUEST_STATUSES = ("Pending",)
 HC_STATUS_TRANSITIONS = {
     "Reviewed": {"Pending"},
     "Approved": {"Reviewed"},
@@ -33,7 +39,9 @@ HC_CONFIRM_INGRESS_POSTULATION_CRITERIA_DEFAULT = []
 HC_MANUAL_POSTULATION_CRITERIA_KEY = "HC_MANUAL_POSTULATION_CRITERIA"
 HC_MANUAL_POSTULATION_CRITERIA_DEFAULT = []
 HC_PRESELECTED_FLAG_KEY = "is_preselected_for_hc"
+HC_PRIORITIZED_FLAG_KEY = "is_prioritized_for_hc"
 HC_INGRESS_CONFIRMATION_CRITERIA_KEY = "ingress_confirmation_criteria_checked"
+HC_CURRENT_EXECUTION_STARTED_AT_KEY = "HC_CURRENT_EXECUTION_STARTED_AT"
 
 
 class HCConstants(Enum):
@@ -173,14 +181,78 @@ def _consume_hc_available_approval() -> int:
     return next_value
 
 
+def get_hc_current_execution_started_at():
+    """Boundary timestamp separating the latest HC execution cycle from history."""
+    raw_value = GeneralSettings.get_value(HC_CURRENT_EXECUTION_STARTED_AT_KEY, None)
+    if not raw_value:
+        return None
+
+    parsed_value = parse_datetime(str(raw_value))
+    if parsed_value is None:
+        return None
+
+    if timezone.is_naive(parsed_value):
+        parsed_value = timezone.make_aware(parsed_value, timezone.get_default_timezone())
+
+    return parsed_value
+
+
+def _set_hc_current_execution_started_at(started_at) -> None:
+    with transaction.atomic():
+        setting_row, created_row = GeneralSettings.objects.select_for_update().get_or_create(
+            name_key=HC_CURRENT_EXECUTION_STARTED_AT_KEY,
+            defaults={
+                "value": started_at.isoformat(),
+                "category": "engine_participation",
+                "data_type": "STRING",
+                "description": "Start timestamp of the latest HC participation execution cycle",
+                "status": True,
+            },
+        )
+        if not created_row:
+            setting_row.value = started_at.isoformat()
+            if not setting_row.data_type:
+                setting_row.data_type = "STRING"
+            if setting_row.status is None:
+                setting_row.status = True
+            setting_row.save()
+
+    _clear_general_setting_cache(HC_CURRENT_EXECUTION_STARTED_AT_KEY)
+
+
+def hc_current_execution_scope_filter() -> Q | None:
+    """Q scoping a HCParticipation queryset to the latest execution cycle, or None if unset.
+
+    Includes everything created since the last automatic evaluation, plus any
+    still-pending prioritized carry-over regardless of its create_date.
+    """
+    current_execution_started_at = get_hc_current_execution_started_at()
+    if not current_execution_started_at:
+        return None
+
+    pending_carry_over = Q(status="Pending", **{f"security_posture_data__{HC_PRIORITIZED_FLAG_KEY}": True})
+    return Q(create_date__gte=current_execution_started_at) | pending_carry_over
+
+
+def scope_hc_queryset_to_current_execution(queryset):
+    """Restricts a HCParticipation queryset to the latest execution cycle, when one is set."""
+    scope_filter = hc_current_execution_scope_filter()
+    if scope_filter is None:
+        return queryset
+    return queryset.filter(scope_filter)
+
+
 def get_hc_participation_summary() -> dict:
-    postulated_products = HCParticipation.objects.filter(
+    # Scoped to the current execution cycle so counters reset on every run_hc_participation_evaluation.
+    scoped_requests = scope_hc_queryset_to_current_execution(HCParticipation.objects.all())
+
+    postulated_products = scoped_requests.filter(
         recommendation__in=("postulated", "postulated_manually"),
         status__in=ACTIVE_HC_REQUEST_STATUSES,
     ).values("product_id").distinct().count()
 
     preselected_products = 0
-    preselected_requests = HCParticipation.objects.filter(
+    preselected_requests = scoped_requests.filter(
         recommendation__in=("postulated", "postulated_manually"),
         status="Pending",
     ).only("security_posture_data")
@@ -189,7 +261,7 @@ def get_hc_participation_summary() -> dict:
             preselected_products += 1
 
     latest_by_product = {}
-    for request in HCParticipation.objects.only(
+    for request in scoped_requests.only(
         "product_id",
         "recommendation",
         "status",
@@ -222,6 +294,13 @@ def is_hc_request_preselected(hc_participation) -> bool:
     if not isinstance(security_posture_data, dict):
         return False
     return bool(security_posture_data.get(HC_PRESELECTED_FLAG_KEY, False))
+
+
+def is_hc_request_prioritized(hc_participation) -> bool:
+    security_posture_data = hc_participation.security_posture_data
+    if not isinstance(security_posture_data, dict):
+        return False
+    return bool(security_posture_data.get(HC_PRIORITIZED_FLAG_KEY, False))
 
 
 def set_hc_request_preselection(hc_participation, is_preselected: bool):
@@ -414,6 +493,7 @@ def _validate_hc_status_transition(current_status: str, target_status: str) -> N
 
 def run_hc_participation_evaluation(user=None) -> dict:
     batch_id = uuid.uuid4()
+    _set_hc_current_execution_started_at(timezone.now())
     postulated_rows = _fetch_microservice(user, _get_hc_postulated_endpoint_url())
     already_in_hc_rows = _fetch_microservice(user, _get_hc_already_in_hc_endpoint_url())
     rows = [(row, "postulated") for row in postulated_rows] + [(row, "already_in_hc") for row in already_in_hc_rows]
@@ -591,8 +671,8 @@ def _notify_reviewers_of_new_requests(requests, batch_id):
 
 
 def is_product_in_hacking_continuous_from_requests(product) -> bool:
-    latest_request = HCParticipation.objects.filter(
-        product=product,
+    latest_request = scope_hc_queryset_to_current_execution(
+        HCParticipation.objects.filter(product=product)
     ).order_by("-create_date").first()
 
     if not latest_request:
@@ -635,10 +715,12 @@ def get_manual_hc_postulation_eligibility_error(product) -> str | None:
     if is_product_in_hacking_continuous_from_requests(product):
         return "This product is already in SDT."
 
-    pending_postulation_exists = HCParticipation.objects.filter(
-        product=product,
-        status="Pending",
-        recommendation__in=("postulated", "postulated_manually"),
+    pending_postulation_exists = scope_hc_queryset_to_current_execution(
+        HCParticipation.objects.filter(
+            product=product,
+            status="Pending",
+            recommendation__in=("postulated", "postulated_manually"),
+        )
     ).exists()
     if pending_postulation_exists:
         return "A pending HC postulation already exists for this product."
@@ -711,6 +793,100 @@ def delete_hc_participation_records_by_date_range(start_date, end_date):
     }
 
 
+def finalize_pending_hc_participation_requests(user):
+    postulation_message = "Not prioritized for this execution."
+    continuity_message = "The product continues in Specialized DevSecOps Tests."
+    carried_over_message = (
+        "This product was prioritized (pre-selected) but there was not enough approval quota "
+        "in this execution. A new prioritized request was created for the next execution."
+    )
+    finalized_counts = {
+        "postulated_rejected": 0,
+        "already_in_hc_continues": 0,
+        "prioritized_carried_over": 0,
+    }
+
+    with transaction.atomic():
+        pending_requests = HCParticipation.objects.select_for_update().filter(
+            status="Pending",
+            recommendation__in=(
+                "postulated",
+                "postulated_manually",
+                "already_in_hc",
+            ),
+        )
+
+        for hc_request in pending_requests:
+            is_postulation = hc_request.recommendation in (
+                "postulated",
+                "postulated_manually",
+            )
+            was_preselected = is_postulation and is_hc_request_preselected(hc_request)
+
+            if was_preselected:
+                message = carried_over_message
+            elif is_postulation:
+                message = postulation_message
+            else:
+                message = continuity_message
+
+            previous_status = hc_request.status
+            current_time = timezone.now()
+
+            hc_request.status = "Rejected"
+            hc_request.final_status = "Rejected"
+            hc_request.status_updated_at = current_time
+            hc_request.status_updated_by = user
+            hc_request.rejected_by = user
+            if not hc_request.reviewed_at:
+                hc_request.reviewed_at = current_time
+                hc_request.reviewed_by = user
+            hc_request.save()
+
+            HCParticipationDiscussion.objects.create(
+                hc_participation=hc_request,
+                author=user,
+                content=message,
+            )
+            HCParticipationLog.objects.create(
+                hc_participation=hc_request,
+                changed_by=user,
+                previous_status=previous_status,
+                current_status="Rejected",
+                notes=message,
+            )
+
+            if was_preselected:
+                # Quota stays reserved: it moves from the closed request to the carried-over one.
+                carried_over_posture_data = {
+                    "product_risk_posture_url": _build_product_risk_posture_url(hc_request.product_id),
+                    HC_PRESELECTED_FLAG_KEY: True,
+                    HC_PRIORITIZED_FLAG_KEY: True,
+                }
+                HCParticipation.objects.create(
+                    product=hc_request.product,
+                    recommendation="postulated",
+                    business_criticality=hc_request.business_criticality,
+                    was_in_hacking_continuous=hc_request.was_in_hacking_continuous,
+                    security_posture_data=carried_over_posture_data,
+                    reason=(
+                        "Prioritized product carried over from the previous execution: "
+                        "it was pre-selected but insufficient approval quota was available."
+                    ),
+                    status="Pending",
+                    created_by=user,
+                    batch_id=hc_request.batch_id,
+                )
+                finalized_counts["prioritized_carried_over"] += 1
+            elif is_postulation:
+                finalized_counts["postulated_rejected"] += 1
+            else:
+                finalized_counts["already_in_hc_continues"] += 1
+
+    finalized_counts["total"] = sum(finalized_counts.values())
+    return finalized_counts
+
+
 def mark_hc_participation_reviewed(hc_participation, user, confirmation_criteria=None):
     with transaction.atomic():
         locked_hc_participation = HCParticipation.objects.select_for_update().get(pk=hc_participation.pk)
@@ -723,14 +899,30 @@ def mark_hc_participation_reviewed(hc_participation, user, confirmation_criteria
         is_already_in_hc_request = locked_hc_participation.recommendation == "already_in_hc"
         was_preselected = is_hc_request_preselected(locked_hc_participation)
 
-        current_available_approvals = get_hc_available_approvals()
-        if is_postulation_request and current_available_approvals < 0:
-            raise InvalidHCParticipationTransition(
-                "Available approvals is negative. Remove pre-selections or review already_in_hc removals before reviewing more postulated requests."
-            )
-
         if is_postulation_request and not was_preselected:
+            current_available_approvals = get_hc_available_approvals()
+            if current_available_approvals < 0:
+                raise InvalidHCParticipationTransition(
+                    "Available approvals is negative. Remove pre-selections or review already_in_hc removals before reviewing more postulated requests."
+                )
             _consume_hc_available_approval()
+
+        if is_postulation_request and was_preselected:
+            # Pre-selecting can over-commit the bag; only as many pre-selected
+            # requests as real remaining capacity can be reviewed, in the order
+            # they are processed. The rest stay Pending and become carry-over
+            # once the execution is finalized.
+            pending_preselected_count = HCParticipation.objects.filter(
+                status="Pending",
+                recommendation__in=("postulated", "postulated_manually"),
+                security_posture_data__is_preselected_for_hc=True,
+            ).count()
+            real_capacity_for_preselected = get_hc_available_approvals() + pending_preselected_count
+            if real_capacity_for_preselected <= 0:
+                raise InvalidHCParticipationTransition(
+                    "No approval capacity left for pre-selected requests. This request will "
+                    "be carried over to the next execution if it stays pending."
+                )
 
         if is_postulation_request and was_preselected:
             security_posture_data = locked_hc_participation.security_posture_data

@@ -1400,7 +1400,7 @@ class UserHasTransferFindingFindingPermission(permissions.BasePermission):
             if request.method in ["PATCH", "PUT"]:
                 return check_patch_permission(request, TransferFinding, transfer_finding_id, Permissions.Transfer_Finding_Finding_Edit)
         if self.path_transfer_finding_finding_pre_review.match(request.path):
-            obj = get_object_or_404(TransferFinding, pk=transfer_finding_id)
+            obj = get_object_or_404(TransferFindingFinding, pk=transfer_finding_id)
             return check_object_permission(
                 request,
                 obj,

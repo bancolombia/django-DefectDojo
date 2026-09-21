@@ -14,7 +14,7 @@ from dojo.engine_participation.models import (
     HCParticipation,
     HCParticipationDiscussion,
 )
-from dojo.engine_participation.filters import HCParticipationFilter
+from dojo.engine_participation.filters import HCParticipationFilter, HCParticipationHistoryFilter
 from dojo.engine_participation.forms import (
     HCConfirmIngressPostulationForm,
     HCManualPostulationForm,
@@ -26,12 +26,16 @@ from dojo.engine_participation.helpers import (
     approve_hc_participation,
     create_manual_hc_postulation,
     get_hc_participation_summary,
+    get_hc_current_execution_started_at,
     get_manual_hc_postulation_eligibility_error,
     get_hc_confirm_ingress_postulation_criteria,
+    hc_current_execution_scope_filter,
+    scope_hc_queryset_to_current_execution,
     reject_hc_participation,
     has_valid_comments,
     get_hc_approvers_members,
     is_hc_request_preselected,
+    is_hc_request_prioritized,
     mark_hc_participation_reviewed,
     run_hc_participation_evaluation,
     set_hc_request_preselection,
@@ -51,13 +55,20 @@ def _redirect_to_next_or_hc_list(request: HttpRequest) -> HttpResponse:
 
 
 def hc_participations(request: HttpRequest) -> HttpResponse:
+    current_execution_started_at = get_hc_current_execution_started_at()
+
     hc_requests = HCParticipation.objects.select_related(
         "product",
         "product__prod_type",
         "created_by",
         "reviewed_by",
         "approved_by"
-    ).all().order_by("-create_date")
+    ).all()
+
+    # Pending carry-over (prioritized) requests still need review, regardless of create_date.
+    hc_requests = scope_hc_queryset_to_current_execution(hc_requests)
+
+    hc_requests = hc_requests.order_by("-create_date")
     
     filtered = HCParticipationFilter(request.GET, queryset=hc_requests)
     postulated_qs = filtered.qs.filter(recommendation__in=("postulated", "postulated_manually"))
@@ -68,6 +79,7 @@ def hc_participations(request: HttpRequest) -> HttpResponse:
 
     for hc_request in postulated_requests.object_list:
         hc_request.is_preselected_for_hc = is_hc_request_preselected(hc_request)
+        hc_request.is_prioritized_for_hc = is_hc_request_prioritized(hc_request)
     
     add_breadcrumb(
         title="Specialized DevSecOps Testing Requests",
@@ -86,6 +98,55 @@ def hc_participations(request: HttpRequest) -> HttpResponse:
         "can_run_hc_evaluation": request.user.is_staff or request.user.is_superuser,
         "can_preselect_hc": is_in_group(request.user, HCConstants.REVIEWERS_GROUP.value),
         "hc_summary": summary,
+        "current_execution_started_at": current_execution_started_at,
+    })
+
+
+def hc_participation_history(request: HttpRequest) -> HttpResponse:
+    current_execution_started_at = get_hc_current_execution_started_at()
+
+    hc_requests = HCParticipation.objects.select_related(
+        "product",
+        "product__prod_type",
+        "created_by",
+        "reviewed_by",
+        "approved_by"
+    ).all()
+
+    if current_execution_started_at:
+        # Pending carry-over (prioritized) requests stay out of history until reviewed.
+        pending_carry_over = hc_current_execution_scope_filter()
+        hc_requests = hc_requests.filter(create_date__lt=current_execution_started_at).exclude(pending_carry_over)
+    else:
+        # No execution has run yet, so there is no history to show.
+        hc_requests = hc_requests.none()
+
+    hc_requests = hc_requests.order_by("-create_date")
+
+    filtered = HCParticipationHistoryFilter(request.GET, queryset=hc_requests)
+    postulated_qs = filtered.qs.filter(recommendation__in=("postulated", "postulated_manually"))
+    already_in_hc_qs = filtered.qs.filter(recommendation="already_in_hc")
+
+    postulated_requests = get_page_items(request, postulated_qs, 25, prefix="postulated_")
+    already_in_hc_requests = get_page_items(request, already_in_hc_qs, 25, prefix="already_")
+
+    for hc_request in postulated_requests.object_list:
+        hc_request.is_preselected_for_hc = is_hc_request_preselected(hc_request)
+        hc_request.is_prioritized_for_hc = is_hc_request_prioritized(hc_request)
+
+    add_breadcrumb(
+        title="Specialized DevSecOps Testing Requests - Execution History",
+        top_level=True,
+        request=request
+    )
+
+    return render(request, "dojo/hc_participation/history.html", {
+        "has_hc_requests": filtered.qs.exists(),
+        "filtered": filtered,
+        "name": "Specialized DevSecOps Tests - Execution History",
+        "postulated_requests": postulated_requests,
+        "already_in_hc_requests": already_in_hc_requests,
+        "current_execution_started_at": current_execution_started_at,
     })
 
 

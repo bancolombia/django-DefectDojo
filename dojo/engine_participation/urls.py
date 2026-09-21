@@ -8,6 +8,11 @@ urlpatterns = [
         name="hc_participations"
     ),
     re_path(
+        r"^engine_participation/hc_participations/history$",
+        views.hc_participation_history,
+        name="hc_participation_history"
+    ),
+    re_path(
         r"^engine_participation/(?P<hcid>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
         views.show_hc_participation,
         name="hc_participation"

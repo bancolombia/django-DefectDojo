@@ -45,6 +45,7 @@ class TransferFindingFindingCreateSerializer(serializers.ModelSerializer):
         fields = '__all__'
     
     def create(self, validation_data):
+        # add finding to Transfer Finding
         self.assignment_of_origin_of_finding(validation_data["findings"], validation_data)
         transfer_finding_request = validation_data["transfer_findings"]
         destination_engagement = transfer_finding_request.destination_engagement
@@ -63,6 +64,8 @@ class TransferFindingFindingCreateSerializer(serializers.ModelSerializer):
                 raise ApiError.precondition_required(
                     "It is not possible to transfer to a finding the same engagement." +
                     f"Finding {finding.id}, engagment_id: {destination_engagement.id}",)
+            finding.risk_status = "Transfer Pending"
+            finding.save()
             transfer_finding_finding = TransferFindingFinding.objects.create(
                     findings=finding,
                     transfer_findings=transfer_finding_request,
@@ -159,6 +162,10 @@ class TransferFindingBasicSerializer(serializers.ModelSerializer):
             return "Transfer Expired"
         if "Transfer Rejected" in statuses:
             return "Transfer Rejected"
+        if "Risk Active" in statuses:
+            return "Risk Active"
+        if "Transfer Accepted" in statuses:
+            return "Transfer Accepted"
         return statuses.pop()
 
 class TransferFindingFindingSerializer(serializers.ModelSerializer):
@@ -181,6 +188,12 @@ class TransferFindingFindingSerializer(serializers.ModelSerializer):
                 representation['permissions'].append(permission.name)
             
             elif user_is_contacts(user, transfer_finding_finding_obj.transfer_findings.destination_product):
+                if (
+                    transfer_finding_finding_obj.findings.risk_status in ["Transfer Accepted", "Transfer Expired", "Risk Active"]
+                    and permission in [Permissions.Transfer_Finding_Finding_View]
+                ):
+                    representation['permissions'].append(permission.name)
+                    break
                 representation['permissions'].append(permission.name)
 
             elif user_has_permission(
@@ -200,6 +213,16 @@ class TransferFindingFindingSerializer(serializers.ModelSerializer):
         model = TransferFindingFinding
         fields = '__all__'
 
+class TransferFindingUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TransferFinding
+        fields = "__all__"
+        read_only_fields = [
+            "origin_product_type",
+            "origin_product",
+            "origin_engagement",
+        ]
+    
 class TransferFindingCreateSerializer(serializers.ModelSerializer):
     owner = serializers.CharField(required=False)
     class Meta:
@@ -282,7 +305,15 @@ class TransferFindingSerializer(serializers.ModelSerializer):
                 representation['permissions'].append(permission.name)
 
             elif user_is_contacts(user, transfer_finding_obj.destination_product):
-                representation['permissions'].append(permission.name)
+                serializer = TransferFindingBasicSerializer(instance=transfer_finding_obj, context={"request": self.context["request"]})
+                if serializer.data.get("status") in ["Transfer Accepted", "Transfer Expired", "Risk Active"] and permission in [
+                    Permissions.Transfer_Finding_View,
+                    Permissions.Transfer_Finding_Finding_View
+                ]:
+                    representation['permissions'].append(permission.name)
+                    break
+                else:
+                    representation['permissions'].append(permission.name)
 
             elif user_has_permission(
                     user,
