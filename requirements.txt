@@ -184,6 +184,6 @@ webencodings==0.6.1
 whitenoise==5.2.0
 wrapt==2.4.1
 xmlschema==2.5.1
-yarl==1.24.5
+yarl==1.25.1
 zipp==4.1.0
 zstandard==0.25.0
