@@ -171,7 +171,7 @@ typing_extensions==4.16.0
 tzdata==2026.4
 tzlocal==5.4.4
 uritemplate==4.2.0
-urllib3==2.7.0
+urllib3==2.8.0
 uWSGI==2.0.31
 vcrpy==8.3.0
 vcrpy-unittest==0.1.7
