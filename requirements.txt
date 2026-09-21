@@ -122,7 +122,7 @@ pilkit==3.0
 pillow==12.3.0
 prometheus_client==0.26.0
 prompt_toolkit==3.0.53
-propcache==0.5.2
+propcache==0.5.4
 protobuf==7.36.1
 psycopg==3.3.5
 psycopg-c==3.3.5
