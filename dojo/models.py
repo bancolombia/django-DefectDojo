@@ -3026,7 +3026,7 @@ class Finding(models.Model):
         old_status_findings = list(self.status_finding.all())
         old_reviewers = list(self.reviewers.all())
         old_found_by = list(self.found_by.all())
-        old_tags = list(self.tags.all())
+        old_tags = list(self.tags.all())        
         # Wipe the IDs of the new object
         if test:
             copy.test = test
