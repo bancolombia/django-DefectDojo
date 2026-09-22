@@ -471,6 +471,7 @@ class EngagementViewSet(
             get_authorized_engagements(Permissions.Engagement_View)
             .prefetch_related("notes", "risk_acceptance", "files")
             .distinct()
+            .order_by("-updated")
         )
 
     @extend_schema(

@@ -180,7 +180,7 @@ def get_filtered_engagements(request, view):
         msg = f"View {view} is not allowed"
         raise ValidationError(msg)
 
-    engagements = get_authorized_engagements(Permissions.Engagement_View).order_by("-target_start")
+    engagements = get_authorized_engagements(Permissions.Engagement_View).order_by("-updated")
 
     if view == "active":
         engagements = engagements.filter(active=True)
