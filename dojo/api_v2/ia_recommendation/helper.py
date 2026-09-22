@@ -1,7 +1,9 @@
-import logging
+﻿import logging
 import requests
+import json
 import dojo.finding.helper as finding_helper
 from django.utils import timezone
+from typing import List
 from dojo.celery import app
 from django.shortcuts import get_object_or_404
 from dojo.models import Finding
@@ -20,7 +22,7 @@ def async_get_ia_recommendation(fid, user, save=True):
     "status": "Ok",
     "ia_recommendations": (
             "At the moment, you can't generate a recommendation for this finding.\n"
-            "Please try again later or with a different finding.🫣"
+            "Please try again later or with a different finding.ðŸ«£"
         )}
     url = GeneralSettings.get_value("HOST_IA_RECOMMENDATION")
     params = {
@@ -127,3 +129,54 @@ def order_finding_by_rules(findings, max_results=10):
     if len(findings) > max_results:
         findings = findings[:max_results]
     return (findings, ["Priority", "SLA Expiration Date"])
+
+
+def context_process(findings: List[Finding], request):
+    """
+    Process findings and extract context with IA recommendations.
+    Returns a list of findings with their processed context.
+    """
+    findings_with_context = []
+    
+    for finding in findings:
+        # Extract Cliente from tags
+        cliente = "vultrackerbatch"
+        tags_list = [tag.name for tag in finding.tags.all()] if finding.tags.exists() else []
+        # Extract user_email from reporter
+        
+        finding_data = {
+            "Cliente": cliente,
+            "user_email": request.user.email,
+            "id": finding.id,
+            "tags": tags_list,
+            "title": finding.title,
+            "severity": finding.severity,
+            "description": finding.description,
+            "component_name": getattr(finding, 'component_name', None),
+            "service": getattr(finding, 'service', None),
+            "file_path": finding.file_path,
+            "vuln_id_from_tool": getattr(finding, 'vuln_id_from_tool', None),
+            "mitigation": getattr(finding, 'mitigation', None),
+            "display_status": f"Active, {'Verified' if finding.verified else 'Not Verified'}",
+            "vulnerability_ids": finding.get_vulnerability_ids()
+        }
+        
+        # Extract related fields
+        if finding.test and finding.test.engagement:
+            engagement = finding.test.engagement
+            finding_data["related_fields"] = {
+                "test": {
+                    "engagement": {
+                        "name": engagement.name,
+                        "source_code_management_uri": getattr(engagement, 'source_code_management_uri', ''),
+                        "source_code_management_server": {
+                            "name": engagement.source_code_management_server.name if engagement.source_code_management_server else ''
+                        }
+                    },
+                    "branch_tag": getattr(finding.test, 'branch_tag', 'refs/heads/trunk')
+                }
+            }
+        
+        findings_with_context.append(finding_data)
+    
+    return json.dumps(findings_with_context)

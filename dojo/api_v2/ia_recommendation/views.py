@@ -7,7 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.core.cache import cache
-from dojo.api_v2.ia_recommendation.helper import order_finding_by_rules
+from dojo.api_v2.ia_recommendation.helper import order_finding_by_rules, context_process
 from dojo.api_v2.ia_recommendation.serializers import IaRecommendationSerializer, IaRemediationBulkRequestSerializer
 from dojo.api_v2.ia_recommendation.helper import async_get_ia_recommendation
 from dojo.api_v2.api_error import ApiError
@@ -49,6 +49,10 @@ class IAremediationApiView(APIView):
         serializer.is_valid(raise_exception=True) 
         max_results = GeneralSettings.get_value("IA_MAX_RESULTS", 10)
         findings, order_by = order_finding_by_rules(test.finding_set.filter(active=True, risk_status="Risk Active", duplicate=False), max_results=max_results)
-        findings_ids = str(list(f.id for f in findings)).replace("[", "").replace("]", "").replace(" ", "")
-        async_get_ia_recommendation.apply_async(args=[findings_ids, request.user, False])
-        return http_response.ok(message="OK", data={"findings": findings_ids, "order_by": order_by})
+        context_findings = str(list(f.id for f in findings)).replace("[", "").replace("]", "").replace(" ", "")
+        if GeneralSettings.get_value("IA_GENERATE_CONTEXT", False):
+            context_message = context_process(findings, request)
+        else:
+            context_message = context_findings
+        async_get_ia_recommendation.apply_async(args=[context_message, request.user, False])
+        return http_response.ok(message="OK", data={"findings": context_findings, "order_by": order_by})
