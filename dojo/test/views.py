@@ -543,6 +543,10 @@ class AddFindingView(View):
             # Save the finding at the end and return
             finding.save()
 
+            selected_flow = context["form"].cleaned_data.get("scenarios")
+            if selected_flow:
+                finding.Input_flows.set([selected_flow])
+
             return finding, request, True
         add_error_message_to_response("The form has errors, please correct them below.")
         add_field_errors_to_response(context["form"])

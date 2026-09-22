@@ -107,6 +107,7 @@ from dojo.models import (
     ExclusivePermission,
     Role,
     GeneralSettings,
+    InputFlow,
 )
 from dojo.group.queries import get_users_for_group, get_users_for_group_by_role
 from dojo.product.queries import get_authorized_products
@@ -1570,6 +1571,12 @@ class AddFindingForm(forms.ModelForm):
             "required": "Select valid choice: In Progress, On Hold, Completed",
             "invalid_choice": EFFORT_FOR_FIXING_INVALID_CHOICE})
     mitigation = forms.CharField(widget=forms.Textarea, required=False)
+    
+    scenarios = forms.ModelChoiceField(queryset=InputFlow.objects.none(),
+    required=False,
+    widget=forms.widgets.Select(),
+    help_text="Select which Input_flow")
+
     impact = forms.CharField(widget=forms.Textarea, required=False)
     request = forms.CharField(widget=forms.Textarea, required=False)
     response = forms.CharField(widget=forms.Textarea, required=False)
@@ -1605,6 +1612,7 @@ class AddFindingForm(forms.ModelForm):
 
         if product:
             self.fields["endpoints"].queryset = Endpoint.objects.filter(product=product)
+            self.fields["scenarios"].queryset = InputFlow.objects.filter(engagement__product=product)
 
         if req_resp:
             self.fields["request"].initial = req_resp[0]
@@ -1839,7 +1847,10 @@ class FindingForm(forms.ModelForm):
     cvssv3_score = forms.FloatField(label="CVSS3 Score", required=False, max_value=10.0, min_value=0.0)
     cvssv4 = forms.CharField(label="CVSS4 Vector", max_length=255, required=False)
     cvssv4_score = forms.FloatField(label="CVSS4 Score", required=False, max_value=10.0, min_value=0.0)
-
+    scenarios = forms.ModelChoiceField(queryset=InputFlow.objects.none(),
+        required=False,
+        widget=forms.widgets.Select(),
+        help_text="Select which Input_flow")
     description = forms.CharField(widget=forms.Textarea)
     severity = forms.ChoiceField(
         choices=SEVERITY_CHOICES,
@@ -1888,6 +1899,9 @@ class FindingForm(forms.ModelForm):
 
         self.fields["endpoints"].queryset = Endpoint.objects.filter(product=self.instance.test.engagement.product)
         self.fields["mitigated_by"].queryset = get_authorized_users(Permissions.Test_Edit)
+        self.fields["scenarios"].queryset = InputFlow.objects.filter(engagement=self.instance.test.engagement)
+        if self.instance.pk:
+            self.fields["scenarios"].initial = self.instance.Input_flows.first()
 
         # do not show checkbox if finding is not accepted and simple risk acceptance is disabled
         # if checked, always show to allow unaccept also with full risk acceptance enabled
