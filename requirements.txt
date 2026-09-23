@@ -1,4 +1,4 @@
-amqp==5.3.1
+amqp==5.4.0
 annotated-types==0.8.0
 anyio==4.15.1
 appdirs==1.4.4
