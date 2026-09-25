@@ -1749,7 +1749,7 @@ CELERY_BEAT_SCHEDULE = {
             day_of_week=CELERY_CRON_SCHEDULE_EXPIRE_PERMISSION_KEY.split()[4]),
         },
     "long_risk_acceptance_expiration_handler": {
-        "task": "dojo.long_risk_acceptance.helper.expiration_handler",
+        "task": "dojo.api_v2.long_risk_acceptance.helper.expiration_handler",
         "schedule": crontab(
             minute=CELERY_CRON_SCHEDULE_EXPIRE_LONG_RISK_ACCEPTANCE.split()[0],
             hour=CELERY_CRON_SCHEDULE_EXPIRE_LONG_RISK_ACCEPTANCE.split()[1],
@@ -1758,7 +1758,7 @@ CELERY_BEAT_SCHEDULE = {
             day_of_week=CELERY_CRON_SCHEDULE_EXPIRE_LONG_RISK_ACCEPTANCE.split()[4]),
     },
        "long_risk_acceptance_automatic_acceptance": {
-            "task": "dojo.long_risk_acceptance.helper.automatic_acceptance",
+            "task": "dojo.api_v2.long_risk_acceptance.helper.automatic_acceptance",
             "schedule": crontab(
                 minute=CELERY_CRON_SCHEDULE_AUTOMATIC_LONG_RISK_ACCEPTANCE.split()[0],
                 hour=CELERY_CRON_SCHEDULE_AUTOMATIC_LONG_RISK_ACCEPTANCE.split()[1],
