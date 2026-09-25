@@ -54,5 +54,6 @@ class IAremediationApiView(APIView):
             context_message = context_process(findings, request)
         else:
             context_message = context_findings
+        logger.info("Sending async IA recommendation request with context: %s", context_message)
         async_get_ia_recommendation.apply_async(args=[context_message, request.user, False])
         return http_response.ok(message="OK", data={"findings": context_findings, "order_by": order_by})
