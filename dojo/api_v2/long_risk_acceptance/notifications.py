@@ -12,20 +12,17 @@ logger = logging.getLogger(__name__)
 class Notification:
 
     @staticmethod
-    def risk_acceptance_request(*args, **kwargs):
+    def risk_acceptance_approved(*args, **kwargs):
         long_risk_acceptance = kwargs["long_risk_acceptance"]
-        product = long_risk_acceptance.product
-        product_type = product.prod_type
         title = f"{long_risk_acceptance.description[:50]}"
         recipients = [long_risk_acceptance.reviewed_by]
         long_term = long_risk_acceptance.expiration_date.date() - timezone.now().date()
-        description = f"requested acceptance <b>long-term</b> of {long_term.days} days for the findings that are part of <b>{product_type}</b> of aplication <b>{product}</b>",
+        description = f"requested acceptance <b>long-term</b> of {long_term.days} days for the findings",
         subject = f"🙋‍♂️Request of aceptance long term of risk {long_risk_acceptance.id}  🙏"
 
-        create_notification(event='risk_acceptance_request',
+        create_notification(event='long_risk_acceptance_approved',
                         title=title, risk_acceptance=long_risk_acceptance,
                         subject=subject,
-                        product=long_risk_acceptance.product,
                         description=description,
                         recipients=recipients,
                         icon="bell",
@@ -35,23 +32,31 @@ class Notification:
  
     @staticmethod
     def risk_acceptance_expiration(long_risk_acceptance,
-                                   reactivated_findings=None,
                                    title=None):
-        accepted_findings = long_risk_acceptance.accepted_findings.filter(
-            is_mitigated=False,
-            risk_status="Risk Accepted")
-        if accepted_findings.count() == 0:
-            logger.debug("RISK_ACCETANCE_EXPIRATION: Not found findings in Risk Acceptance")
-            return True
-        if title is None:
-            title = 'Risk acceptance with ' + str(len(accepted_findings)) + " accepted findings has expired for " + \
-                    str(long_risk_acceptance.engagement.product) + ': ' + str(long_risk_acceptance.engagement.name)
 
-        create_notification(
-            event='risk_acceptance_expiration',
-            subject=f"⚠️Acceptance request Risk_Acceptance: {long_risk_acceptance.id} has expired🔔",
-            title=title, risk_acceptance=long_risk_acceptance, accepted_findings=accepted_findings,
-            reactivated_findings=reactivated_findings,
-            product=long_risk_acceptance.product,
-            recipients=long_risk_acceptance.accepted_by_user + [long_risk_acceptance.owner.get_username()],
-            url=reverse('view_risk_acceptance', args=(long_risk_acceptance.engagement.id, long_risk_acceptance.id, ))) # TODO: IMPLEMENTAR REVERSE
+        title = f"{long_risk_acceptance.description[:50]}"
+        long_term = long_risk_acceptance.expiration_date.date() - timezone.now().date()
+        description = f"Expiration <b>long-term</b> of {long_term.days} days for the findings",
+        subject = f"🙋‍♂️Expiration of aceptance long term of risk {long_risk_acceptance.id}  🙏"
+        recipients = []
+        if long_risk_acceptance.accepted_by:
+            recipients.append(long_risk_acceptance.accepted_by)
+
+        if long_risk_acceptance.owner:
+            username = long_risk_acceptance.owner.get_username()
+            if username:
+                recipients.append(username)
+
+        if recipients:
+            create_notification(
+                event='long_risk_acceptance_expiration',
+                subject=subject,
+                title=title,
+                product=long_risk_acceptance.product,
+                recipients=recipients,
+                description=description,
+                icon="bell",
+                color_icon="#A7A40B",
+                url=reverse('view_long_risk_acceptance_details',  args=(long_risk_acceptance.id,))
+            )
+

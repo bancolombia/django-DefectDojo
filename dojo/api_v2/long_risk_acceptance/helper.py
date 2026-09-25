@@ -1,13 +1,18 @@
-import logging
+﻿import logging
+from django.conf import settings
+from dojo.user.queries import get_user
+from dateutil.relativedelta import relativedelta
+from dojo.models import Finding, System_Settings
 from dojo.api_v2.api_error import ApiError
 from dojo.celery import app
 from dojo.api_v2.long_risk_acceptance.models import RiskAcceptanceEngagement 
-from dojo.models import Finding
+from dojo.models import Finding, Notes
 from django.utils import timezone
 from django.db.models.query import QuerySet
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from dojo.models import User
+from dojo.api_v2.long_risk_acceptance.notifications import Notification 
 from django.db.models import Q
 logger = logging.getLogger(__name__)
 
@@ -86,6 +91,10 @@ def render_rule(ra_engagement: RiskAcceptanceEngagement, reverse_query: bool = F
 
     return finding_qr
 
+def get_almost_expired_long_riks_acceptance_to_handle(heads_up_days):
+    transfer_finding = RiskAcceptanceEngagement.objects.filter(expiration_date__isnull=False, expiration_date_handled__isnull=True, expiration_date_warned__isnull=True,
+            expiration_date__date__lte=timezone.now().date() + relativedelta(days=heads_up_days), expiration_date__date__gte=timezone.now().date())
+    return transfer_finding
 
 def apply_review(request, ra_engagement: RiskAcceptanceEngagement):
     ra_engagement.risk_status = "Risks Reviewed"
@@ -106,6 +115,7 @@ def active_findings_long_risk_acceptance(finding_qs: QuerySet[Finding]):
         ])
         finding.tags.remove("long_term_risk_acceptance")
 
+
 @app.task
 def async_apply_rule_long_risk_acceptance(ra_engagement_id, user_id, event):
     ra_engagement = get_object_or_404(RiskAcceptanceEngagement, id=ra_engagement_id) 
@@ -113,33 +123,105 @@ def async_apply_rule_long_risk_acceptance(ra_engagement_id, user_id, event):
     finding_qs = render_rule(ra_engagement, False)
     if finding_qs:
         if event == "reject":
-            if ra_engagement.risk_status in ["Risks Reviewed"]:
+            if ra_engagement.risk_status in ["Risks Reviewed", "Risks Accepted"]:
+                ra_engagement.risk_status = "Risks Rejected"
+                ra_engagement.save()
+                active_findings_long_risk_acceptance(finding_qs)
+        elif event == "expire":
+            if ra_engagement.risk_status in ["Risks Reviewed", "Risks Accepted"]:
                 ra_engagement.risk_status = "Risks Rejected"
                 ra_engagement.save()
             elif ra_engagement.risk_status in ["Risks Accepted"]:
                 ra_engagement.risk_status = "Risks Rejected"
                 ra_engagement.save()
                 active_findings_long_risk_acceptance(finding_qs)
-        if ra_engagement.risk_status in ["Risks Reviewed"]:
-            ra_engagement.risk_status = "Risks Accepted"
-            ra_engagement.save()
-            for finding in finding_qs.iterator(chunk_size=200):
-                finding.risk_status = "Risk Accepted"
-                finding.active = False
-                finding.risk_accepted = True
+        elif event == "accept":
+            if ra_engagement.risk_status in ["Risks Reviewed", "Risks Accepted"]:
+                ra_engagement.risk_status = "Risks Accepted"
+                ra_engagement.save()
+                for finding in finding_qs.iterator(chunk_size=200):
+                    finding.risk_status = "Risk Accepted"
+                    finding.active = False
+                    finding.risk_accepted = True
 
-                finding.save(update_fields=[
-                    "risk_status",
-                    "active",
-                    "risk_accepted"
-                ])
-                logger.debug(f"finding {finding.id} accepted flow long term risk acceptance of engagement {ra_engagement.id}")
-                finding.tags.add("long_term_risk_acceptance")
-
-        elif ra_engagement.risk_status in ["Risks Pending"]:
-            ra_engagement.risk_status = "Risks Reviewed"
-            ra_engagement.reviewed_by = user.username
-            ra_engagement.reviewed_date = timezone.now()
-            ra_engagement.save()
+                    finding.save(update_fields=[
+                        "risk_status",
+                        "active",
+                        "risk_accepted"
+                    ])
+                    logger.debug(f"finding {finding.id} accepted flow long term risk acceptance of engagement {ra_engagement.id}")
+                    finding.tags.add("long_term_risk_acceptance")
+        elif event == "review":
+            if ra_engagement.risk_status in ["Risks Pending"]:
+                ra_engagement.risk_status = "Risks Reviewed"
+                ra_engagement.reviewed_by = user.username
+                ra_engagement.reviewed_date = timezone.now()
+                ra_engagement.save()
     else:
         raise ApiError("No findings found for this engagement with the current rules.")
+
+def get_expired_long_risk_acceptance_to_handle():
+    long_risk_acceptances = RiskAcceptanceEngagement.objects.filter(
+        expiration_date__isnull=False,
+        expiration_date_handled__isnull=True,
+        expiration_date__date__lte=timezone.now().date())
+    return long_risk_acceptances
+
+def get_almost_expired_long_risk_acceptance_to_handle(heads_up_days):
+    long_risk_acceptances = RiskAcceptanceEngagement.objects.filter(expiration_date__isnull=False, expiration_date_handled__isnull=True, expiration_date_warned__isnull=True,
+            expiration_date__date__lte=timezone.now().date() + relativedelta(days=heads_up_days), expiration_date__date__gte=timezone.now().date())
+    return long_risk_acceptances
+
+
+def expire_now(long_risk_acceptance: RiskAcceptanceEngagement):
+    system_user = get_user(settings.SYSTEM_USER)
+    logger.debug(f"Expiration Now {long_risk_acceptance.id}")
+    long_risk_acceptance.expiration_date_handled = timezone.now()
+    long_risk_acceptance.save()
+    long_risk_acceptance_eng = long_risk_acceptance.engagement_set.all()
+
+    for ra_engagement in long_risk_acceptance_eng:
+        async_apply_rule_long_risk_acceptance(ra_engagement, system_user.username, "expire")
+        note = Notes(entry=f"Long Risk Acceptance Expired: {long_risk_acceptance.id}",
+                     author=system_user)
+        note.save()
+        long_risk_acceptance.notes.add(note)
+        Notification.risk_acceptance_expiration(
+            event="long_risk_acceptance",
+            subject=f"⏳Long Risk Acceptance expired : {long_risk_acceptance.id}🚨",
+            description="Long risk acceptance expired",
+            long_risk_acceptance=long_risk_acceptance)
+
+@app.task
+def expiration_handler(*args, **kwargs):
+    try:
+        system_settings = System_Settings.objects.get()
+    except System_Settings.DoesNotExist:
+        logger.warning("Unable to get system_settings, skipping risk acceptance expiration job")
+
+    long_risk_acceptances = get_expired_long_risk_acceptance_to_handle()
+
+    logger.info("expiring %i risk acceptances that are past expiration date", len(long_risk_acceptances))
+    for long_risk_acceptance in long_risk_acceptances:
+        expire_now(long_risk_acceptance)
+        # notification created by expire_now code
+
+    heads_up_days = system_settings.risk_acceptance_notify_before_expiration
+    if heads_up_days > 0:
+        long_risk_acceptances = get_almost_expired_long_risk_acceptance_to_handle(heads_up_days)
+        logger.info("notifying for %i long risk acceptances that are expiring within %i days",
+                    len(long_risk_acceptances), heads_up_days)
+        for long_risk_acceptance in long_risk_acceptances:
+            logger.debug("EXPIRATION LONG RISK ACCEPTANCE TASK: "
+                         "notifying for long risk acceptance %i",
+                         long_risk_acceptance.id)
+            notification_title = "Long Risk Acceptance accepted will expire on " + \
+                timezone.localtime(long_risk_acceptance.expiration_date).strftime("%b %d, %Y")
+            Notification.risk_acceptance_expiration(long_risk_acceptance)
+            logger.debug(
+                            "EXPIRATION LONG RISK ACCEPTANCE TASK: %s "
+                            "sending risk acceptance expiration"
+                            "warning notification", long_risk_acceptance.id)
+            long_risk_acceptance.expiration_date_warned = timezone.now()
+            long_risk_acceptance.save()
+

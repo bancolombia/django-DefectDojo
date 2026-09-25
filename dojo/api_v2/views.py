@@ -3776,12 +3776,12 @@ class TransferFindingViewSet(prefetch.PrefetchListMixin,
 
         file = transfer_finding_obj.path
         if not file:
-            raise ApiError.not_found(contex="File not fonud")
+            raise ApiError.not_found(detail="File not fonud")
 
         try:
             file_handle = file.open("rb")
         except Exception as e:
-            raise ApiError.internal_server_error(contex="Unable to open file: " + str(e))
+            raise ApiError.internal_server_error(detail="Unable to open file: " + str(e))
 
         filename = os.path.basename(file.name)
         content_type, _ = mimetypes.guess_type(filename)

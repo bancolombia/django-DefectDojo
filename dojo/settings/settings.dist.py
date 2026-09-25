@@ -101,6 +101,8 @@ env = environ.FileAwareEnv(
     DD_CELERY_PASS_MODEL_BY_ID=(str, True),
     DD_CELERY_CRON_SCHEDULE=(str, "* * * * *"),
     DD_CELERY_CRON_SCHEDULE_EXPIRE_PERMISSION_KEY=(str, "* * * * *"),
+    DD_CELERY_CRON_SCHEDULE_EXPIRE_LONG_RISK_ACCEPTANCE=(str, "* * * * *"),
+    DD_CELERY_CRON_SCHEDULE_AUTOMATIC_LONG_RISK_ACCEPTANCE=(str, "* * * * *"),
     DD_CELERY_LOG_LEVEL=(str, "INFO"),
     DD_CELERY_CRON_SCHEDULE_DUPE_DELETE=(int, 1),
     DD_FOOTER_VERSION=(str, ""),
@@ -1682,6 +1684,8 @@ CELERY_PASS_MODEL_BY_ID = env("DD_CELERY_PASS_MODEL_BY_ID")
 CELERY_CRON_SCHEDULE = env("DD_CELERY_CRON_SCHEDULE")
 CELERY_CRON_SCHEDULE_DUPE_DELETE = env("DD_CELERY_CRON_SCHEDULE_DUPE_DELETE")
 CELERY_CRON_SCHEDULE_EXPIRE_PERMISSION_KEY = env("DD_CELERY_CRON_SCHEDULE_EXPIRE_PERMISSION_KEY")
+CELERY_CRON_SCHEDULE_EXPIRE_LONG_RISK_ACCEPTANCE = env("DD_CELERY_CRON_SCHEDULE_EXPIRE_LONG_RISK_ACCEPTANCE")
+CELERY_CRON_SCHEDULE_AUTOMATIC_LONG_RISK_ACCEPTANCE = env("DD_CELERY_CRON_SCHEDULE_AUTOMATIC_LONG_RISK_ACCEPTANCE")
 CELERY_EXPIRING_FINDINGEXCLUSION = env("DD_CHECK_EXPIRING_FINDINGEXCLUSION")
 CELERY_NEW_FINDINGS_TO_EXCLUSION_LIST = env("DD_CHECK_NEW_FINDINGS_TO_EXCLUSION_LIST")
 CELERY_EXPIRING_CROSS_APPROVAL_EXCLUSIONS = env("DD_CHECK_EXPIRING_CROSS_APPROVAL_EXCLUSIONS")
@@ -1743,6 +1747,24 @@ CELERY_BEAT_SCHEDULE = {
             day_of_month=CELERY_CRON_SCHEDULE_EXPIRE_PERMISSION_KEY.split()[2],
             month_of_year=CELERY_CRON_SCHEDULE_EXPIRE_PERMISSION_KEY.split()[3],
             day_of_week=CELERY_CRON_SCHEDULE_EXPIRE_PERMISSION_KEY.split()[4]),
+        },
+    "long_risk_acceptance_expiration_handler": {
+        "task": "dojo.long_risk_acceptance.long_risk_acceptance.expiration_handler",
+        "schedule": crontab(
+            minute=CELERY_CRON_SCHEDULE_EXPIRE_LONG_RISK_ACCEPTANCE.split()[0],
+            hour=CELERY_CRON_SCHEDULE_EXPIRE_LONG_RISK_ACCEPTANCE.split()[1],
+            day_of_month=CELERY_CRON_SCHEDULE_EXPIRE_LONG_RISK_ACCEPTANCE.split()[2],
+            month_of_year=CELERY_CRON_SCHEDULE_EXPIRE_LONG_RISK_ACCEPTANCE.split()[3],
+            day_of_week=CELERY_CRON_SCHEDULE_EXPIRE_LONG_RISK_ACCEPTANCE.split()[4]),
+    },
+       "long_risk_acceptance_automatic_acceptance": {
+            "task": "dojo.long_risk_acceptance.long_risk_acceptance.automatic_acceptance",
+            "schedule": crontab(
+                minute=CELERY_CRON_SCHEDULE_AUTOMATIC_LONG_RISK_ACCEPTANCE.split()[0],
+                hour=CELERY_CRON_SCHEDULE_AUTOMATIC_LONG_RISK_ACCEPTANCE.split()[1],
+                day_of_month=CELERY_CRON_SCHEDULE_AUTOMATIC_LONG_RISK_ACCEPTANCE.split()[2],
+                month_of_year=CELERY_CRON_SCHEDULE_AUTOMATIC_LONG_RISK_ACCEPTANCE.split()[3],
+                day_of_week=CELERY_CRON_SCHEDULE_AUTOMATIC_LONG_RISK_ACCEPTANCE.split()[4]),
         },
     "check_expiring_findingexclusions": {
         'task': 'dojo.engine_tools.helpers.check_expiring_findingexclusions',
