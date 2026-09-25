@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class Notification:
 
     @staticmethod
-    def risk_acceptance_approved(*args, **kwargs):
+    def risk_acceptance_request(*args, **kwargs):
         long_risk_acceptance = kwargs["long_risk_acceptance"]
         title = f"{long_risk_acceptance.description[:50]}"
         recipients = [long_risk_acceptance.reviewed_by]
@@ -28,6 +28,25 @@ class Notification:
                         icon="bell",
                         owner=long_risk_acceptance.owner,
                         color_icon="#104dbe",
+                        url=reverse('view_long_risk_acceptance_details', args=(long_risk_acceptance.id,)))
+
+    @staticmethod
+    def risk_acceptance_approved(*args, **kwargs):
+        long_risk_acceptance = kwargs["long_risk_acceptance"]
+        title = f"{long_risk_acceptance.description[:50]}"
+        recipients = [long_risk_acceptance.reviewed_by]
+        long_term = long_risk_acceptance.expiration_date.date() - timezone.now().date()
+        description = f"Request Acceptance long Term Approved of {long_term.days} days for the findings",
+        subject = f"🙋‍♂️Request of aceptance long term of risk {long_risk_acceptance.id}  🙏"
+
+        create_notification(event='long_risk_acceptance_approved',
+                        title=title, risk_acceptance=long_risk_acceptance,
+                        subject=subject,
+                        description=description,
+                        recipients=recipients,
+                        icon="bell",
+                        owner=long_risk_acceptance.owner,
+                        color_icon="#087924",
                         url=reverse('view_long_risk_acceptance_details', args=(long_risk_acceptance.id,)))
  
     @staticmethod

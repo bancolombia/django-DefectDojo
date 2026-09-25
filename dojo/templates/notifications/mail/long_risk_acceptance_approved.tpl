@@ -13,17 +13,6 @@
 	
 
 	{% block contect_description %}
-		<div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 15px 0; border-radius: 4px;">
-			{% if long_risk_acceptance.expiration_date_handled %}
-				{% blocktranslate with expiration_date=long_risk_acceptance.expiration_date_handled|date:"b d, Y H:i" %}
-					<strong style="color: #d9534f;">This long-term risk acceptance has EXPIRED on {{ expiration_date }}</strong>
-				{% endblocktranslate %}
-			{% else %}
-				{% blocktranslate with expiration_date=long_risk_acceptance.expiration_date|date:"b d, Y H:i" %}
-					<strong style="color: #d9534f;">This long-term risk acceptance will EXPIRE on {{ expiration_date }}</strong>
-				{% endblocktranslate %}
-			{% endif %}
-		</div>
 		
 		{% if long_risk_acceptance.description %}
 			<p style="color: #555; line-height: 1.6;">{{ long_risk_acceptance.description }}</p>
