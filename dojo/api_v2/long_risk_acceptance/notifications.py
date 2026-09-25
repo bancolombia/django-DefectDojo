@@ -33,7 +33,7 @@ class Notification:
     @staticmethod
     def risk_acceptance_expiration(long_risk_acceptance,
                                    title=None):
-
+        from dojo.api_v2.long_risk_acceptance.helper import render_rule
         title = f"{long_risk_acceptance.description[:50]}"
         long_term = long_risk_acceptance.expiration_date.date() - timezone.now().date()
         description = f"Expiration <b>long-term</b> of {long_term.days} days for the findings",
@@ -53,6 +53,8 @@ class Notification:
                 subject=subject,
                 title=title,
                 product=long_risk_acceptance.product,
+                long_risk_acceptance=long_risk_acceptance,
+                findings_count=qr.count() if (qr := render_rule(long_risk_acceptance, True)) else 0,
                 recipients=recipients,
                 description=description,
                 icon="bell",
