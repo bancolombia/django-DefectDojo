@@ -140,12 +140,12 @@ def context_process(findings: List[Finding], request):
     
     for finding in findings:
         # Extract Cliente from tags
-        cliente = "vultrackerbatch"
+        client = "vultrackerbatch"
         tags_list = [tag.name for tag in finding.tags.all()] if finding.tags.exists() else []
         # Extract user_email from reporter
         
         finding_data = {
-            "Cliente": cliente,
+            "client": client,
             "user_email": request.user.email,
             "id": finding.id,
             "tags": tags_list,
@@ -158,7 +158,7 @@ def context_process(findings: List[Finding], request):
             "vuln_id_from_tool": getattr(finding, 'vuln_id_from_tool', None),
             "mitigation": getattr(finding, 'mitigation', None),
             "display_status": f"Active, {'Verified' if finding.verified else 'Not Verified'}",
-            "vulnerability_ids": finding.get_vulnerability_ids()
+            "vulnerability_ids": [{"vulnerability_id": vid} for vid in finding.get_vulnerability_ids().split(",") if vid]
         }
         
         # Extract related fields
