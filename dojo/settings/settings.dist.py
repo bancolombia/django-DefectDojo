@@ -1757,14 +1757,14 @@ CELERY_BEAT_SCHEDULE = {
             month_of_year=CELERY_CRON_SCHEDULE_EXPIRE_LONG_RISK_ACCEPTANCE.split()[3],
             day_of_week=CELERY_CRON_SCHEDULE_EXPIRE_LONG_RISK_ACCEPTANCE.split()[4]),
     },
-       "long_risk_acceptance_automatic_acceptance": {
-            "task": "dojo.api_v2.long_risk_acceptance.helper.automatic_acceptance",
-            "schedule": crontab(
-                minute=CELERY_CRON_SCHEDULE_AUTOMATIC_LONG_RISK_ACCEPTANCE.split()[0],
-                hour=CELERY_CRON_SCHEDULE_AUTOMATIC_LONG_RISK_ACCEPTANCE.split()[1],
-                day_of_month=CELERY_CRON_SCHEDULE_AUTOMATIC_LONG_RISK_ACCEPTANCE.split()[2],
-                month_of_year=CELERY_CRON_SCHEDULE_AUTOMATIC_LONG_RISK_ACCEPTANCE.split()[3],
-                day_of_week=CELERY_CRON_SCHEDULE_AUTOMATIC_LONG_RISK_ACCEPTANCE.split()[4]),
+    "long_risk_acceptance_automatic_acceptance": {
+        "task": "dojo.api_v2.long_risk_acceptance.helper.automatic_acceptance",
+        "schedule": crontab(
+            minute=CELERY_CRON_SCHEDULE_AUTOMATIC_LONG_RISK_ACCEPTANCE.split()[0],
+            hour=CELERY_CRON_SCHEDULE_AUTOMATIC_LONG_RISK_ACCEPTANCE.split()[1],
+            day_of_month=CELERY_CRON_SCHEDULE_AUTOMATIC_LONG_RISK_ACCEPTANCE.split()[2],
+            month_of_year=CELERY_CRON_SCHEDULE_AUTOMATIC_LONG_RISK_ACCEPTANCE.split()[3],
+            day_of_week=CELERY_CRON_SCHEDULE_AUTOMATIC_LONG_RISK_ACCEPTANCE.split()[4]),
         },
     "check_expiring_findingexclusions": {
         'task': 'dojo.engine_tools.helpers.check_expiring_findingexclusions',

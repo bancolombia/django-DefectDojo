@@ -117,9 +117,8 @@ def active_findings_long_risk_acceptance(finding_qs: QuerySet[Finding]):
 
 
 @app.task
-def async_apply_rule_long_risk_acceptance(ra_engagement_id, user_id, event):
+def async_apply_rule_long_risk_acceptance(ra_engagement_id, user, event):
     ra_engagement = get_object_or_404(RiskAcceptanceEngagement, id=ra_engagement_id) 
-    user = get_object_or_404(User, id=user_id)
     finding_qs = render_rule(ra_engagement, False)
     if finding_qs:
         if event == "reject":
@@ -158,7 +157,7 @@ def async_apply_rule_long_risk_acceptance(ra_engagement_id, user_id, event):
                 ra_engagement.reviewed_date = timezone.now()
                 ra_engagement.save()
     else:
-        raise ApiError("No findings found for this engagement with the current rules.")
+        raise ApiError(f"No findings found for this engagement with the current rules: ra_engagement_id {ra_engagement_id}")
 
 def get_expired_long_risk_acceptance_to_handle():
     long_risk_acceptances = RiskAcceptanceEngagement.objects.filter(
@@ -172,9 +171,18 @@ def get_almost_expired_long_risk_acceptance_to_handle(heads_up_days):
             expiration_date__date__lte=timezone.now().date() + relativedelta(days=heads_up_days), expiration_date__date__gte=timezone.now().date())
     return long_risk_acceptances
 
-def automatic_acceptance(long_risk_acceptance: RiskAcceptanceEngagement):
-    async_apply_rule_long_risk_acceptance.apply_async(
-        args=(long_risk_acceptance.id, settings.SYSTEM_USER, "accept"))
+@app.task
+def automatic_acceptance(*args, **kwargs):
+    queryset = RiskAcceptanceEngagement.objects.filter(risk_status__in=["Risks Accepted"])
+    system_user = get_user(settings.SYSTEM_USER)
+    for long_risk_acceptance in queryset.iterator(chunk_size=200):
+        try:
+            async_apply_rule_long_risk_acceptance.apply_async(
+                args=(long_risk_acceptance.id, system_user.id, "accept"))
+        except Exception as e:
+            logger.error(str(e))
+            continue
+            
 
 def expire_now(long_risk_acceptance: RiskAcceptanceEngagement):
     system_user = get_user(settings.SYSTEM_USER)
@@ -184,7 +192,8 @@ def expire_now(long_risk_acceptance: RiskAcceptanceEngagement):
     long_risk_acceptance_eng = long_risk_acceptance.engagement_set.all()
 
     for ra_engagement in long_risk_acceptance_eng:
-        async_apply_rule_long_risk_acceptance(ra_engagement, system_user.username, "expire")
+        async_apply_rule_long_risk_acceptance.apply_async(
+            args=(ra_engagement.id, system_user.id, "expire"))
         note = Notes(entry=f"Long Risk Acceptance Expired: {long_risk_acceptance.id}",
                      author=system_user)
         note.save()
@@ -218,8 +227,6 @@ def expiration_handler(*args, **kwargs):
             logger.debug("EXPIRATION LONG RISK ACCEPTANCE TASK: "
                          "notifying for long risk acceptance %i",
                          long_risk_acceptance.id)
-            notification_title = "Long Risk Acceptance accepted will expire on " + \
-                timezone.localtime(long_risk_acceptance.expiration_date).strftime("%b %d, %Y")
             Notification.risk_acceptance_expiration(long_risk_acceptance)
             logger.debug(
                             "EXPIRATION LONG RISK ACCEPTANCE TASK: %s "
