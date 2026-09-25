@@ -109,12 +109,8 @@ class RiskAcceptanceEngagementViewSet(prefetch.PrefetchListMixin,
         try:
             RiskAcceptanceEngagementRequestSerializer(data=request.query_params).is_valid(raise_exception=True)
             event = request.query_params.get("event") 
-            Notification.risk_acceptance_request(long_risk_acceptance=ra_engagement)
-            # Notification.risk_acceptance_expiration(long_risk_acceptance=ra_engagement)
-            # helper_ra_engagement.expiration_handler()
-            # helper_ra_engagement.async_apply_rule_long_risk_acceptance(ra_engagement.id, request.user.id, event)
-            # helper_ra_engagement.async_apply_rule_long_risk_acceptance.apply_async(
-            #     args=(ra_engagement.id, request.user.id, event))
+            helper_ra_engagement.async_apply_rule_long_risk_acceptance.apply_async(
+                args=(ra_engagement.id, request.user.id, event))
             return http_response.ok(message="Render Rule Applied")
         except Exception as e:
             return http_response.error(

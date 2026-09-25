@@ -172,6 +172,9 @@ def get_almost_expired_long_risk_acceptance_to_handle(heads_up_days):
             expiration_date__date__lte=timezone.now().date() + relativedelta(days=heads_up_days), expiration_date__date__gte=timezone.now().date())
     return long_risk_acceptances
 
+def automatic_acceptance(long_risk_acceptance: RiskAcceptanceEngagement):
+    async_apply_rule_long_risk_acceptance.apply_async(
+        args=(long_risk_acceptance.id, settings.SYSTEM_USER, "accept"))
 
 def expire_now(long_risk_acceptance: RiskAcceptanceEngagement):
     system_user = get_user(settings.SYSTEM_USER)
