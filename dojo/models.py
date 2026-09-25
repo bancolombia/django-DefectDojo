@@ -4709,6 +4709,15 @@ class Notifications(models.Model):
     url_report_finding = MultiSelectField(choices=NOTIFICATION_CHOICES, default=NOTIFICATION_CHOICE_ALERT_MAIL, blank=True,
         verbose_name=_("Url report finding"),
         help_text=_("Get notified of url download report finding"))
+    long_risk_acceptance_approved = MultiSelectField(choices=NOTIFICATION_CHOICES, default=NOTIFICATION_CHOICE_ALERT_MAIL, blank=True,
+        verbose_name=_("Long Risk Acceptance Request"),
+        help_text=_("Get notified when a long risk acceptance is requested"))
+    long_risk_acceptance_rejected = MultiSelectField(choices=NOTIFICATION_CHOICES, default=NOTIFICATION_CHOICE_ALERT_MAIL, blank=True,
+        verbose_name=_("Long Risk Acceptance Rejected"),
+        help_text=_("Get notified when a long risk acceptance is rejected"))
+    long_risk_acceptance_expiration = MultiSelectField(choices=NOTIFICATION_CHOICES, default=NOTIFICATION_CHOICE_ALERT_MAIL, blank=True,
+        verbose_name=_("Long Risk Acceptance Expiration"),
+        help_text=_("Get notified when a long risk acceptance is about to expire"))
 
     class Meta:
         constraints = [
@@ -4757,6 +4766,9 @@ class Notifications(models.Model):
                 result.finding_exclusion_approved = {*result.finding_exclusion_approved, *notifications.finding_exclusion_approved}
                 result.finding_exclusion_expired = {*result.finding_exclusion_expired, *notifications.finding_exclusion_expired}
                 result.url_report_finding = {*result.url_report_finding, *notifications.url_report_finding}
+                result.long_risk_acceptance_expiration = {*result.long_risk_acceptance_expiration, *notifications.long_risk_acceptance_expiration}
+                result.long_risk_acceptance_approved = {*result.long_risk_acceptance_approved, *notifications.long_risk_acceptance_approved}
+                result.long_risk_acceptance_rejected = {*result.long_risk_acceptance_rejected, *notifications.long_risk_acceptance_rejected}
         return result
 
 

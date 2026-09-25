@@ -174,12 +174,12 @@ class ScopeViewSet(prefetch.PrefetchListMixin,
 
         file_field = input_file.file
         if not file_field:
-            raise ApiError.not_found(contex="File not fonud")
+            raise ApiError.not_found(detail="File not fonud")
 
         try:
             file_handle = file_field.open("rb")
         except Exception as e:
-            raise ApiError.internal_server_error(contex="Unable to open file: " + str(e))
+            raise ApiError.internal_server_error(detail="Unable to open file: " + str(e))
 
         filename = os.path.basename(file_field.name)
         content_type, _ = mimetypes.guess_type(filename)

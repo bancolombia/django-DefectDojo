@@ -4,7 +4,7 @@ import mimetypes
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework import status
-from dojo.models import RiskAcceptanceEngagement, Notes
+from dojo.models import Finding, Notes
 from rest_framework.permissions import IsAuthenticated
 from dojo.api_v2.long_risk_acceptance.models import *
 from dojo.api_v2.long_risk_acceptance.serializers import * 
@@ -172,12 +172,12 @@ class RiskAcceptanceEngagementViewSet(prefetch.PrefetchListMixin,
 
         file = long_risk_acceptance_obj.path
         if not file:
-            raise ApiError.not_found(contex="File not fonud")
+            raise ApiError.not_found(detail="File not fonud")
 
         try:
             file_handle = file.open("rb")
         except Exception as e:
-            raise ApiError.internal_server_error(contex="Unable to open file: " + str(e))
+            raise ApiError.internal_server_error(detail="Unable to open file: " + str(e))
 
         filename = os.path.basename(file.name)
         content_type, _ = mimetypes.guess_type(filename)
