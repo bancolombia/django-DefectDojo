@@ -1,4 +1,5 @@
 import logging
+import ast
 from typing import List
 from django.urls import reverse
 from datetime import datetime
@@ -17,7 +18,7 @@ class Notification:
             recipients.append(long_risk_acceptance.reviewed_by)
         
         if long_risk_acceptance.accepted_by:
-            recipients.append(long_risk_acceptance.accepted_by)
+            recipients.append(ast.literal_eval(long_risk_acceptance.accepted_by)[0])
 
         if long_risk_acceptance.owner:
             username = long_risk_acceptance.owner.get_username()
@@ -26,18 +27,62 @@ class Notification:
         return recipients
 
     @staticmethod
-    def risk_acceptance_request(*args, **kwargs):
+    def risk_acceptance_rejected(*args, **kwargs):
+        from dojo.api_v2.long_risk_acceptance.helper import render_rule
+        long_risk_acceptance = kwargs["long_risk_acceptance"]
+        title = f"❌ {long_risk_acceptance.description[:50]}"
+        recipients = Notification._get_recipients(long_risk_acceptance)
+        long_term = long_risk_acceptance.expiration_date.date() - timezone.now().date()
+        description = f"<b>❌ REJECTED:</b> Long-term risk acceptance for {long_term.days} days is <b>Rejected</b>",
+        subject = f"❌ REJECTED: Long-term Risk Acceptance Request #{long_risk_acceptance.id}"
+        if recipients:
+            create_notification(event='long_risk_acceptance_rejected',
+                            title=title, long_risk_acceptance=long_risk_acceptance,
+                            subject=subject,
+                            description=description,
+                            recipients=recipients,
+                            findings_count=qr.count() if (qr := render_rule(long_risk_acceptance, True)) else 0,
+                            icon="bell",
+                            owner=long_risk_acceptance.owner,
+                            color_icon="#0056b3",
+                            url=reverse('view_long_risk_acceptance_details', args=(long_risk_acceptance.id,)))
+
+    @staticmethod
+    def risk_acceptance_review(*args, **kwargs):
+        from dojo.api_v2.long_risk_acceptance.helper import render_rule
         long_risk_acceptance = kwargs["long_risk_acceptance"]
         title = f"📋 {long_risk_acceptance.description[:50]}"
         recipients = Notification._get_recipients(long_risk_acceptance)
         long_term = long_risk_acceptance.expiration_date.date() - timezone.now().date()
-        description = f"<b>📋 NEW REQUEST:</b> Long-term risk acceptance for {long_term.days} days is <b>pending approval</b>",
-        subject = f"📋 NEW: Long-term Risk Acceptance Request #{long_risk_acceptance.id}"
+        description = f"<b>📋 REVIEW:</b> Long-term risk acceptance for {long_term.days} days is <b>Reviewed</b>",
+        subject = f"📋 REVIEW: Long-term Risk Acceptance Request #{long_risk_acceptance.id}"
         if recipients:
-            create_notification(event='long_risk_acceptance_request',
+            create_notification(event='long_risk_acceptance_approved',
                             title=title, long_risk_acceptance=long_risk_acceptance,
                             subject=subject,
                             description=description,
+                            recipients=recipients,
+                            findings_count=qr.count() if (qr := render_rule(long_risk_acceptance, True)) else 0,
+                            icon="bell",
+                            owner=long_risk_acceptance.owner,
+                            color_icon="#0056b3",
+                            url=reverse('view_long_risk_acceptance_details', args=(long_risk_acceptance.id,)))
+
+    @staticmethod
+    def risk_acceptance_request(*args, **kwargs):
+        from dojo.api_v2.long_risk_acceptance.helper import render_rule
+        long_risk_acceptance = kwargs["long_risk_acceptance"]
+        title = f"⏳ {long_risk_acceptance.description[:50]}"
+        recipients = Notification._get_recipients(long_risk_acceptance)
+        long_term = long_risk_acceptance.expiration_date.date() - timezone.now().date()
+        description = f"<b>⏳ NEW REQUEST:</b> Long-term risk acceptance for {long_term.days} days is <b>pending approval</b>",
+        subject = f"⏳ NEW: Long-term Risk Acceptance Request #{long_risk_acceptance.id}"
+        if recipients:
+            create_notification(event='long_risk_acceptance_approved',
+                            title=title, long_risk_acceptance=long_risk_acceptance,
+                            subject=subject,
+                            description=description,
+                            findings_count=qr.count() if (qr := render_rule(long_risk_acceptance, True)) else 0,
                             recipients=recipients,
                             icon="bell",
                             owner=long_risk_acceptance.owner,
@@ -46,6 +91,7 @@ class Notification:
 
     @staticmethod
     def risk_acceptance_approved(*args, **kwargs):
+        from dojo.api_v2.long_risk_acceptance.helper import render_rule
         long_risk_acceptance = kwargs["long_risk_acceptance"]
         title = f"✓ {long_risk_acceptance.description[:50]}"
         long_term = long_risk_acceptance.expiration_date.date() - timezone.now().date()
@@ -57,6 +103,7 @@ class Notification:
                             title=title, long_risk_acceptance=long_risk_acceptance,
                             subject=subject,
                             description=description,
+                            findings_count=qr.count() if (qr := render_rule(long_risk_acceptance, True)) else 0,
                             recipients=recipients,
                             icon="bell",
                             owner=long_risk_acceptance.owner,
