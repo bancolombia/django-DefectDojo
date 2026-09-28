@@ -103,7 +103,15 @@ def get_unique_ids_from_value(unique_id_from_tool):
 
 def get_unique_ids_filter(unique_id_from_tool):
     unique_ids = get_unique_ids_from_value(unique_id_from_tool)
-    return Q(cve__in=unique_ids) | Q(vuln_id_from_tool__in=unique_ids)
+    return (
+        Q(cve__in=unique_ids)
+        | Q(vuln_id_from_tool__in=unique_ids)
+        | Q(
+            pk__in=Vulnerability_Id.objects.filter(
+                vulnerability_id__in=unique_ids
+            ).values("finding_id")
+        )
+    )
 
 
 def get_unique_ids_display(unique_id_from_tool):

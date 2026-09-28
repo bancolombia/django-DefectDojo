@@ -92,6 +92,11 @@ class TestNotifications(DojoTestCase):
         self.assertEqual('slack' in merged_notifications.other, False)  # default alert from global
         self.assertEqual(len(merged_notifications.other), 1)
         self.assertEqual(merged_notifications.other, {''})
+
+        global_personal_notifications.cross_approval_approved = ["slack"]
+        personal_product_notifications.cross_approval_approved = ["mail"]
+        merged_notifications = Notifications.merge_notifications_list([global_personal_notifications, personal_product_notifications])
+        self.assertEqual(merged_notifications.cross_approval_approved, {"slack", "mail"})
         # TODO: add unittest by default new settings
 
     # @patch("dojo.notifications.helper.AlertNotificationManger.send_alert_notification", wraps=AlertNotificationManger.send_alert_notification)
