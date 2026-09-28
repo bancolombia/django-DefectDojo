@@ -34,7 +34,7 @@ from dojo.models import (
     RiskAcceptanceExclusionRule,
     RiskAcceptanceEngagementEconomicImpact,
 )
-from dojo.api_v2.scope.models import Input, InputSecret, InputFile, InputFlow
+from dojo.api_v2.scope.models import Input, InputSecret, InputFile, InputFlow, InputURL, InputScenario
 from dojo.engine_tools.models import FindingExclusion
 from dojo.request_cache import cache_for_request
 logger = logging.getLogger(__name__)
@@ -56,7 +56,11 @@ def user_has_permission(user, obj, permission):
 
     if user.is_superuser:
         return True
-    
+
+    if isinstance(obj, InputScenario):
+        return user_has_permission(user, obj.url, permission)
+    if isinstance(obj, InputURL):
+        return user_has_permission(user, obj.flow, permission)
     if isinstance(obj, InputFlow):
         return user_has_permission(user, obj.engagement, permission)
 

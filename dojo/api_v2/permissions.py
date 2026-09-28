@@ -1473,36 +1473,31 @@ class UserHasTransferFindingPermission(permissions.BasePermission):
         
         
 class UserHasInputFlowPermission(permissions.BasePermission):
-    path_input_flow_post = re.compile(r"^/api/v2/input_flow/$")
-    path_input_flow = re.compile(r"^/api/v2/input_flow/\d+/$")
+    # Used by InputFlowViewSet, InputURLViewSet and InputScenarioViewSet.
+    # InputURL and InputScenario inherit permissions from their flow's engagement.
 
     def has_permission(self, request, view):
-        if (
-            UserHasInputFlowPermission.path_input_flow_post.match(request.path)
-            or UserHasInputFlowPermission.path_input_flow.match(request.path)
-        ):
+        if view.basename == "input_flow" and view.action == "create":
             return check_post_permission(
                 request,
                 Engagement,
                 "engagement",
-                Permissions.Engagement_View,
+                Permissions.Input_Flow_Add,
             )
         return True
 
     def has_object_permission(self, request, view, obj):
-        if (
-            UserHasInputFlowPermission.path_input_flow_post.match(request.path)
-            or UserHasInputFlowPermission.path_input_flow.match(request.path)
-        ):
-            return check_object_permission(
-                request,
-                obj,
-                Permissions.Input_Flow_View,
-                Permissions.Input_Flow_Edit,
-                Permissions.Input_Flow_Delete,
-                Permissions.Input_Flow_Add,
-            )
-        return True
+        # add_url (obj=InputFlow) and add_scenario (obj=InputURL) add children to obj
+        if view.action in {"add_url", "add_scenario"}:
+            return user_has_permission(request.user, obj, Permissions.Input_Flow_Add)
+        return check_object_permission(
+            request,
+            obj,
+            Permissions.Input_Flow_View,
+            Permissions.Input_Flow_Edit,
+            Permissions.Input_Flow_Delete,
+            Permissions.Input_Flow_Add,
+        )
 
 class UserHasIaRecommendationPermission(permissions.BasePermission):
     path_post = re.compile(r"^/api/v2/metrics/ia_recommendation$")

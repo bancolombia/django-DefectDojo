@@ -32,6 +32,7 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from dojo.api_v2.scope.queries import get_authorized_scope
 from dojo.finding import serializer
 from dojo.models import Engagement
+from dojo.engagement.queries import get_authorized_engagements
 
 logger = logging.getLogger(__name__)
 
@@ -238,12 +239,17 @@ class InputFlowViewSet(
 
     serializer_class = InputFlowSerializer
     filter_backends = (DjangoFilterBackend,)
+    filterset_fields = ["engagement"]
     parser_classes = (MultiPartParser, FormParser, JSONParser)
 
     permission_classes = (
         IsAuthenticated,
         permissions.UserHasInputFlowPermission,
     )
+
+    def get_queryset(self):
+        return self.queryset.filter(
+            engagement__in=get_authorized_engagements(Permissions.Input_Flow_View))
 
     def create(self, request, *args, **kwargs):
         engagement_id = request.data.get("engagement")
@@ -298,7 +304,7 @@ class InputFlowViewSet(
                 data={"engagement": ["Flow has no engagement associated."]}
             )
 
-        self.check_object_permissions(request, flow.engagement)
+        self.check_object_permissions(request, flow)
 
         serializer = InputURLSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -333,6 +339,10 @@ class InputURLViewSet(
         IsAuthenticated,
         permissions.UserHasInputFlowPermission,
     )
+
+    def get_queryset(self):
+        return self.queryset.filter(
+            flow__engagement__in=get_authorized_engagements(Permissions.Input_Flow_View))
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -393,6 +403,11 @@ class InputScenarioViewSet(
         IsAuthenticated,
         permissions.UserHasInputFlowPermission,
     )
+
+    def get_queryset(self):
+        return self.queryset.filter(
+            url__flow__engagement__in=get_authorized_engagements(Permissions.Input_Flow_View))
+
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop("partial", False)
         instance = self.get_object()
