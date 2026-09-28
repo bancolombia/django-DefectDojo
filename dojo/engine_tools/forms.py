@@ -2,8 +2,18 @@ from django import forms
 from dojo.api_v2.validators import valid_chars_validator
 from dojo.templatetags.authorization_tags import is_in_reviewer_group
 from dojo.engine_tools.models import FindingExclusion, FindingExclusionDiscussion
-from dojo.models import Product, Product_Type, Engagement
+from dojo.models import Product, Product_Type, Engagement, GeneralSettings
 from dojo.engine_tools.helpers import Constants
+
+GENERAL_SETTINGS_BLOCKED_IDS_KEY = "FINDING_EXCLUSION_BLOCKED_IDS"
+
+
+def _get_blocked_unique_ids() -> set[str]:
+    # Reads comma-separated blocked IDs from GeneralSettings; comparison is case-insensitive.
+    raw = GeneralSettings.get_value(GENERAL_SETTINGS_BLOCKED_IDS_KEY, default=[])
+    if not raw:
+        return set()
+    return {entry.strip().lower() for entry in raw if entry.strip()}
 
 
 class CreateFindingExclusionForm(forms.ModelForm):
@@ -65,6 +75,8 @@ class CreateFindingExclusionForm(forms.ModelForm):
                 "This flow only accepts a single Vulnerability Id."
             )
 
+        blocked_ids = _get_blocked_unique_ids()
+
         deduplicated_unique_ids = []
         seen_unique_ids = set()
         for unique_id in unique_ids:
@@ -74,6 +86,12 @@ class CreateFindingExclusionForm(forms.ModelForm):
                 )
 
             valid_chars_validator(unique_id)
+
+            if unique_id.lower() in blocked_ids:
+                raise forms.ValidationError(
+                    f"'{unique_id}' is not a valid Vulnerability Id and cannot be used."
+                )
+
             if unique_id not in seen_unique_ids:
                 deduplicated_unique_ids.append(unique_id)
                 seen_unique_ids.add(unique_id)
@@ -239,12 +257,18 @@ class EditFindingExclusionForm(forms.ModelForm):
         if not unique_ids:
             raise forms.ValidationError("This field is required.")
 
+        blocked_ids = _get_blocked_unique_ids()
+
         for unique_id in unique_ids:
             if "," in unique_id:
                 raise forms.ValidationError(
                     "Commas are not allowed inside a Vulnerability Id."
                 )
             valid_chars_validator(unique_id)
+            if unique_id.lower() in blocked_ids:
+                raise forms.ValidationError(
+                    f"'{unique_id}' is not a valid Vulnerability Id and cannot be used."
+                )
 
         normalized_unique_ids = FindingExclusion.normalize_unique_ids(unique_ids)
         if len(normalized_unique_ids) > self.fields["unique_id_from_tool"].max_length:
