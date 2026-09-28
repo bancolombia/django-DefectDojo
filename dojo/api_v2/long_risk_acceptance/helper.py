@@ -123,18 +123,15 @@ def async_apply_rule_long_risk_acceptance(ra_engagement_id, user_id, event):
     finding_qs = render_rule(ra_engagement, False)
     if finding_qs:
         if event == "reject":
-            if ra_engagement.risk_status in ["Risks Reviewed", "Risks Accepted"]:
-                ra_engagement.risk_status = "Risks Rejected"
-                ra_engagement.save()
-                active_findings_long_risk_acceptance(finding_qs)
+            ra_engagement.risk_status = "Risks Rejected"
+            ra_engagement.save()
+            active_findings_long_risk_acceptance(finding_qs)
+            Notification.risk_acceptance_rejected(long_risk_acceptance=ra_engagement)
         elif event == "expire":
-            if ra_engagement.risk_status in ["Risks Reviewed", "Risks Accepted"]:
-                ra_engagement.risk_status = "Risks Rejected"
-                ra_engagement.save()
-            elif ra_engagement.risk_status in ["Risks Accepted"]:
-                ra_engagement.risk_status = "Risks Rejected"
-                ra_engagement.save()
-                active_findings_long_risk_acceptance(finding_qs)
+            ra_engagement.risk_status = "Risks Active"
+            ra_engagement.save()
+            active_findings_long_risk_acceptance(finding_qs)
+            Notification.risk_acceptance_expiration(long_risk_acceptance=ra_engagement)
         elif event == "accept":
             if ra_engagement.risk_status in ["Risks Reviewed", "Risks Accepted"]:
                 ra_engagement.risk_status = "Risks Accepted"
@@ -151,12 +148,13 @@ def async_apply_rule_long_risk_acceptance(ra_engagement_id, user_id, event):
                     ])
                     logger.debug(f"finding {finding.id} accepted flow long term risk acceptance of engagement {ra_engagement.id}")
                     finding.tags.add("long_term_risk_acceptance")
+                Notification.risk_acceptance_approved(long_risk_acceptance=ra_engagement)
         elif event == "review":
-            if ra_engagement.risk_status in ["Risks Pending"]:
-                ra_engagement.risk_status = "Risks Reviewed"
-                ra_engagement.reviewed_by = user.username
-                ra_engagement.reviewed_date = timezone.now()
-                ra_engagement.save()
+            ra_engagement.risk_status = "Risks Reviewed"
+            ra_engagement.reviewed_by = user.username
+            ra_engagement.reviewed_date = timezone.now()
+            ra_engagement.save()
+            Notification.risk_acceptance_review(long_risk_acceptance=ra_engagement)
     else:
         raise ApiError(f"No findings found for this engagement with the current rules: ra_engagement_id {ra_engagement_id}")
 
