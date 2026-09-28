@@ -1485,7 +1485,7 @@ class UserHasInputFlowPermission(permissions.BasePermission):
                 request,
                 Engagement,
                 "engagement",
-                Permissions.Input_Flow_Add,
+                Permissions.Engagement_View,
             )
         return True
 
