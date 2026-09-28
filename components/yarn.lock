@@ -161,22 +161,22 @@ datatables.net-buttons@4.1.1:
   dependencies:
     datatables.net "^3.1"
 
-datatables.net-colreorder@^3.0.2:
-  version "3.0.2"
-  resolved "https://registry.yarnpkg.com/datatables.net-colreorder/-/datatables.net-colreorder-3.0.2.tgz#08fdcd30f11464f2f72e3c625ca729f11ddba390"
-  integrity sha512-Yo4yjX2fpE9U8vCgDStR7KXEwDVdPxvTnShZMbnNNGDNjX8AY0MomDOWj217ZGZiNqL09g5g1liui7fwzFq5nQ==
+datatables.net-colreorder@^3.1.1:
+  version "3.1.1"
+  resolved "https://registry.yarnpkg.com/datatables.net-colreorder/-/datatables.net-colreorder-3.1.1.tgz#ff758cdccd8983fc63870b8b63baeda7b69cddb3"
+  integrity sha512-dbwDGLDrXmp/Le2Nf9ie3GES6+6nnQZ9TWZnCKrSqa+DQyltcoye+eEOpziaNVpMvA6npv2djlDOJvL+YH4YRw==
   dependencies:
-    datatables.net "^3"
+    datatables.net "^3.1"
 
 datatables.net@3.1.2, datatables.net@^3.1:
   version "3.1.2"
   resolved "https://registry.yarnpkg.com/datatables.net/-/datatables.net-3.1.2.tgz#a5a50257bf87b0f70eca710f6ef0feeb763c5556"
   integrity sha512-6PnhPw9lrPASP2n1t13zW595aKB41j3Qt6iykFVV6aohGtSF3CTjwQ+RsdlrGUQTj/Ji0or8+9Q7mMpf4YY1cQ==
 
-datatables.net@^3, datatables.net@^3.1.1:
-  version "3.1.1"
-  resolved "https://registry.yarnpkg.com/datatables.net/-/datatables.net-3.1.1.tgz#dfbf94f14e5d5e04ce6dfe05aaa458d45e3e09b8"
-  integrity sha512-dETxh14+KkQrFTZFIVtnKuIcNuglSLnraITbvrkztA+2yM6AeNtEAiMVucZ5o6vkJnJrtoApSALggSmc0czs0w==
+datatables.net@^3, datatables.net@^3.0.4, datatables.net@^3.1:
+  version "3.1.2"
+  resolved "https://registry.yarnpkg.com/datatables.net/-/datatables.net-3.1.2.tgz#a5a50257bf87b0f70eca710f6ef0feeb763c5556"
+  integrity sha512-6PnhPw9lrPASP2n1t13zW595aKB41j3Qt6iykFVV6aohGtSF3CTjwQ+RsdlrGUQTj/Ji0or8+9Q7mMpf4YY1cQ==
 
 delegate@^3.1.2:
   version "3.2.0"
