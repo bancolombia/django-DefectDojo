@@ -15,6 +15,7 @@ from dojo.models import (
     Dojo_Group_Member,
     Notes,
     Role,
+    Vulnerability_Id,
 )
 from dojo.engine_tools.models import FindingExclusion, FindingExclusionDiscussion
 from dojo.engine_tools.helpers import (
@@ -23,6 +24,7 @@ from dojo.engine_tools.helpers import (
     get_approvers_members,
     get_note,
     has_valid_comments,
+    get_unique_ids_filter,
     check_prisma_and_tenable_cve,
     remove_finding_from_list,
     get_severity_risk_map,
@@ -154,6 +156,28 @@ class CheckPrismaAndTenableCVETest(TestCase):
             target_start=timezone.now(),
             target_end=timezone.now()
         )
+
+    def test_unique_ids_filter_matches_related_vulnerability_id(self):
+        user = User.objects.create_user(username="unique-id-filter-user")
+        finding = Finding.objects.create(
+            title="Related vulnerability ID finding",
+            test=self.test,
+            cve=None,
+            vuln_id_from_tool=None,
+            active=True,
+            severity="High",
+            reporter=user,
+        )
+        Vulnerability_Id.objects.create(
+            finding=finding,
+            vulnerability_id="GHSA-1234-abcd",
+        )
+
+        matched_findings = Finding.objects.filter(
+            get_unique_ids_filter("GHSA-1234-abcd")
+        )
+
+        self.assertEqual(list(matched_findings), [finding])
 
     @patch('dojo.engine_tools.helpers.Constants')
     def test_has_prisma_findings(self, mock_constants):

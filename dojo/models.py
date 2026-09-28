@@ -4715,6 +4715,27 @@ class Notifications(models.Model):
     long_risk_acceptance_rejected = MultiSelectField(choices=NOTIFICATION_CHOICES, default=NOTIFICATION_CHOICE_ALERT_MAIL, blank=True,
         verbose_name=_("Long Risk Acceptance Rejected"),
         help_text=_("Get notified when a long risk acceptance is rejected"))
+    cross_approval_created = MultiSelectField(choices=NOTIFICATION_CHOICES, default=NOTIFICATION_CHOICE_ALERT, blank=True,
+        verbose_name=_("Cross-Approval Created"),
+        help_text=_("Get notified when a cross-approval request is created"))
+    cross_approval_approved = MultiSelectField(choices=NOTIFICATION_CHOICES, default=NOTIFICATION_CHOICE_ALERT, blank=True,
+        verbose_name=_("Cross-Approval Approved"),
+        help_text=_("Get notified when a cross-approval request is approved"))
+    cross_approval_rejected = MultiSelectField(choices=NOTIFICATION_CHOICES, default=NOTIFICATION_CHOICE_ALERT, blank=True,
+        verbose_name=_("Cross-Approval Rejected"),
+        help_text=_("Get notified when a cross-approval request is rejected"))
+    cross_approval_expired = MultiSelectField(choices=NOTIFICATION_CHOICES, default=NOTIFICATION_CHOICE_ALERT, blank=True,
+        verbose_name=_("Cross-Approval Expired"),
+        help_text=_("Get notified when a cross-approval request or exclusion expires"))
+    cross_approval_reopened = MultiSelectField(choices=NOTIFICATION_CHOICES, default=NOTIFICATION_CHOICE_ALERT, blank=True,
+        verbose_name=_("Cross-Approval Reopened"),
+        help_text=_("Get notified when a cross-approval exclusion is reopened"))
+    cross_approval_discussion = MultiSelectField(choices=NOTIFICATION_CHOICES, default=NOTIFICATION_CHOICE_ALERT, blank=True,
+        verbose_name=_("Cross-Approval Discussion"),
+        help_text=_("Get notified when a discussion is added to a cross-approval request"))
+    cross_approval_deleted = MultiSelectField(choices=NOTIFICATION_CHOICES, default=NOTIFICATION_CHOICE_ALERT, blank=True,
+        verbose_name=_("Cross-Approval Deleted"),
+        help_text=_("Get notified when a cross-approval request is deleted"))
     long_risk_acceptance_expiration = MultiSelectField(choices=NOTIFICATION_CHOICES, default=NOTIFICATION_CHOICE_ALERT_MAIL, blank=True,
         verbose_name=_("Long Risk Acceptance Expiration"),
         help_text=_("Get notified when a long risk acceptance is about to expire"))
@@ -4769,6 +4790,13 @@ class Notifications(models.Model):
                 result.long_risk_acceptance_expiration = {*result.long_risk_acceptance_expiration, *notifications.long_risk_acceptance_expiration}
                 result.long_risk_acceptance_approved = {*result.long_risk_acceptance_approved, *notifications.long_risk_acceptance_approved}
                 result.long_risk_acceptance_rejected = {*result.long_risk_acceptance_rejected, *notifications.long_risk_acceptance_rejected}
+                result.cross_approval_created = {*result.cross_approval_created, *notifications.cross_approval_created}
+                result.cross_approval_approved = {*result.cross_approval_approved, *notifications.cross_approval_approved}
+                result.cross_approval_rejected = {*result.cross_approval_rejected, *notifications.cross_approval_rejected}
+                result.cross_approval_expired = {*result.cross_approval_expired, *notifications.cross_approval_expired}
+                result.cross_approval_reopened = {*result.cross_approval_reopened, *notifications.cross_approval_reopened}
+                result.cross_approval_discussion = {*result.cross_approval_discussion, *notifications.cross_approval_discussion}
+                result.cross_approval_deleted = {*result.cross_approval_deleted, *notifications.cross_approval_deleted}
         return result
 
 

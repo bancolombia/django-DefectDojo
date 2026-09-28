@@ -324,7 +324,11 @@ class CrossApprovalRequestViewSet(DeletePreviewModelMixin, ModelViewSet):
         log_status_change(instance, request.user, previous_status, status)
         if status == "approved":
             apply_request_exclusions(instance)
-        notify_request_status(instance, f"cross_approval_{status}", f"Cross-approval request {instance.pk} {status}")
+        status_event = {
+            "approved": "cross_approval_approved",
+            "rejected": "cross_approval_rejected",
+        }[status]
+        notify_request_status(instance, status_event, f"Cross-approval request {instance.pk} {status}")
         return Response(self.get_serializer(instance).data)
 
     def perform_destroy(self, instance):
