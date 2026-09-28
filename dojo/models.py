@@ -1763,7 +1763,15 @@ class Engagement(models.Model):
     @property
     def last_time_scanned(self):
         from dojo.utils import extract_field_from_text_regex
-        return extract_field_from_text_regex(self.description, "LAST TIME SCANNED")
+        test = self.test_set.order_by("-created").first()
+        if not test:
+            return None
+        # Notes default ordering is "-date" so the first note is the latest one
+        last_note = test.notes.all().first()
+        if not last_note:
+            return None
+        return (extract_field_from_text_regex(last_note.entry, "TIME SCANNED")
+                or extract_field_from_text_regex(last_note.entry, "SCAN FINALIZED AT"))
     
     def delete(self, *args, **kwargs):
         logger.debug("%d engagement delete", self.id)
