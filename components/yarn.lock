@@ -146,18 +146,18 @@ datatables.net-bs@^3.1:
   dependencies:
     datatables.net "3.1.2"
 
-datatables.net-buttons-bs@^4.1.1:
-  version "4.1.1"
-  resolved "https://registry.yarnpkg.com/datatables.net-buttons-bs/-/datatables.net-buttons-bs-4.1.1.tgz#d0908a4ca6c9ec41ec733767acf28b2c753d6afe"
-  integrity sha512-+L8NUVtm50zWD2uW19npZcvw8DU4J3h0OztONT2czGqphFeoNEm7AUi5aqiyEk40dZgEJL7oW2ilGDtqaXUHyg==
+datatables.net-buttons-bs@^4.1.2:
+  version "4.1.2"
+  resolved "https://registry.yarnpkg.com/datatables.net-buttons-bs/-/datatables.net-buttons-bs-4.1.2.tgz#8f344915b48f446e797019472d6aaac403f269e5"
+  integrity sha512-zI31PmB0pPk/SSWUz20BlgVn5lop9iZkqs4lP0X79fWQNadw+V1tfM26wr73ydVIZ5e5U6/d41jC4TR+N03itg==
   dependencies:
     datatables.net-bs "^3.1"
-    datatables.net-buttons "4.1.1"
+    datatables.net-buttons "4.1.2"
 
-datatables.net-buttons@4.1.1:
-  version "4.1.1"
-  resolved "https://registry.yarnpkg.com/datatables.net-buttons/-/datatables.net-buttons-4.1.1.tgz#e8922db1f3e9a2228feab279188d5fee49173330"
-  integrity sha512-KH8SewpQJTUq5M8YsY7aXUkhbhjUsxsoxXsXMUqMcU6daa7f+vtQDUp3yYTMTnPofzBkS9m2vxRrqxWEMtP+Ew==
+datatables.net-buttons@4.1.2:
+  version "4.1.2"
+  resolved "https://registry.yarnpkg.com/datatables.net-buttons/-/datatables.net-buttons-4.1.2.tgz#d16352507ed2a3720d5f55c1f57cdd72ca45f84b"
+  integrity sha512-VigN0751S8r/brSZNRSPXgfUHZciujQ2zXkZifOuWYbgMaX/I68YyGmiuQTTrI7DMl0fXHgM4nA3lmJcdtKD2A==
   dependencies:
     datatables.net "^3.1"
 
