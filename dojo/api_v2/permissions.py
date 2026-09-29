@@ -1475,12 +1475,12 @@ class UserHasTransferFindingPermission(permissions.BasePermission):
 class UserHasInputFlowPermission(permissions.BasePermission):
     path_input_flow_post = re.compile(r"^/api/v2/input_flow/$")
     path_input_flow = re.compile(r"^/api/v2/input_flow/\d+/$")
+    path_input_url = re.compile(r"^/api/v2/input_url/\d+/$")
+    path_input_scenario = re.compile(r"^/api/v2/input_scenario/\d+/$")
+    path_add_child = re.compile(r"^/api/v2/(input_flow/\d+/add_url|input_url/\d+/add_scenario)/$")
 
     def has_permission(self, request, view):
-        if (
-            UserHasInputFlowPermission.path_input_flow_post.match(request.path)
-            or UserHasInputFlowPermission.path_input_flow.match(request.path)
-        ):
+        if UserHasInputFlowPermission.path_input_flow_post.match(request.path):
             return check_post_permission(
                 request,
                 Engagement,
@@ -1490,9 +1490,13 @@ class UserHasInputFlowPermission(permissions.BasePermission):
         return True
 
     def has_object_permission(self, request, view, obj):
+        if UserHasInputFlowPermission.path_add_child.match(request.path):
+            return user_has_permission(request.user, obj, Permissions.Input_Flow_Add)
         if (
             UserHasInputFlowPermission.path_input_flow_post.match(request.path)
             or UserHasInputFlowPermission.path_input_flow.match(request.path)
+            or UserHasInputFlowPermission.path_input_url.match(request.path)
+            or UserHasInputFlowPermission.path_input_scenario.match(request.path)
         ):
             return check_object_permission(
                 request,
