@@ -2,6 +2,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient, APITestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
 
 from dojo.api_v2.long_risk_acceptance.models import (
     RiskAcceptanceEngagement,
@@ -18,6 +19,7 @@ class EconomicImpactViewSetTestCase(APITestCase):
         self.client = APIClient()
         self.client.credentials(HTTP_AUTHORIZATION="Token " + token.key)
         self.url = reverse("economic_impact-list")
+        self.download_url = reverse("long_risk_acceptance-download-file")
         self.owner = Dojo_User.objects.get(username="admin")
         self.product = Product.objects.get(id=1)
         self.risk_acceptance_engagement = RiskAcceptanceEngagement.objects.create(
@@ -27,6 +29,36 @@ class EconomicImpactViewSetTestCase(APITestCase):
             product=self.product,
             reviewed_by=self.owner.username,
         )
+
+    def _attach_file(self):
+        self.risk_acceptance_engagement.path = SimpleUploadedFile(
+            "acceptance.pdf",
+            b"risk acceptance evidence",
+            content_type="application/pdf",
+        )
+        self.risk_acceptance_engagement.save()
+        self.addCleanup(lambda: self.risk_acceptance_engagement.path.delete(save=False))
+
+    def test_download_risk_acceptance_file_allows_authorized_user(self):
+        self._attach_file()
+
+        response = self.client.get(
+            f"{self.download_url}?long_risk_acceptance_id={self.risk_acceptance_engagement.id}",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(b"".join(response.streaming_content), b"risk acceptance evidence")
+
+    def test_download_risk_acceptance_file_denies_user_without_product_access(self):
+        self._attach_file()
+        unrelated_user = Dojo_User.objects.create_user(username="unrelated-risk-user")
+        self.client.force_authenticate(user=unrelated_user)
+
+        response = self.client.get(
+            f"{self.download_url}?long_risk_acceptance_id={self.risk_acceptance_engagement.id}",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def _payload(self, **overrides):
         data = {

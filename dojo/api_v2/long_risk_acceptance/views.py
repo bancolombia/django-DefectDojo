@@ -169,6 +169,7 @@ class RiskAcceptanceEngagementViewSet(prefetch.PrefetchListMixin,
             return http_response.error(message="Missing 'long_risk_acceptance_id' query parameter.", data=None)
 
         long_risk_acceptance_obj = get_object_or_404(RiskAcceptanceEngagement, pk=long_risk_acceptance_id)
+        self.check_object_permissions(request, long_risk_acceptance_obj)
 
         file = long_risk_acceptance_obj.path
         if not file:
