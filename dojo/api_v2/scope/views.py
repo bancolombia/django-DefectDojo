@@ -215,11 +215,15 @@ class InputFileViewSet(prefetch.PrefetchListMixin,
 
     def patch(self, request, *args, **kwargs):
         input_id = request.query_params.get("id")
+        input_file_instance = get_object_or_404(InputFile, input__id=input_id)
+        self.check_object_permissions(request, input_file_instance)
         try:
-            input_file_instance = get_object_or_404(InputFile, input__id=input_id)
-            serializer = InputFileSerializer(input_file_instance, data=request.query_params, partial=True)
+            patch_data = request.query_params.copy()
+            patch_data.pop("id", None)
+            patch_data.update(request.data)
+            serializer = InputFileSerializer(input_file_instance, data=patch_data, partial=True)
             serializer.is_valid(raise_exception=True)
-            serializer.save(request=request)
+            serializer.save()
             return http_response.ok(message="InputFile updated successfully.", data=serializer.data)
         except Exception as e:
             logger.error(f"Validation error on PATCH InputFile: {e}")
