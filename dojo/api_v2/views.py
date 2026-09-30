@@ -3773,6 +3773,7 @@ class TransferFindingViewSet(prefetch.PrefetchListMixin,
             return http_response.error(message="Missing 'transfer_finding_id' query parameter.", data=None)
 
         transfer_finding_obj = get_object_or_404(TransferFinding, pk=transfer_finding_id)
+        self.check_object_permissions(request, transfer_finding_obj)
 
         file = transfer_finding_obj.path
         if not file:
