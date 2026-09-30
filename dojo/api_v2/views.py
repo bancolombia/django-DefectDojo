@@ -2211,15 +2211,19 @@ class ProductViewSet(
             ),],
         responses={status.HTTP_200_OK: serializers.ProductContactsSerializer},
     )
-    @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated],)
+    @action(detail=False, methods=["get"])
     def get_description_product(self, request):
         """
         Returns a list of products with their contacts.
         """
         pid = request.query_params.get("product_id")
         product = get_object_or_404(Product, id=pid)
+        self.check_object_permissions(request, product)
         serializer = serializers.ProductContactsSerializer(product)
-        return http_response.ok(data=serializer.data)
+        contacts = serializer.data
+        if not user_has_permission(request.user, product, Permissions.Product_Manage_Members):
+            contacts = dict.fromkeys(contacts)
+        return http_response.ok(data=contacts)
 
 
 @extend_schema_view(**schema_with_prefetch())
