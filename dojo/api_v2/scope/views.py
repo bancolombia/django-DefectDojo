@@ -172,6 +172,7 @@ class ScopeViewSet(prefetch.PrefetchListMixin,
             return http_response.error(message="Missing 'input' query parameter.", data=None)
 
         input_file = get_object_or_404(InputFile, input__id=input_id)
+        self.check_object_permissions(request, input_file)
 
         file_field = input_file.file
         if not file_field:

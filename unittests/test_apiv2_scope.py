@@ -158,3 +158,22 @@ class scopeViewsTestCase(APITestCase):
         assert resp.status_code == status.HTTP_200_OK
         cd = resp.get("Content-Disposition", "")
         assert "attachment" in cd.lower()
+
+    def test_download_file_denies_user_without_object_permission(self):
+        input_instance, input_file = self.create_input_file()
+        self.addCleanup(lambda: input_file.file.delete(save=False))
+        unrelated_user = Dojo_User.objects.create_user(username="unrelated-download-user")
+        self.client.force_authenticate(user=unrelated_user)
+
+        response = self.client.get(f"{self.download_url}?input={input_instance.id}")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_download_file_allows_authorized_user(self):
+        input_instance, input_file = self.create_input_file()
+        self.addCleanup(lambda: input_file.file.delete(save=False))
+
+        response = self.client.get(f"{self.download_url}?input={input_instance.id}")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert b"".join(response.streaming_content) == b"original content"
