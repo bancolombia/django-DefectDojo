@@ -992,62 +992,10 @@ class HCParticipationViewsTest(TestCase):
 
     @patch("dojo.engine_participation.views.is_in_group", return_value=True)
     @patch("dojo.engine_participation.views.has_valid_comments", return_value=True)
-    @patch("dojo.engine_participation.views.mark_hc_participation_reviewed")
-    def test_review_requires_checklist_for_postulated_requests(
-        self,
-        mock_mark_reviewed,
-        _mock_has_comments,
-        _mock_is_in_group,
-    ):
-        """Reviewing postulated requests requires full checklist when configured."""
-        from django.test import Client
-        _set_confirm_ingress_criteria_for_test(["Criterion A", "Criterion B"])
-
-        client = Client()
-        client.force_login(self.user)
-
-        response = client.post(
-            reverse("review_hc_participation", args=[str(self.hc.uuid)]),
-            data={},
-            follow=True,
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "You must confirm all ingress checklist criteria to mark as reviewed.")
-        mock_mark_reviewed.assert_not_called()
-
-    @patch("dojo.engine_participation.views.is_in_group", return_value=True)
-    @patch("dojo.engine_participation.views.has_valid_comments", return_value=True)
-    @patch("dojo.engine_participation.views.mark_hc_participation_reviewed")
-    def test_review_rejects_partial_checklist_for_postulated_requests(
-        self,
-        mock_mark_reviewed,
-        _mock_has_comments,
-        _mock_is_in_group,
-    ):
-        """Reviewing postulated requests with partial checklist must be rejected."""
-        from django.test import Client
-        _set_confirm_ingress_criteria_for_test(["Criterion A", "Criterion B"])
-
-        client = Client()
-        client.force_login(self.user)
-
-        response = client.post(
-            reverse("review_hc_participation", args=[str(self.hc.uuid)]),
-            data={"criteria": ["Criterion A"]},
-            follow=True,
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "You must confirm all ingress checklist criteria to mark as reviewed.")
-        mock_mark_reviewed.assert_not_called()
-
-    @patch("dojo.engine_participation.views.is_in_group", return_value=True)
-    @patch("dojo.engine_participation.views.has_valid_comments", return_value=True)
     @patch("dojo.engine_participation.views.get_hc_approvers_members", return_value=[])
     @patch("dojo.engine_participation.views.create_notification")
     @patch("dojo.engine_participation.views.mark_hc_participation_reviewed")
-    def test_review_accepts_checklist_for_postulated_requests(
+    def test_review_no_longer_requires_checklist(
         self,
         mock_mark_reviewed,
         _mock_create_notification,
@@ -1055,7 +1003,7 @@ class HCParticipationViewsTest(TestCase):
         _mock_has_comments,
         _mock_is_in_group,
     ):
-        """Review action forwards checklist criteria when all configured are selected."""
+        """Reviewing postulated requests no longer requires checklist criteria (moved to pre-selection)."""
         from django.test import Client
         _set_confirm_ingress_criteria_for_test(["Criterion A", "Criterion B"])
 
@@ -1066,14 +1014,11 @@ class HCParticipationViewsTest(TestCase):
 
         response = client.post(
             reverse("review_hc_participation", args=[str(self.hc.uuid)]),
-            data={"criteria": ["Criterion A", "Criterion B"]},
+            data={},
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response["Location"], reverse("hc_participation", args=[str(self.hc.uuid)]))
-        mock_mark_reviewed.assert_called_once()
-        _, kwargs = mock_mark_reviewed.call_args
-        self.assertEqual(kwargs.get("confirmation_criteria"), ["Criterion A", "Criterion B"])
+        mock_mark_reviewed.assert_called_once_with(self.hc, self.user)
 
     def test_approve_requires_post(self):
         """Test approve action rejects GET requests"""
@@ -1163,7 +1108,7 @@ class HCParticipationViewsTest(TestCase):
 
     @patch("dojo.engine_participation.views.is_in_group", return_value=True)
     def test_preselect_redirects_to_next_path(self, _mock_is_in_group):
-        """Preselect action should redirect back to the provided next path."""
+        """Preselect action should redirect back to the provided next path even when the form is invalid."""
         from django.test import Client
 
         client = Client()
@@ -1179,6 +1124,83 @@ class HCParticipationViewsTest(TestCase):
             response["Location"],
             "/engine_participation/hc_participations?status=Pending&postulated_page=2",
         )
+        self.hc.refresh_from_db()
+        self.assertFalse(is_hc_request_preselected(self.hc))
+
+    @patch("dojo.engine_participation.views.is_in_group", return_value=True)
+    def test_preselect_requires_scope_and_description(self, _mock_is_in_group):
+        """Missing Alcance/Descripción must fail without pre-selecting the request."""
+        from django.test import Client
+
+        client = Client()
+        client.force_login(self.user)
+
+        response = client.post(
+            reverse("preselect_hc_participation", args=[str(self.hc.uuid)]),
+            data={},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "You must indicate the scope the tests should have.")
+        self.assertContains(response, "You must describe the product and the reason for the postulation.")
+        self.hc.refresh_from_db()
+        self.assertFalse(is_hc_request_preselected(self.hc))
+
+    @patch("dojo.engine_participation.views.is_in_group", return_value=True)
+    def test_preselect_requires_all_configured_criteria(self, _mock_is_in_group):
+        """Partial checklist selection must fail when criteria are configured."""
+        from django.test import Client
+        _set_confirm_ingress_criteria_for_test(["Criterion A", "Criterion B"])
+
+        client = Client()
+        client.force_login(self.user)
+
+        response = client.post(
+            reverse("preselect_hc_participation", args=[str(self.hc.uuid)]),
+            data={
+                "criteria": ["Criterion A"],
+                "scope": "Test scope",
+                "description": "Test description",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "You must confirm all ingress checklist criteria to pre-select this request.")
+        self.hc.refresh_from_db()
+        self.assertFalse(is_hc_request_preselected(self.hc))
+
+    @patch("dojo.engine_participation.views.is_in_group", return_value=True)
+    def test_preselect_success_stores_criteria_and_creates_comment(self, _mock_is_in_group):
+        """A full valid submission pre-selects the request, stores the checklist and adds a comment."""
+        from django.test import Client
+        _set_confirm_ingress_criteria_for_test(["Criterion A", "Criterion B"])
+
+        client = Client()
+        client.force_login(self.user)
+
+        response = client.post(
+            reverse("preselect_hc_participation", args=[str(self.hc.uuid)]),
+            data={
+                "criteria": ["Criterion A", "Criterion B"],
+                "scope": "Test the login and payment modules",
+                "description": "Critical product, postulated due to high risk exposure",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.hc.refresh_from_db()
+        self.assertTrue(is_hc_request_preselected(self.hc))
+        self.assertEqual(
+            self.hc.security_posture_data.get("ingress_confirmation_criteria_checked"),
+            ["Criterion A", "Criterion B"],
+        )
+
+        discussion = self.hc.discussions.latest("created_at")
+        self.assertEqual(discussion.author, self.user)
+        self.assertIn("Test the login and payment modules", discussion.content)
+        self.assertIn("Critical product, postulated due to high risk exposure", discussion.content)
 
     @patch("dojo.engine_participation.views.is_in_group", return_value=True)
     def test_remove_preselection_rejects_external_next(self, _mock_is_in_group):
@@ -1246,25 +1268,54 @@ class HCManualPostulationFormTest(TestCase):
         self.assertIn("criteria", form.errors)
 
 
-class HCConfirmIngressPostulationFormTest(TestCase):
-    """Tests for HCConfirmIngressPostulationForm behavior"""
+class HCPreselectionFormTest(TestCase):
+    """Tests for HCPreselectionForm behavior"""
 
-    def test_requires_at_least_one_criterion_when_configured(self):
-        from dojo.engine_participation.forms import HCConfirmIngressPostulationForm
+    def test_requires_all_criteria_when_configured(self):
+        from dojo.engine_participation.forms import HCPreselectionForm
         _set_confirm_ingress_criteria_for_test(["Criterion A", "Criterion B"])
 
-        form = HCConfirmIngressPostulationForm(data={})
+        form = HCPreselectionForm(data={
+            "criteria": ["Criterion A"],
+            "scope": "Some scope",
+            "description": "Some description",
+        })
 
         self.assertFalse(form.is_valid())
         self.assertIn("criteria", form.errors)
 
-    def test_allows_empty_selection_when_not_configured(self):
-        from dojo.engine_participation.forms import HCConfirmIngressPostulationForm
-        _set_confirm_ingress_criteria_for_test([])
+    def test_valid_when_all_criteria_selected(self):
+        from dojo.engine_participation.forms import HCPreselectionForm
+        _set_confirm_ingress_criteria_for_test(["Criterion A", "Criterion B"])
 
-        form = HCConfirmIngressPostulationForm(data={})
+        form = HCPreselectionForm(data={
+            "criteria": ["Criterion A", "Criterion B"],
+            "scope": "Some scope",
+            "description": "Some description",
+        })
 
         self.assertTrue(form.is_valid())
+
+    def test_allows_empty_criteria_when_not_configured(self):
+        from dojo.engine_participation.forms import HCPreselectionForm
+        _set_confirm_ingress_criteria_for_test([])
+
+        form = HCPreselectionForm(data={
+            "scope": "Some scope",
+            "description": "Some description",
+        })
+
+        self.assertTrue(form.is_valid())
+
+    def test_requires_scope_and_description(self):
+        from dojo.engine_participation.forms import HCPreselectionForm
+        _set_confirm_ingress_criteria_for_test([])
+
+        form = HCPreselectionForm(data={})
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("scope", form.errors)
+        self.assertIn("description", form.errors)
 
 
 class ManualHCPostulationEligibilityTest(TestCase):
