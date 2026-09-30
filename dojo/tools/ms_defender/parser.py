@@ -1,8 +1,8 @@
 import json
 import logging
-import zipfile
 
 from dojo.models import Endpoint, Finding
+from dojo.tools.utils import safe_read_all_zip
 
 logger = logging.getLogger(__name__)
 
@@ -34,12 +34,7 @@ class MSDefenderParser:
                 logger.warning("Error parsing JSON file %s: %s", file.name, str(e))
                 return []
         elif str(file.name).endswith(".zip"):
-            if str(file.__class__) == "<class '_io.TextIOWrapper'>":
-                input_zip = zipfile.ZipFile(file.name, "r")
-            else:
-                input_zip = zipfile.ZipFile(file, "r")
-
-            zipdata = {name: input_zip.read(name) for name in input_zip.namelist()}
+            zipdata = safe_read_all_zip(file)
             vulnerabilityfiles = []
             machinefiles = []
             for content in list(zipdata):
