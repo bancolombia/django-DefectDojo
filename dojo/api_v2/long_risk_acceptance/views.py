@@ -15,6 +15,7 @@ import dojo.api_v2.long_risk_acceptance.helper as helper_ra_engagement
 from dojo.authorization.roles_permissions import Permissions
 from rest_framework.pagination import LimitOffsetPagination
 from django.shortcuts import get_object_or_404
+from django_filters import rest_framework as filters
 from django_filters.rest_framework import DjangoFilterBackend
 from django.http import FileResponse, Http404, HttpResponse
 from dojo.api_v2.api_error import ApiError
@@ -36,6 +37,51 @@ import json
 
 logger = logging.getLogger(__name__)
 
+
+class RiskAcceptanceEngagementFilter(filters.FilterSet):
+    accepted_by = filters.CharFilter(method="filter_accepted_by")
+    reviewed_by = filters.CharFilter(method="filter_reviewed_by")
+
+    @staticmethod
+    def _normalize_value(value):
+        if value is None:
+            return None
+        value = str(value).strip()
+        while value.startswith("[") and value.endswith("]"):
+            value = value[1:-1].strip()
+        value = value.strip("\"'")
+        return value
+
+    def filter_accepted_by(self, queryset, name, value):
+        normalized_value = self._normalize_value(value)
+        if not normalized_value:
+            return queryset
+        return queryset.filter(accepted_by__icontains=normalized_value)
+
+    def filter_reviewed_by(self, queryset, name, value):
+        normalized_value = self._normalize_value(value)
+        if not normalized_value:
+            return queryset
+        return queryset.filter(reviewed_by__icontains=normalized_value)
+
+    def filter_owner(self, queryset, name, value):
+        normalized_value = self._normalize_value(value)
+        if not normalized_value:
+            return queryset
+        return queryset.filter(owner__username__icontains=normalized_value)
+
+    class Meta:
+        model = RiskAcceptanceEngagement
+        fields = [
+            "id",
+            "product",
+            "risk_status",
+            "expiration_date",
+            "reviewed_by",
+            "accepted_by",
+        ]
+
+
 class RiskAcceptanceEngagementViewSet(prefetch.PrefetchListMixin,
                              prefetch.PrefetchRetrieveMixin,
                              DojoModelViewSet):
@@ -44,11 +90,7 @@ class RiskAcceptanceEngagementViewSet(prefetch.PrefetchListMixin,
                           permissions.UserHasLongRiskAcceptancePermission,)
     serializer_class = RiskAcceptanceEngagementSerializer 
     filter_backends = (DjangoFilterBackend,)
-    filterset_fields = [
-        "id",
-        "owner",
-        "product",
-    ] 
+    filterset_class = RiskAcceptanceEngagementFilter
     pagination_class = LimitOffsetPagination
 
     def get_serializer_class(self):

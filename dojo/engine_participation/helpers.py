@@ -303,7 +303,15 @@ def is_hc_request_prioritized(hc_participation) -> bool:
     return bool(security_posture_data.get(HC_PRIORITIZED_FLAG_KEY, False))
 
 
-def set_hc_request_preselection(hc_participation, is_preselected: bool):
+def set_hc_request_preselection(
+    hc_participation,
+    is_preselected: bool,
+    *,
+    user=None,
+    confirmation_criteria=None,
+    scope=None,
+    description=None,
+):
     with transaction.atomic():
         locked_hc_participation = HCParticipation.objects.select_for_update().get(pk=hc_participation.pk)
 
@@ -327,12 +335,23 @@ def set_hc_request_preselection(hc_participation, is_preselected: bool):
 
         if is_preselected:
             _update_hc_available_approvals(-1)
+            security_posture_data[HC_INGRESS_CONFIRMATION_CRITERIA_KEY] = list(confirmation_criteria or [])
         else:
             _update_hc_available_approvals(1)
 
         security_posture_data[HC_PRESELECTED_FLAG_KEY] = is_preselected
         locked_hc_participation.security_posture_data = security_posture_data
         locked_hc_participation.save()
+
+        if is_preselected and user is not None and (scope or description):
+            HCParticipationDiscussion.objects.create(
+                hc_participation=locked_hc_participation,
+                author=user,
+                content=(
+                    f"Alcance:\n{scope or ''}\n\n"
+                    f"Descripción del producto y motivo de postulación:\n{description or ''}"
+                ),
+            )
 
     return locked_hc_participation
 
@@ -887,7 +906,7 @@ def finalize_pending_hc_participation_requests(user):
     return finalized_counts
 
 
-def mark_hc_participation_reviewed(hc_participation, user, confirmation_criteria=None):
+def mark_hc_participation_reviewed(hc_participation, user):
     with transaction.atomic():
         locked_hc_participation = HCParticipation.objects.select_for_update().get(pk=hc_participation.pk)
         _validate_hc_status_transition(locked_hc_participation.status, "Reviewed")
@@ -929,13 +948,6 @@ def mark_hc_participation_reviewed(hc_participation, user, confirmation_criteria
             if not isinstance(security_posture_data, dict):
                 security_posture_data = {}
             security_posture_data[HC_PRESELECTED_FLAG_KEY] = False
-            locked_hc_participation.security_posture_data = security_posture_data
-
-        if is_postulation_request and confirmation_criteria:
-            security_posture_data = locked_hc_participation.security_posture_data
-            if not isinstance(security_posture_data, dict):
-                security_posture_data = {}
-            security_posture_data[HC_INGRESS_CONFIRMATION_CRITERIA_KEY] = list(confirmation_criteria)
             locked_hc_participation.security_posture_data = security_posture_data
 
         previous_status = locked_hc_participation.status

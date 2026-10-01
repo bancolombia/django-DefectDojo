@@ -23,11 +23,6 @@ urlpatterns = [
         name="add_hc_discussion"
     ),
     re_path(
-        r"^engine_participation/(?P<hcid>[\w-]+)/delete-discussion/(?P<did>\d+)/$",
-        views.delete_hc_discussion,
-        name="delete_hc_discussion"
-    ),
-    re_path(
         r"^engine_participation/(?P<hcid>[\w-]+)/review/$",
         views.review_hc_participation,
         name="review_hc_participation"
