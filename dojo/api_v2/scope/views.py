@@ -228,8 +228,8 @@ class InputFileViewSet(prefetch.PrefetchListMixin,
             return http_response.ok(message="InputFile updated successfully.", data=serializer.data)
         except Exception as e:
             logger.error(f"Validation error on PATCH InputFile: {e}")
-            return http_response.error(
-                message="Validation error occurred.", data=serializer.errors, status_code=status.HTTP_400_BAD_REQUEST)
+            return http_response.bad_request(
+                message="Validation error occurred.", data=serializer.errors)
 @extend_schema(tags=["scope"])
 class InputFlowViewSet(
     prefetch.PrefetchListMixin,
