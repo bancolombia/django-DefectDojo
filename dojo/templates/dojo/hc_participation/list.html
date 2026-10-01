@@ -13,6 +13,35 @@
         width: 100%;
         max-width: 500px;
     }
+    #preselectModal .modal-dialog {
+        display: flex;
+        align-items: center;
+        min-height: calc(100% - 60px);
+        margin: 30px auto;
+        width: 90%;
+        max-width: 900px;
+    }
+    #preselectModal .modal-content {
+        width: 100%;
+    }
+    #preselectModal .modal-body label {
+        display: block;
+        width: 100%;
+    }
+    #preselectModal .modal-body .form-control {
+        width: 100%;
+        box-sizing: border-box;
+    }
+    #preselectModal .modal-body .checkbox label {
+        display: flex;
+        align-items: flex-start;
+        padding-left: 0;
+    }
+    #preselectModal .modal-body .checkbox input[type="checkbox"] {
+        position: static;
+        margin: 3px 8px 0 0;
+        flex-shrink: 0;
+    }
 </style>
 {% endblock %}
 {% block content %}
@@ -147,11 +176,12 @@
                                                 <button type="submit" class="btn btn-xs btn-warning">Remove pre-selection</button>
                                             </form>
                                         {% else %}
-                                            <form method="post" action="{% url 'preselect_hc_participation' hc.uuid %}" style="display:inline;">
-                                                {% csrf_token %}
-                                                <input type="hidden" name="next" value="{{ request.get_full_path }}" />
-                                                <button type="submit" class="btn btn-xs btn-secondary">Pre-select</button>
-                                            </form>
+                                            <button type="button" class="btn btn-xs btn-secondary"
+                                                    data-toggle="modal" data-target="#preselectModal"
+                                                    data-action="{% url 'preselect_hc_participation' hc.uuid %}"
+                                                    onclick="openPreselectModal(this)">
+                                                Pre-select
+                                            </button>
                                         {% endif %}
                                     {% elif hc.is_preselected_for_hc %}
                                         <span class="label label-warning">Pre-selected</span>
@@ -234,5 +264,58 @@
                 No SDT participation requests found.
             {% endif %}
         </div>
-    </div>   
+    </div>
+
+    {% if can_preselect_hc %}
+    <div class="modal fade" id="preselectModal" tabindex="-1" role="dialog" aria-labelledby="preselectModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <form method="post" id="preselectForm" action="">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}" />
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                        <h4 class="modal-title" id="preselectModalLabel">Pre-select Request</h4>
+                    </div>
+                    <div class="modal-body">
+                        {% if preselect_form.fields.criteria.choices %}
+                        <div class="form-group">
+                            <label>{{ preselect_form.criteria.label }}</label>
+                            {% for value, label in preselect_form.fields.criteria.choices %}
+                                <div class="checkbox">
+                                    <label>
+                                        <input type="checkbox" name="criteria" value="{{ value }}" required> {{ label }}
+                                    </label>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        <div class="form-group">
+                            <label for="id_scope">{{ preselect_form.scope.label }}</label>
+                            {{ preselect_form.scope }}
+                        </div>
+                        <div class="form-group">
+                            <label for="id_description">{{ preselect_form.description.label }}</label>
+                            {{ preselect_form.description }}
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <p class="text-muted small text-left" style="margin-top: 0;">
+                            Upon saving, this information is recorded as a permanent comment on the request.
+                        </p>
+                        <input type="button" class="btn btn-secondary" data-dismiss="modal" value="Cancel">
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <script>
+        function openPreselectModal(button) {
+            var form = document.getElementById('preselectForm');
+            form.reset();
+            form.setAttribute('action', button.getAttribute('data-action'));
+        }
+    </script>
+    {% endif %}
 {% endblock %}
