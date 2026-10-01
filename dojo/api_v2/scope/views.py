@@ -172,6 +172,7 @@ class ScopeViewSet(prefetch.PrefetchListMixin,
             return http_response.error(message="Missing 'input' query parameter.", data=None)
 
         input_file = get_object_or_404(InputFile, input__id=input_id)
+        self.check_object_permissions(request, input_file)
 
         file_field = input_file.file
         if not file_field:
@@ -215,16 +216,20 @@ class InputFileViewSet(prefetch.PrefetchListMixin,
 
     def patch(self, request, *args, **kwargs):
         input_id = request.query_params.get("id")
+        input_file_instance = get_object_or_404(InputFile, input__id=input_id)
+        self.check_object_permissions(request, input_file_instance)
         try:
-            input_file_instance = get_object_or_404(InputFile, input__id=input_id)
-            serializer = InputFileSerializer(input_file_instance, data=request.query_params, partial=True)
+            patch_data = request.query_params.copy()
+            patch_data.pop("id", None)
+            patch_data.update(request.data)
+            serializer = InputFileSerializer(input_file_instance, data=patch_data, partial=True)
             serializer.is_valid(raise_exception=True)
-            serializer.save(request=request)
+            serializer.save()
             return http_response.ok(message="InputFile updated successfully.", data=serializer.data)
         except Exception as e:
             logger.error(f"Validation error on PATCH InputFile: {e}")
-            return http_response.error(
-                message="Validation error occurred.", data=serializer.errors, status_code=status.HTTP_400_BAD_REQUEST)
+            return http_response.bad_request(
+                message="Validation error occurred.", data=serializer.errors)
 @extend_schema(tags=["scope"])
 class InputFlowViewSet(
     prefetch.PrefetchListMixin,

@@ -4,7 +4,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework import status
 from django.core.files.uploadedfile import SimpleUploadedFile
 
-from dojo.models import Input, InputFile, InputSecret, InputEngagement
+from dojo.models import Dojo_User, Input, InputFile, InputSecret, InputEngagement
 
 
 class scopeViewsTestCase(APITestCase):
@@ -12,12 +12,75 @@ class scopeViewsTestCase(APITestCase):
 
     def setUp(self):
         token = Token.objects.get(user__username="admin")
+        self.admin = token.user
         self.client = APIClient()
         self.client.credentials(HTTP_AUTHORIZATION="Token " + token.key)
         self.create_file_url = reverse("scope-create-scope-file")
         self.create_secret_url = reverse("scope-create-scope-secret")
         self.download_url = reverse("scope-download-file")
         self.list_file_url = reverse("scope-list")
+
+    def create_input_file(self):
+        input_instance = Input.objects.create(owner=self.admin, type="file")
+        InputEngagement.objects.create(input=input_instance, engagement_id=1)
+        upload = SimpleUploadedFile("original.txt", b"original content", content_type="text/plain")
+        return input_instance, InputFile.objects.create(
+            input=input_instance,
+            file=upload,
+            file_name="original.txt",
+        )
+
+    def test_patch_input_file_updates_file_name_from_request_body(self):
+        input_instance, input_file = self.create_input_file()
+
+        response = self.client.patch(
+            f"/api/v2/input_file/?id={input_instance.id}",
+            {"file_name": "renamed.txt"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        input_file.refresh_from_db()
+        assert input_file.file_name == "renamed.txt"
+
+    def test_patch_input_file_accepts_legacy_query_parameter(self):
+        input_instance, input_file = self.create_input_file()
+
+        response = self.client.patch(
+            f"/api/v2/input_file/?id={input_instance.id}&file_name=renamed.txt",
+            {},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        input_file.refresh_from_db()
+        assert input_file.file_name == "renamed.txt"
+
+    def test_patch_input_file_rejects_user_without_object_permission(self):
+        input_instance, _ = self.create_input_file()
+        unrelated_user = Dojo_User.objects.create_user(username="unrelated-user")
+        self.client.force_authenticate(user=unrelated_user)
+
+        response = self.client.patch(
+            f"/api/v2/input_file/?id={input_instance.id}",
+            {"file_name": "changed.txt"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_patch_input_file_rejects_path_in_file_name(self):
+        input_instance, input_file = self.create_input_file()
+
+        response = self.client.patch(
+            f"/api/v2/input_file/?id={input_instance.id}",
+            {"file_name": "../app/media/overwritten.txt"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        input_file.refresh_from_db()
+        assert input_file.file_name == "original.txt"
     
 
     def test_create_scope_file_creates_input_and_file(self):
@@ -95,3 +158,22 @@ class scopeViewsTestCase(APITestCase):
         assert resp.status_code == status.HTTP_200_OK
         cd = resp.get("Content-Disposition", "")
         assert "attachment" in cd.lower()
+
+    def test_download_file_denies_user_without_object_permission(self):
+        input_instance, input_file = self.create_input_file()
+        self.addCleanup(lambda: input_file.file.delete(save=False))
+        unrelated_user = Dojo_User.objects.create_user(username="unrelated-download-user")
+        self.client.force_authenticate(user=unrelated_user)
+
+        response = self.client.get(f"{self.download_url}?input={input_instance.id}")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_download_file_allows_authorized_user(self):
+        input_instance, input_file = self.create_input_file()
+        self.addCleanup(lambda: input_file.file.delete(save=False))
+
+        response = self.client.get(f"{self.download_url}?input={input_instance.id}")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert b"".join(response.streaming_content) == b"original content"

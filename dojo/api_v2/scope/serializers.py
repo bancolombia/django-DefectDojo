@@ -54,11 +54,15 @@ class InputFileSerializer(serializers.ModelSerializer):
         ]
     
     def update(self, instance, validated_data):
-        request = validated_data.pop("request", None)
-        instance.file = request.data.get('file', instance.file) if request else instance.file 
+        instance.file = validated_data.get("file", instance.file)
         instance.file_name = validated_data.get('file_name', instance.file_name)
         instance.save()
         return instance
+
+    def validate_file_name(self, value):
+        if CONTROL_CHARS_RE.search(value) or any(character in value for character in "/\\<>"):
+            raise serializers.ValidationError("file_name must be a valid filename, not a path.")
+        return validate_safe_text(value, field_name="file_name", max_length=255, allow_blank=False)
 
 class ScopeFileSerializers(serializers.Serializer):
     CHOICES = (

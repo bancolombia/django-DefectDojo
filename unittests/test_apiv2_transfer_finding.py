@@ -8,6 +8,7 @@ from dojo.models import (
     TransferFinding)
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
+from django.core.files.uploadedfile import SimpleUploadedFile
 
 
 class TransferFindingFindingsTestCase(APITestCase):
@@ -19,6 +20,7 @@ class TransferFindingFindingsTestCase(APITestCase):
         self.client = APIClient()
         self.client.credentials(HTTP_AUTHORIZATION="Token " + token.key)
         self.url = reverse('transfer_finding_findings-list')
+        self.download_url = reverse('transfer_finding-download-file')
 
         self.origin_product_type = Product_Type.objects.get(id=2)
         self.origin_product = self.origin_product_type.prod_type.get(id=2)
@@ -44,6 +46,36 @@ class TransferFindingFindingsTestCase(APITestCase):
             restart_sla_expired=False,
             owner=Dojo_User.objects.get(username="user1"),
             notes="Transfer Test Notes")
+
+    def attach_transfer_finding_file(self):
+        self.transfer_finding.path = SimpleUploadedFile(
+            "evidence.txt",
+            b"sensitive evidence",
+            content_type="text/plain",
+        )
+        self.transfer_finding.save()
+        self.addCleanup(lambda: self.transfer_finding.path.delete(save=False))
+
+    def test_download_transfer_finding_file_allows_authorized_user(self):
+        self.attach_transfer_finding_file()
+
+        response = self.client.get(
+            f"{self.download_url}?transfer_finding_id={self.transfer_finding.id}",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(b"".join(response.streaming_content), b"sensitive evidence")
+
+    def test_download_transfer_finding_file_denies_unrelated_user(self):
+        self.attach_transfer_finding_file()
+        unrelated_user = Dojo_User.objects.create_user(username="unrelated-transfer-user")
+        self.client.force_authenticate(user=unrelated_user)
+
+        response = self.client.get(
+            f"{self.download_url}?transfer_finding_id={self.transfer_finding.id}",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
 
     def test_create_transfer_finding_finding(self):
