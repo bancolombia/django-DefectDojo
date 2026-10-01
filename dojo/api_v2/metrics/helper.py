@@ -16,6 +16,7 @@ def add_findings_metrics(user_data,
             finding_data["like"] = status
         else:
             finding_data = {
+                "title": finding.title,
                 "last_updated": finding.ia_recommendation["data"].get("last_modified", ""),
                 "like": status,
                 "engagement": finding.test.engagement.name,

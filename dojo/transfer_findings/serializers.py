@@ -25,6 +25,7 @@ class FindingTfSerlilizer(serializers.ModelSerializer):
         fields = [
             "id",
             "priority",
+            "priority_classification",
             "severity",
             "risk_status",
             "title",
