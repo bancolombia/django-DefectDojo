@@ -2,24 +2,30 @@ from unittest.mock import patch
 
 from django.urls import reverse
 from rest_framework import status
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient, APITestCase
 
-from dojo.models import Dojo_User, Product
+from dojo.models import Dojo_User, Product, Product_Type, SLA_Configuration
 
 
 class ProductContactsViewSetTestCase(APITestCase):
-    fixtures = ["dojo_testdata.json"]
-
     def setUp(self):
-        self.admin = Dojo_User.objects.get(username="admin")
-        token = Token.objects.get(user=self.admin)
+        self.admin = Dojo_User.objects.create_superuser(
+            username="product-contact-admin",
+            password="test-password",
+        )
         self.client = APIClient()
-        self.client.credentials(HTTP_AUTHORIZATION="Token " + token.key)
-        self.product = Product.objects.get(id=1)
+        self.client.force_authenticate(user=self.admin)
+        product_type = Product_Type.objects.create(name="Product contacts test type")
+        sla_configuration = SLA_Configuration.objects.create(name="Product contacts test SLA")
+        self.product = Product.objects.create(
+            name="Product contacts test product",
+            description="",
+            prod_type=product_type,
+            sla_configuration=sla_configuration,
+        )
         self.product.technical_contact = self.admin
         self.product.save()
-        self.url = reverse("products-get-description-product")
+        self.url = reverse("product-get-description-product")
 
     def test_get_description_product_denies_user_without_product_permission(self):
         unrelated_user = Dojo_User.objects.create_user(username="unrelated-product-user")
