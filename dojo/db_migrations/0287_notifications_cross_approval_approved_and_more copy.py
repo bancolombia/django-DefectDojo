@@ -7,7 +7,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("dojo", "0286_notifications_long_risk_acceptance_approved_and_more"),
+        ("dojo", "0287_notifications_cross_approval_approved_and_more copy"),
     ]
 
     operations = [
