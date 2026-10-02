@@ -1765,11 +1765,11 @@ class Engagement(models.Model):
         from dojo.utils import extract_field_from_text_regex
         test = self.test_set.order_by("-created").first()
         if not test:
-            return None
+            return extract_field_from_text_regex(self.description, "TIME SCANNED")
         # Notes default ordering is "-date" so the first note is the latest one
         last_note = test.notes.all().first()
         if not last_note:
-            return None
+            return extract_field_from_text_regex(self.description, "TIME SCANNED")
         return (extract_field_from_text_regex(last_note.entry, "TIME SCANNED")
                 or extract_field_from_text_regex(last_note.entry, "SCAN FINALIZED AT"))
     
