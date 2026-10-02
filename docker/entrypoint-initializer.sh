@@ -136,6 +136,9 @@ fi
 # }
 
 echo "Migrating"
+python manage.py migrate dojo 0279
+python manage.py migrate dojo 0280
+python manage.py migrate dojo 0285
 python3 manage.py migrate
 
 echo "Admin user: ${DD_ADMIN_USER}"
