@@ -56,6 +56,35 @@ class CrossApprovalExclusionSerializerTest(SimpleTestCase):
         self.assertTrue(serializer.is_valid(), serializer.errors)
         self.assertEqual(serializer.validated_data["where"], "all")
 
+    def test_accepts_list_values_for_where_priority_and_severity(self):
+        payload = self.valid_payload()
+        payload["where"] = ["tenable", "prisma", "tenable"]
+        payload["priority"] = ["high", "critical", "high"]
+        payload["severity"] = ["medium", "critical"]
+        with patch(
+            "dojo.api_v2.cross_approval.serializers.GeneralSettings.get_value",
+            return_value=["tenable", "prisma", "gitleaks"],
+        ):
+            serializer = CrossApprovalExclusionSerializer(data=payload)
+
+            self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["where"], "tenable,prisma")
+        self.assertEqual(serializer.validated_data["priority"], "high,critical")
+        self.assertEqual(serializer.validated_data["severity"], "medium,critical")
+
+    def test_rejects_where_values_not_in_configured_options(self):
+        payload = self.valid_payload()
+        payload["where"] = "tenable,unknown"
+        with patch(
+            "dojo.api_v2.cross_approval.serializers.GeneralSettings.get_value",
+            return_value=["tenable", "prisma", "gitleaks"],
+        ):
+            serializer = CrossApprovalExclusionSerializer(data=payload)
+
+            self.assertFalse(serializer.is_valid())
+        self.assertIn("where", serializer.errors)
+        self.assertIn("unsupported", str(serializer.errors["where"][0]).lower())
+
     def test_rejects_expired_date_before_create_date(self):
         payload = self.valid_payload()
         payload["expired_date"] = "2026-08-22"
@@ -151,10 +180,14 @@ class CrossApprovalRequestSerializerTest(SimpleTestCase):
 
 
 class CrossApprovalHelpersTest(SimpleTestCase):
-    def test_get_findings_matches_priority_or_severity_and_images(self):
+    def test_get_findings_matches_any_priority_or_severity_and_images(self):
         matching_finding = SimpleNamespace(
             priority_classification="High",
             severity="Low",
+        )
+        matching_by_severity = SimpleNamespace(
+            priority_classification="Medium Low",
+            severity="Critical",
         )
         non_matching_finding = SimpleNamespace(
             priority_classification="Medium Low",
@@ -164,12 +197,16 @@ class CrossApprovalHelpersTest(SimpleTestCase):
         findings.prefetch_related.return_value = findings
         findings.filter.return_value = findings
         findings.distinct.return_value = findings
-        findings.__iter__ = Mock(return_value=iter([matching_finding, non_matching_finding]))
+        findings.__iter__ = Mock(return_value=iter([
+            matching_finding,
+            matching_by_severity,
+            non_matching_finding,
+        ]))
         exclusion = SimpleNamespace(
             vulnerability_id="VULN-1",
             where="tenable, prisma, gitleaks",
-            priority="high",
-            severity="critical",
+            priority="high, very critical",
+            severity="critical, medium",
             component_type="image",
             component_values=["registry.example.com/base:1.0"],
         )
@@ -177,7 +214,7 @@ class CrossApprovalHelpersTest(SimpleTestCase):
         with patch("dojo.api_v2.cross_approval.helpers.Finding.objects.filter", return_value=findings):
             result = _get_findings(exclusion)
 
-        self.assertEqual(result, [matching_finding])
+        self.assertEqual(result, [matching_finding, matching_by_severity])
         self.assertEqual(findings.filter.call_count, 2)
         findings.distinct.assert_called_once_with()
         self.assertIn("tags__name__iexact", str(findings.filter.call_args_list[1].args[0]))
