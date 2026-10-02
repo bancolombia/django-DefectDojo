@@ -13,6 +13,10 @@ from dojo.user.queries import get_user
 from .models import CrossApprovalExclusion, CrossApprovalRequestLog
 
 
+CROSS_APPROVAL_CSV_SEPARATOR = ","
+CROSS_APPROVAL_DEFAULT_WHERE = "all"
+
+
 def _request_owner(cross_approval_request):
     return cross_approval_request.owner
 
@@ -23,14 +27,22 @@ def _component_values(exclusion):
 
 def _where_values(exclusion):
     where_value = (exclusion.where or "").strip()
-    if not where_value or where_value.casefold() == "all":
+    if not where_value or where_value.casefold() == CROSS_APPROVAL_DEFAULT_WHERE:
         return []
 
-    return [
-        item.strip()
-        for item in where_value.split(",")
-        if item.strip()
-    ]
+    return _csv_values(where_value)
+
+
+def _csv_values(value):
+    normalized_values = []
+    if not isinstance(value, str):
+        return normalized_values
+
+    for raw_item in value.split(CROSS_APPROVAL_CSV_SEPARATOR):
+        normalized_item = raw_item.strip().casefold()
+        if normalized_item and normalized_item not in normalized_values:
+            normalized_values.append(normalized_item)
+    return normalized_values
 
 
 def _filter_findings_by_component(findings, exclusion):
@@ -65,15 +77,17 @@ def _get_findings(exclusion):
     findings = _filter_findings_by_component(findings, exclusion)
     findings = _filter_findings_by_where(findings, exclusion)
 
-    if exclusion.priority or exclusion.severity:
-        priority = exclusion.priority.casefold()
-        severity = exclusion.severity.casefold()
+    priority_values = _csv_values(exclusion.priority)
+    severity_values = _csv_values(exclusion.severity)
+    if priority_values or severity_values:
         findings = [
             finding for finding in findings
             if (
-                priority and finding.priority_classification.casefold() == priority
+                priority_values
+                and (finding.priority_classification or "").casefold() in priority_values
             ) or (
-                severity and finding.severity.casefold() == severity
+                severity_values
+                and (finding.severity or "").casefold() in severity_values
             )
         ]
     return findings
