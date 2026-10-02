@@ -9,11 +9,13 @@ from dojo.api_v2.cross_approval.models import (
     CrossApprovalRequestLog,
 )
 from dojo.api_v2.serializers import UserStubSerializer
+from dojo.models import GeneralSettings
 
 
 CROSS_APPROVAL_CSV_SEPARATOR = ","
 CROSS_APPROVAL_DEFAULT_WHERE = "all"
 CROSS_APPROVAL_MULTI_VALUE_FIELDS = ("where", "priority", "severity")
+CROSS_APPROVAL_WHERE_OPTIONS_SETTING_KEY = "DEVSECOPS_ADOPTION_INCLUDE_TAGS"
 
 
 def parse_cross_approval_date(value):
@@ -71,7 +73,23 @@ class CrossApprovalExclusionSerializer(serializers.ModelSerializer):
         return parse_cross_approval_date(value)
 
     def validate_where(self, value):
-        return self._normalize_where(value)
+        normalized_where = self._normalize_where(value)
+        if normalized_where == CROSS_APPROVAL_DEFAULT_WHERE:
+            return normalized_where
+
+        configured_where_options = self._configured_where_options()
+        where_values = self._csv_values(normalized_where)
+        invalid_values = [
+            where_value
+            for where_value in where_values
+            if where_value.casefold() not in configured_where_options
+        ]
+        if invalid_values:
+            raise serializers.ValidationError(
+                f"where contains unsupported value(s): {', '.join(invalid_values)}."
+            )
+
+        return normalized_where
 
     def validate_priority(self, value):
         return self._csv_from_value(value)
@@ -97,7 +115,17 @@ class CrossApprovalExclusionSerializer(serializers.ModelSerializer):
         normalized_where = self._csv_from_value(value)
         return normalized_where or CROSS_APPROVAL_DEFAULT_WHERE
 
-    def _csv_from_value(self, value):
+    def _configured_where_options(self):
+        configured_values = GeneralSettings.get_value(
+            CROSS_APPROVAL_WHERE_OPTIONS_SETTING_KEY,
+            [],
+        )
+        normalized_values = set()
+        for configured_value in self._csv_values(configured_values):
+            normalized_values.add(configured_value.casefold())
+        return normalized_values
+
+    def _csv_values(self, value):
         if isinstance(value, str):
             raw_items = value.split(CROSS_APPROVAL_CSV_SEPARATOR)
         elif isinstance(value, (list, tuple)):
@@ -113,7 +141,10 @@ class CrossApprovalExclusionSerializer(serializers.ModelSerializer):
             if normalized_item and normalized_item not in normalized_items:
                 normalized_items.append(normalized_item)
 
-        return CROSS_APPROVAL_CSV_SEPARATOR.join(normalized_items)
+        return normalized_items
+
+    def _csv_from_value(self, value):
+        return CROSS_APPROVAL_CSV_SEPARATOR.join(self._csv_values(value))
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

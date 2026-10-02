@@ -61,12 +61,29 @@ class CrossApprovalExclusionSerializerTest(SimpleTestCase):
         payload["where"] = ["tenable", "prisma", "tenable"]
         payload["priority"] = ["high", "critical", "high"]
         payload["severity"] = ["medium", "critical"]
-        serializer = CrossApprovalExclusionSerializer(data=payload)
+        with patch(
+            "dojo.api_v2.cross_approval.serializers.GeneralSettings.get_value",
+            return_value=["tenable", "prisma", "gitleaks"],
+        ):
+            serializer = CrossApprovalExclusionSerializer(data=payload)
 
-        self.assertTrue(serializer.is_valid(), serializer.errors)
+            self.assertTrue(serializer.is_valid(), serializer.errors)
         self.assertEqual(serializer.validated_data["where"], "tenable,prisma")
         self.assertEqual(serializer.validated_data["priority"], "high,critical")
         self.assertEqual(serializer.validated_data["severity"], "medium,critical")
+
+    def test_rejects_where_values_not_in_configured_options(self):
+        payload = self.valid_payload()
+        payload["where"] = "tenable,unknown"
+        with patch(
+            "dojo.api_v2.cross_approval.serializers.GeneralSettings.get_value",
+            return_value=["tenable", "prisma", "gitleaks"],
+        ):
+            serializer = CrossApprovalExclusionSerializer(data=payload)
+
+            self.assertFalse(serializer.is_valid())
+        self.assertIn("where", serializer.errors)
+        self.assertIn("unsupported", str(serializer.errors["where"][0]).lower())
 
     def test_rejects_expired_date_before_create_date(self):
         payload = self.valid_payload()
