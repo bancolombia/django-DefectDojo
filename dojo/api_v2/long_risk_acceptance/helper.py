@@ -16,6 +16,15 @@ from dojo.api_v2.long_risk_acceptance.notifications import Notification
 from django.db.models import Q
 logger = logging.getLogger(__name__)
 
+def add_note(event, long_risk_acceptance, system_user):
+    note = Notes(
+        entry=f"{event}: {long_risk_acceptance.id}",
+        author=system_user)
+    note.save()
+    long_risk_acceptance.notes.add(note)
+    note.save()
+    return note
+
 def parse_filter_values(filter_string: str) -> list[str]:
     if not filter_string:
         return []
@@ -116,47 +125,122 @@ def active_findings_long_risk_acceptance(finding_qs: QuerySet[Finding]):
         finding.tags.remove("long_term_risk_acceptance")
 
 
+def _accept_findings(finding_qs: QuerySet[Finding], ra_engagement_id: int):
+    """Mark findings as accepted and add long_term_risk_acceptance tag."""
+    for finding in finding_qs.iterator(chunk_size=200):
+        finding.risk_status = "Risk Accepted"
+        finding.active = False
+        finding.risk_accepted = True
+        finding.save(update_fields=["risk_status", "active", "risk_accepted"])
+        finding.tags.add("long_term_risk_acceptance")
+        logger.debug(
+            f"finding {finding.id} accepted flow long term risk acceptance "
+            f"of engagement {ra_engagement_id}"
+        )
+
+
+def _update_ra_engagement(ra_engagement: RiskAcceptanceEngagement, 
+                         update_fields: dict):
+    """Update risk acceptance engagement with given fields and save."""
+    for field, value in update_fields.items():
+        setattr(ra_engagement, field, value)
+    ra_engagement.save(update_fields=list(update_fields.keys()))
+
+
+def _handle_reject(ra_engagement: RiskAcceptanceEngagement, 
+                   user, finding_qs: QuerySet[Finding]):
+    """Handle reject event."""
+    _update_ra_engagement(ra_engagement, {"risk_status": "Risks Rejected"})
+    add_note("Long Risk Acceptance Rejected", ra_engagement, user)
+    active_findings_long_risk_acceptance(finding_qs)
+    Notification.risk_acceptance_rejected(long_risk_acceptance=ra_engagement)
+
+
+def _handle_expire(ra_engagement: RiskAcceptanceEngagement, 
+                   user, finding_qs: QuerySet[Finding]):
+    """Handle expire event."""
+    _update_ra_engagement(ra_engagement, {"risk_status": "Risks Expired"})
+    add_note("Long Risk Acceptance Expired", ra_engagement, user)
+    active_findings_long_risk_acceptance(finding_qs)
+    Notification.risk_acceptance_expiration(
+            event="long_risk_acceptance",
+            subject=f"⏳Long Risk Acceptance expired : {ra_engagement.id}🚨",
+            description="Long risk acceptance expired",
+            long_risk_acceptance=ra_engagement)
+
+
+def _handle_accept(ra_engagement: RiskAcceptanceEngagement, 
+                   user, finding_qs: QuerySet[Finding]):
+    """Handle accept event."""
+    if ra_engagement.risk_status not in ["Risks Reviewed", "Risks Accepted"]:
+        return False
+    
+    _update_ra_engagement(ra_engagement, {"risk_status": "Risks Accepted"})
+    add_note("Long Risk Acceptance Accepted", ra_engagement, user)
+    _accept_findings(finding_qs, ra_engagement.id)
+    Notification.risk_acceptance_approved(long_risk_acceptance=ra_engagement)
+    return True
+
+
+def _handle_review(ra_engagement: RiskAcceptanceEngagement, user):
+    """Handle review event."""
+    _update_ra_engagement(
+        ra_engagement,
+        {
+            "risk_status": "Risks Reviewed",
+            "reviewed_by": user.username,
+            "reviewed_date": timezone.now(),
+        }
+    )
+    add_note("Long Risk Acceptance Reviewed", ra_engagement, user)
+    Notification.risk_acceptance_review(long_risk_acceptance=ra_engagement)
+
+
+# Map events to handler functions
+EVENT_HANDLERS = {
+    "reject": _handle_reject,
+    "expire": _handle_expire,
+    "accept": _handle_accept,
+    "review": _handle_review,
+}
+
+
 @app.task
-def async_apply_rule_long_risk_acceptance(ra_engagement_id, user_id, event):
-    ra_engagement = get_object_or_404(RiskAcceptanceEngagement, id=ra_engagement_id) 
+def async_apply_rule_long_risk_acceptance(ra_engagement_id: int, 
+                                         user_id: int, 
+                                         event: str):
+    """Apply rule for long risk acceptance based on event type.
+    
+    Args:
+        ra_engagement_id: ID of RiskAcceptanceEngagement
+        user_id: ID of User performing the action
+        event: Event type ('reject', 'expire', 'accept', 'review')
+    
+    Raises:
+        ApiError: If no findings found or event is invalid
+    """
+    ra_engagement = get_object_or_404(RiskAcceptanceEngagement, id=ra_engagement_id)
     user = get_object_or_404(User, id=user_id)
     finding_qs = render_rule(ra_engagement, False)
-    if finding_qs:
-        if event == "reject":
-            ra_engagement.risk_status = "Risks Rejected"
-            ra_engagement.save()
-            active_findings_long_risk_acceptance(finding_qs)
-            Notification.risk_acceptance_rejected(long_risk_acceptance=ra_engagement)
-        elif event == "expire":
-            ra_engagement.risk_status = "Risks Active"
-            ra_engagement.save()
-            active_findings_long_risk_acceptance(finding_qs)
-            Notification.risk_acceptance_expiration(long_risk_acceptance=ra_engagement)
-        elif event == "accept":
-            if ra_engagement.risk_status in ["Risks Reviewed", "Risks Accepted"]:
-                ra_engagement.risk_status = "Risks Accepted"
-                ra_engagement.save()
-                for finding in finding_qs.iterator(chunk_size=200):
-                    finding.risk_status = "Risk Accepted"
-                    finding.active = False
-                    finding.risk_accepted = True
-
-                    finding.save(update_fields=[
-                        "risk_status",
-                        "active",
-                        "risk_accepted"
-                    ])
-                    logger.debug(f"finding {finding.id} accepted flow long term risk acceptance of engagement {ra_engagement.id}")
-                    finding.tags.add("long_term_risk_acceptance")
-                Notification.risk_acceptance_approved(long_risk_acceptance=ra_engagement)
-        elif event == "review":
-            ra_engagement.risk_status = "Risks Reviewed"
-            ra_engagement.reviewed_by = user.username
-            ra_engagement.reviewed_date = timezone.now()
-            ra_engagement.save()
-            Notification.risk_acceptance_review(long_risk_acceptance=ra_engagement)
+    
+    if not finding_qs:
+        raise ApiError(
+            f"No findings found for this engagement with the current rules: "
+            f"ra_engagement_id {ra_engagement_id}"
+        )
+    
+    handler = EVENT_HANDLERS.get(event)
+    if not handler:
+        raise ApiError(f"Invalid event type: {event}")
+    
+    # Review event doesn't need finding_qs
+    if event == "review":
+        with transaction.atomic():
+            handler(ra_engagement, user)
     else:
-        raise ApiError(f"No findings found for this engagement with the current rules: ra_engagement_id {ra_engagement_id}")
+        with transaction.atomic():
+            handler(ra_engagement, user, finding_qs)
+
 
 def get_expired_long_risk_acceptance_to_handle():
     long_risk_acceptances = RiskAcceptanceEngagement.objects.filter(
@@ -193,15 +277,7 @@ def expire_now(long_risk_acceptance: RiskAcceptanceEngagement):
     for ra_engagement in long_risk_acceptance_eng:
         async_apply_rule_long_risk_acceptance.apply_async(
             args=(ra_engagement.id, system_user.id, "expire"))
-        note = Notes(entry=f"Long Risk Acceptance Expired: {long_risk_acceptance.id}",
-                     author=system_user)
-        note.save()
-        long_risk_acceptance.notes.add(note)
-        Notification.risk_acceptance_expiration(
-            event="long_risk_acceptance",
-            subject=f"⏳Long Risk Acceptance expired : {long_risk_acceptance.id}🚨",
-            description="Long risk acceptance expired",
-            long_risk_acceptance=long_risk_acceptance)
+      
 
 @app.task
 def expiration_handler(*args, **kwargs):

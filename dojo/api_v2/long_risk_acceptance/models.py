@@ -8,6 +8,7 @@ class RiskAcceptanceEngagement(models.Model):
         ("Risks Pending", "Risks Pending"),
         ("Risks Accepted", "Risks Accepted"),
         ("Risks Rejected", "Risks Rejected"),
+        ("Risks Expired", "Risks Expired"),
         )
     product = models.ForeignKey(
         "Product", null=True, blank=True, on_delete=models.CASCADE
