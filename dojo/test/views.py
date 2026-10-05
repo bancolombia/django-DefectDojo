@@ -477,6 +477,7 @@ class AddFindingView(View):
             "initial": {"date": timezone.now().date(), "verified": True, "dynamic_finding": False},
             "req_resp": None,
             "product": test.engagement.product,
+            "engagement": test.engagement,
         }
         # Remove the initial state on post
         if request.method == "POST":
@@ -543,9 +544,7 @@ class AddFindingView(View):
             # Save the finding at the end and return
             finding.save()
 
-            selected_flow = context["form"].cleaned_data.get("scenarios")
-            if selected_flow:
-                finding.Input_flows.set([selected_flow])
+            finding.Input_flows.set(context["form"].cleaned_data.get("flows", []))
 
             return finding, request, True
         add_error_message_to_response("The form has errors, please correct them below.")
@@ -687,7 +686,7 @@ def add_temp_finding(request, tid, fid):
 
     if request.method == "POST":
 
-        form = AddFindingForm(request.POST, req_resp=None, product=test.engagement.product)
+        form = AddFindingForm(request.POST, req_resp=None, product=test.engagement.product, engagement=test.engagement)
         if jira_helper.get_jira_project(test):
             jform = JIRAFindingForm(push_all=jira_helper.is_push_all_issues(test), prefix="jiraform", jira_project=jira_helper.get_jira_project(test), finding_form=form)
             logger.debug(f"jform valid: {jform.is_valid()}")
@@ -734,6 +733,7 @@ def add_temp_finding(request, tid, fid):
             finding_helper.apply_priority(new_finding, form.cleaned_data["vulnerability_ids"].split())
 
             new_finding.save()
+            new_finding.Input_flows.set(form.cleaned_data.get("flows", []))
             if "jiraform-push_to_jira" in request.POST:
                 jform = JIRAFindingForm(request.POST, prefix="jiraform", instance=new_finding, push_all=push_all_jira_issues, jira_project=jira_helper.get_jira_project(test), finding_form=form)
                 if jform.is_valid():
@@ -761,7 +761,7 @@ def add_temp_finding(request, tid, fid):
                              extra_tags="alert-danger")
 
     else:
-        form = AddFindingForm(req_resp=None, product=test.engagement.product, initial={"active": False,
+        form = AddFindingForm(req_resp=None, product=test.engagement.product, engagement=test.engagement, initial={"active": False,
                                     "date": timezone.now().date(),
                                     "verified": False,
                                     "false_p": False,
