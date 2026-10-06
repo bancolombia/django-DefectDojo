@@ -311,7 +311,7 @@ class InputFlowViewSet(
 
         self.check_object_permissions(request, flow)
 
-        serializer = InputURLSerializer(data=request.data)
+        serializer = InputURLSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
 
         instance = serializer.save(flow=flow)
