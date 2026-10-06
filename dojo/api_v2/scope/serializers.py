@@ -218,6 +218,21 @@ class InputSerializer(serializers.Serializer):
     def get_permissions(self, obj):
         return authorization_helper.get_permissions(obj)
     
+EXAMPLE_SCENARIO_ESTIMATED_TIME = 60
+EXAMPLE_SCENARIO_DESCRIPTION = "Validación de cabeceras de seguridad"
+
+
+def create_example_scenario(url, user):
+    # Placeholder scenario for URLs created without scenarios; users can edit or delete it later
+    return InputScenario.objects.create(
+        url=url,
+        designed_by=user,
+        estimated_time=EXAMPLE_SCENARIO_ESTIMATED_TIME,
+        description=EXAMPLE_SCENARIO_DESCRIPTION,
+        status="untested",
+    )
+
+
 class InputScenarioSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(required=False)
     STATUS_CHOICES = [
@@ -297,6 +312,9 @@ class InputURLSerializer(serializers.ModelSerializer):
                     **scenario_data
                 )
 
+            if not scenarios_data:
+                create_example_scenario(url, user)
+
         return url
 
 
@@ -359,6 +377,9 @@ class InputFlowSerializer(serializers.ModelSerializer):
                         **scenario_data
                     )
 
+                if not scenarios_data:
+                    create_example_scenario(url, user)
+
         return flow
     def update(self, instance, validated_data):
         urls_data = validated_data.pop("urls", None)
@@ -386,6 +407,8 @@ class InputFlowSerializer(serializers.ModelSerializer):
                         url_instance.save()
                     else:
                         url_instance = InputURL.objects.create(flow=instance, **url_data)
+                        if not scenarios_data:
+                            create_example_scenario(url_instance, user)
 
                     for scenario_data in scenarios_data:
                         scenario_id = scenario_data.pop("id", None)
