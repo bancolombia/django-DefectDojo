@@ -1,4 +1,4 @@
-from dojo.api_v2.scope.models import Input
+from dojo.api_v2.scope.models import Input, InputFlow
 from django_filters import rest_framework as filters
 
 class InputFilter(filters.FilterSet):
@@ -9,3 +9,12 @@ class InputFilter(filters.FilterSet):
     class Meta:
         model = Input
         fields = ["id", "type", "owner", "engagement", "product", "input"]
+
+
+class InputFlowFilter(filters.FilterSet):
+    engagement = filters.NumberFilter(field_name="engagement", lookup_expr="exact")
+    product = filters.NumberFilter(field_name="engagement__product", lookup_expr="exact")
+
+    class Meta:
+        model = InputFlow
+        fields = ["engagement", "product"]

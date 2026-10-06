@@ -1572,10 +1572,11 @@ class AddFindingForm(forms.ModelForm):
             "invalid_choice": EFFORT_FOR_FIXING_INVALID_CHOICE})
     mitigation = forms.CharField(widget=forms.Textarea, required=False)
     
-    scenarios = forms.ModelChoiceField(queryset=InputFlow.objects.none(),
-    required=False,
-    widget=forms.widgets.Select(),
-    help_text="Select which Input_flow")
+    flows = forms.ModelMultipleChoiceField(queryset=InputFlow.objects.none(),
+        required=False,
+        label="Input flows",
+        widget=forms.widgets.SelectMultiple(),
+        help_text="Select the input flows impacted by this finding")
 
     impact = forms.CharField(widget=forms.Textarea, required=False)
     request = forms.CharField(widget=forms.Textarea, required=False)
@@ -1598,7 +1599,7 @@ class AddFindingForm(forms.ModelForm):
 
     # the only reliable way without hacking internal fields to get predicatble ordering is to make it explicit
     field_order = ("title", "date", "cwe", "vulnerability_ids", "severity", "cvssv3", "cvssv3_score", "cvssv4", "cvssv4_score", "description", "mitigation", "impact", "request", "response", "steps_to_reproduce",
-                   "severity_justification", "endpoints", "endpoints_to_add", "references", "priority", "active", "verified", "false_p", "duplicate", "out_of_scope",
+                   "severity_justification", "endpoints", "endpoints_to_add", "flows", "references", "priority", "active", "verified", "false_p", "duplicate", "out_of_scope",
                    "risk_accepted", "under_defect_review")
 
     def __init__(self, *args, **kwargs):
@@ -1607,12 +1608,14 @@ class AddFindingForm(forms.ModelForm):
         product = None
         if "product" in kwargs:
             product = kwargs.pop("product")
+        engagement = kwargs.pop("engagement", None)
 
         super().__init__(*args, **kwargs)
 
         if product:
             self.fields["endpoints"].queryset = Endpoint.objects.filter(product=product)
-            self.fields["scenarios"].queryset = InputFlow.objects.filter(engagement__product=product)
+        if engagement:
+            self.fields["flows"].queryset = InputFlow.objects.filter(engagement=engagement).order_by("flowName")
 
         if req_resp:
             self.fields["request"].initial = req_resp[0]
@@ -1847,10 +1850,11 @@ class FindingForm(forms.ModelForm):
     cvssv3_score = forms.FloatField(label="CVSS3 Score", required=False, max_value=10.0, min_value=0.0)
     cvssv4 = forms.CharField(label="CVSS4 Vector", max_length=255, required=False)
     cvssv4_score = forms.FloatField(label="CVSS4 Score", required=False, max_value=10.0, min_value=0.0)
-    scenarios = forms.ModelChoiceField(queryset=InputFlow.objects.none(),
+    flows = forms.ModelMultipleChoiceField(queryset=InputFlow.objects.none(),
         required=False,
-        widget=forms.widgets.Select(),
-        help_text="Select which Input_flow")
+        label="Input flows",
+        widget=forms.widgets.SelectMultiple(),
+        help_text="Select the input flows impacted by this finding")
     description = forms.CharField(widget=forms.Textarea)
     severity = forms.ChoiceField(
         choices=SEVERITY_CHOICES,
@@ -1883,7 +1887,7 @@ class FindingForm(forms.ModelForm):
     # the only reliable way without hacking internal fields to get predicatble ordering is to make it explicit
     field_order = ("title", "group", "date", "sla_start_date", "sla_expiration_date", "cwe", "vulnerability_ids", "severity", "cvss_info", "cvssv3",
                    "cvssv3_score", "cvssv4", "cvssv4_score", "description", "mitigation", "impact", "request", "response", "steps_to_reproduce", "severity_justification",
-                   "endpoints", "endpoints_to_add", "references", "active", "mitigated", "mitigated_by", "verified", "false_p", "duplicate",
+                   "endpoints", "endpoints_to_add", "flows", "references", "active", "mitigated", "mitigated_by", "verified", "false_p", "duplicate",
                    "out_of_scope", "risk_accept", "under_defect_review")
 
     def __init__(self, *args, **kwargs):
@@ -1899,9 +1903,9 @@ class FindingForm(forms.ModelForm):
 
         self.fields["endpoints"].queryset = Endpoint.objects.filter(product=self.instance.test.engagement.product)
         self.fields["mitigated_by"].queryset = get_authorized_users(Permissions.Test_Edit)
-        self.fields["scenarios"].queryset = InputFlow.objects.filter(engagement=self.instance.test.engagement)
+        self.fields["flows"].queryset = InputFlow.objects.filter(engagement=self.instance.test.engagement).order_by("flowName")
         if self.instance.pk:
-            self.fields["scenarios"].initial = self.instance.Input_flows.first()
+            self.fields["flows"].initial = self.instance.Input_flows.all()
 
         # do not show checkbox if finding is not accepted and simple risk acceptance is disabled
         # if checked, always show to allow unaccept also with full risk acceptance enabled
