@@ -46,6 +46,15 @@ class TestFindingModel(DojoTestCase):
         finding.file_path = "FilePath"
         self.assertEqual("FilePath", finding.get_file_path_with_link())
 
+    def test_get_file_path_with_raw_link_no_source_code_management_uri(self):
+        test = Test()
+        engagement = Engagement()
+        test.engagement = engagement
+        finding = Finding()
+        finding.test = test
+        finding.file_path = "FilePath"
+        self.assertIsNone(finding.get_file_path_with_raw_link)
+
     def test_get_file_path_with_link_and_source_code_management_uri(self):
         test = Test()
         engagement = Engagement()

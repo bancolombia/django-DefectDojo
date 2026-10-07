@@ -3738,25 +3738,25 @@ class Finding(models.Model):
         if self.file_path is None:
             return None
 
-        link = self.test.engagement.source_code_management_uri
+        uri = self.test.engagement.source_code_management_uri
+        if uri is None:
+            return None
+
         scm_type = self.get_scm_type()
-        if (self.test.engagement.source_code_management_uri is not None):
-            if scm_type == "bitbucket-standalone":
-                link = self.bitbucket_standalone_prepare_scm_link(link)
-            elif scm_type == "azure devops":
-                link = self.azuredevops_scm_link(link)
-            elif scm_type in {"github", "gitlab", "gitea", "codeberg", "bitbucket"}:
-                link = self.git_public_prepare_scm_link(link, scm_type)
-            elif "https://github.com/" in self.test.engagement.source_code_management_uri:
-                link = self.git_public_prepare_scm_link(link, "github")
-            else:
-                link += "/" + self.file_path
+        if scm_type == "bitbucket-standalone":
+            link = self.bitbucket_standalone_prepare_scm_link(uri)
+        elif scm_type == "azure devops":
+            link = self.azuredevops_scm_link(uri)
+        elif scm_type in {"github", "gitlab", "gitea", "codeberg", "bitbucket"}:
+            link = self.git_public_prepare_scm_link(uri, scm_type)
+        elif "https://github.com/" in uri:
+            link = self.git_public_prepare_scm_link(uri, "github")
         else:
-            link += "/" + self.file_path
+            link = uri + "/" + self.file_path
 
         # than - add line part to browser url
         if self.line:
-            if scm_type in {"github", "gitlab", "gitea", "codeberg"} or "https://github.com/" in self.test.engagement.source_code_management_uri:
+            if scm_type in {"github", "gitlab", "gitea", "codeberg"} or "https://github.com/" in uri:
                 link = link + "#L" + str(self.line)
             elif scm_type == "bitbucket-standalone":
                 link = link + "#" + str(self.line)
