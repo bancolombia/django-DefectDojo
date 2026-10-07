@@ -3733,6 +3733,7 @@ class Finding(models.Model):
         clean_file_path = self.clean_file_path()
         return uri + "?path=%2F" + clean_file_path + "&version=GB" + (self.test.branch_tag if self.test.branch_tag else "")
 
+    @property
     def get_file_path_with_raw_link(self):
         if self.file_path is None:
             return None

@@ -627,6 +627,8 @@ class BaseImporter(ImporterOptions):
             if self.test.api_scan_configuration != self.api_scan_configuration:
                 self.test.api_scan_configuration = self.api_scan_configuration
                 self.test.save()
+            # Update branch_tag test
+            self.test.branch_tag = self.branch_tag
 
     def verify_tool_configuration_from_engagement(self):
         """

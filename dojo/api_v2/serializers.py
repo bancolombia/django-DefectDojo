@@ -1897,6 +1897,7 @@ class FindingSerializer(serializers.ModelSerializer):
     )
     permissions = serializers.SerializerMethodField(read_only=True, allow_null=True)
     priority_classification = serializers.CharField(read_only=True)
+    get_file_path_with_raw_link = serializers.CharField(read_only=True)
     sla_period = serializers.IntegerField(read_only=True, allow_null=True)
     class Meta:
         model = Finding
