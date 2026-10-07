@@ -3625,7 +3625,7 @@ class Finding(models.Model):
             return None
         if self.test.engagement.source_code_management_uri is None:
             return escape(self.file_path)
-        link = self.get_file_path_with_raw_link()
+        link = self.get_file_path_with_raw_link
         return create_bleached_link(link, self.file_path)
 
     def get_scm_type(self):
