@@ -168,7 +168,7 @@ tinycss2==1.4.0
 titlecase==2.4.1
 typing-inspection==0.4.4
 typing_extensions==4.16.0
-tzdata==2026.4
+tzdata==2026.5
 tzlocal==5.4.4
 uritemplate==4.2.0
 urllib3==2.8.0
@@ -185,5 +185,5 @@ whitenoise==5.2.0
 wrapt==2.4.1
 xmlschema==2.5.1
 yarl==1.25.1
-zipp==4.1.0
+zipp==4.1.1
 zstandard==0.25.0

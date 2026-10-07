@@ -6,7 +6,7 @@ from rest_framework.decorators import action
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction, IntegrityError
-from dojo.api_v2.scope.filter import InputFilter
+from dojo.api_v2.scope.filter import InputFilter, InputFlowFilter
 from dojo.api_v2.scope.models import InputSecret, InputFile, Input , InputFlow,InputScenario,InputURL
 from dojo.api_v2.scope.serializers import *
 from dojo.api_v2.views import DojoModelViewSet
@@ -244,7 +244,7 @@ class InputFlowViewSet(
 
     serializer_class = InputFlowSerializer
     filter_backends = (DjangoFilterBackend,)
-    filterset_fields = ["engagement"]
+    filterset_class = InputFlowFilter
     parser_classes = (MultiPartParser, FormParser, JSONParser)
 
     permission_classes = (
@@ -311,7 +311,7 @@ class InputFlowViewSet(
 
         self.check_object_permissions(request, flow)
 
-        serializer = InputURLSerializer(data=request.data)
+        serializer = InputURLSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
 
         instance = serializer.save(flow=flow)

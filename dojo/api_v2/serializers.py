@@ -34,6 +34,8 @@ from dojo.finding.helper import (
     save_vulnerability_ids_template,
 )
 from dojo.finding.queries import get_authorized_findings
+from dojo.engagement.queries import get_authorized_engagements
+from dojo.api_v2.scope.models import InputFlow
 from dojo.group.utils import get_auth_group_name
 from dojo.importers.auto_create_context import AutoCreateContextManager
 from dojo.importers.base_importer import BaseImporter
@@ -1868,6 +1870,27 @@ class VulnerabilityIdSerializer(serializers.ModelSerializer):
         fields = ["vulnerability_id"]
 
 
+class InputFlowBasicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InputFlow
+        fields = ["id", "flowName"]
+
+
+class AuthorizedInputFlowField(serializers.PrimaryKeyRelatedField):
+    # Unauthorized flows are reported as nonexistent so their ids are not leaked
+    def get_queryset(self):
+        return InputFlow.objects.filter(
+            engagement__in=get_authorized_engagements(Permissions.Input_Flow_View),
+        )
+
+
+def validate_input_flows_engagement(flows, test):
+    invalid_ids = [flow.id for flow in flows if flow.engagement_id != test.engagement_id]
+    if invalid_ids:
+        msg = f"Input flows {invalid_ids} do not belong to the engagement of this finding."
+        raise serializers.ValidationError({"input_flows_ids": msg})
+
+
 class FindingSerializer(serializers.ModelSerializer):
     tags = TagListSerializerField(required=False)
     request_response = serializers.SerializerMethodField()
@@ -1898,6 +1921,8 @@ class FindingSerializer(serializers.ModelSerializer):
     permissions = serializers.SerializerMethodField(read_only=True, allow_null=True)
     priority_classification = serializers.CharField(read_only=True)
     get_file_path_with_raw_link = serializers.CharField(read_only=True)
+    input_flows = InputFlowBasicSerializer(source="Input_flows", many=True, read_only=True)
+    input_flows_ids = AuthorizedInputFlowField(source="Input_flows", many=True, write_only=True, required=False)
     sla_period = serializers.IntegerField(read_only=True, allow_null=True)
     class Meta:
         model = Finding
@@ -1962,9 +1987,14 @@ class FindingSerializer(serializers.ModelSerializer):
         if reporter_id := validated_data.get("reporter"):
             instance.reporter = reporter_id
 
+        input_flows = validated_data.pop("Input_flows", None)
+
         instance = super().update(
             instance, validated_data,
         )
+
+        if input_flows is not None:
+            instance.Input_flows.set(input_flows)
 
         if parsed_vulnerability_ids:
             save_vulnerability_ids(instance, parsed_vulnerability_ids)
@@ -1989,6 +2019,9 @@ class FindingSerializer(serializers.ModelSerializer):
             is_duplicate = data.get("duplicate", False)
             is_false_p = data.get("false_p", False)
             is_risk_accepted = data.get("risk_accepted", False)
+
+        if "Input_flows" in data:
+            validate_input_flows_engagement(data["Input_flows"], data.get("test", self.instance.test))
 
         if (is_active or is_verified) and is_duplicate:
             msg = "Duplicate findings cannot be verified or active"
@@ -2066,6 +2099,8 @@ class FindingCreateSerializer(serializers.ModelSerializer):
     reporter = serializers.PrimaryKeyRelatedField(
         required=False, queryset=User.objects.all(),
     )
+    input_flows = InputFlowBasicSerializer(source="Input_flows", many=True, read_only=True)
+    input_flows_ids = AuthorizedInputFlowField(source="Input_flows", many=True, write_only=True, required=False)
 
     class Meta:
         model = Finding
@@ -2085,6 +2120,7 @@ class FindingCreateSerializer(serializers.ModelSerializer):
         notes = validated_data.pop("notes", None)
         found_by = validated_data.pop("found_by", None)
         reviewers = validated_data.pop("reviewers", None)
+        input_flows = validated_data.pop("Input_flows", None)
         # Process the vulnerability IDs specially
         parsed_vulnerability_ids = []
         if (vulnerability_ids := validated_data.pop("vulnerability_id_set", None)):
@@ -2105,6 +2141,8 @@ class FindingCreateSerializer(serializers.ModelSerializer):
             new_finding.found_by.set(found_by)
         if reviewers:
             new_finding.reviewers.set(reviewers)
+        if input_flows:
+            new_finding.Input_flows.set(input_flows)
         if parsed_vulnerability_ids:
             save_vulnerability_ids(new_finding, parsed_vulnerability_ids)
             # can we avoid this extra save? the cve has already been set above in validated_data. but there are no tests for this
@@ -2120,6 +2158,9 @@ class FindingCreateSerializer(serializers.ModelSerializer):
         if "reporter" not in data:
             request = self.context["request"]
             data["reporter"] = request.user
+
+        if data.get("Input_flows"):
+            validate_input_flows_engagement(data["Input_flows"], data["test"])
 
         if (data.get("active") or data.get("verified")) and data.get(
             "duplicate",

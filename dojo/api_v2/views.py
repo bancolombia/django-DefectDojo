@@ -996,6 +996,7 @@ class FindingViewSet(
             "reviewers",
             "found_by",
             "notes",
+            "Input_flows",
             "risk_acceptance_set",
             "test",
             "tags",
