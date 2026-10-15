@@ -132,7 +132,7 @@ pyarrow==26.0.0
 pycparser==3.11
 pycryptodome==3.24.0
 pycurl==7.48.0
-pydantic==2.14.0
+pydantic==2.14.1
 pydantic_core==2.50.0
 PyGithub==2.10.0
 PyJWT==2.15.1
