@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('dojo', '0289_alter_crossapprovalrequest_status_and_more'),
+        ('dojo', '0290_alter_sla_configuration_critical_and_more'),
     ]
 
     operations = [
