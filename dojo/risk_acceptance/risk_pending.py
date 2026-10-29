@@ -600,7 +600,6 @@ def search_finding_correlated(entry_findings: QuerySet[Finding] | list[Finding],
             return Risk_Acceptance.objects.none()
 
         if isinstance(engagement, int) or isinstance(engagement, Engagement):
-            tags_enabled = GeneralSettings.get_value('ENABLE_TAGS_CORRELATED_FINDINGS')
             queryset = (
                 Risk_Acceptance.objects.filter(
                     engagement=engagement,
@@ -609,8 +608,6 @@ def search_finding_correlated(entry_findings: QuerySet[Finding] | list[Finding],
                 .filter(
                     (Q(accepted_findings__cve__in=ids_vult) |
                     Q(accepted_findings__vuln_id_from_tool__in=ids_from_tool)) &
-                    Q(accepted_findings__tags__name__in=tags_enabled) &
-                    Q(accepted_findings__risk_status="Risk Accepted") &
                     ~Q(accepted_findings__id__in=ids)
                 )
             )
@@ -623,11 +620,14 @@ def search_finding_correlated(entry_findings: QuerySet[Finding] | list[Finding],
 
 def add_finding_correlated(entry_findings, queryset):
     finding_accepted_ids = []
+    tags_enable = GeneralSettings.get_value('ENABLE_TAGS_CORRELATED_FINDINGS')
     for finding in entry_findings:
         risk_acceptance = queryset.filter(
             accepted_findings__cve__in=finding.vulnerability_ids,
             accepted_findings__priority=finding.priority,
             accepted_findings__severity=finding.severity,
+            accepted_findings__tags__name__in=tags_enable,
+            accepted_findings__risk_status="Risk Accepted",
         ).order_by("-created").first()
 
         if risk_acceptance is None:
@@ -635,6 +635,8 @@ def add_finding_correlated(entry_findings, queryset):
                 accepted_findings__vuln_id_from_tool=finding.vuln_id_from_tool,
                 accepted_findings__priority=finding.priority,
                 accepted_findings__severity=finding.severity,
+                accepted_findings__tags__name__in=tags_enable,
+                accepted_findings__risk_status="Risk Accepted",
             ).order_by("-created").first()
         # add finding a risk-acceptance
         if risk_acceptance is not None:
