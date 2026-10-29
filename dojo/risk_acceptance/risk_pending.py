@@ -607,9 +607,10 @@ def search_finding_correlated(entry_findings: QuerySet[Finding] | list[Finding],
                     expiration_date_handled__isnull=True)
                 .prefetch_related("accepted_findings")
                 .filter(
-                    Q(accepted_findings__cve__in=ids_vult) |
-                    Q(accepted_findings__vuln_id_from_tool__in=ids_from_tool) &
+                    (Q(accepted_findings__cve__in=ids_vult) |
+                    Q(accepted_findings__vuln_id_from_tool__in=ids_from_tool)) &
                     Q(accepted_findings__tags__name__in=tags_enabled) &
+                    Q(accepted_findings__risk_status="Risk Accepted") &
                     ~Q(accepted_findings__id__in=ids)
                 )
             )
@@ -622,38 +623,33 @@ def search_finding_correlated(entry_findings: QuerySet[Finding] | list[Finding],
 
 def add_finding_correlated(entry_findings, queryset):
     finding_accepted_ids = []
-    tags_enable = GeneralSettings.get_value('ENABLE_TAGS_CORRELATED_FINDINGS')
     for finding in entry_findings:
-        risk_acceptance_query = None
-        risk_acceptance_query = queryset.filter(
+        risk_acceptance = queryset.filter(
             accepted_findings__cve__in=finding.vulnerability_ids,
             accepted_findings__priority=finding.priority,
             accepted_findings__severity=finding.severity,
-            accepted_findings__tags__name__in=tags_enable,
-            accepted_findings__risk_status="Risk Accepted"
-            ).order_by("-created")
-        if not risk_acceptance_query.exists():
-            risk_acceptance_query = queryset.filter(
+        ).order_by("-created").first()
+
+        if risk_acceptance is None:
+            risk_acceptance = queryset.filter(
                 accepted_findings__vuln_id_from_tool=finding.vuln_id_from_tool,
                 accepted_findings__priority=finding.priority,
                 accepted_findings__severity=finding.severity,
-                accepted_findings__tags__name__in=tags_enable,
-                accepted_findings__risk_status="Risk Accepted"
-                ).order_by("-created")
+            ).order_by("-created").first()
         # add finding a risk-acceptance
-        if risk_acceptance_query:
+        if risk_acceptance is not None:
             logger.debug(
                 "CORRELATED_FINDING: adding %i finding to risk acceptance %i",
-                finding.id, risk_acceptance_query.first().id)
+                finding.id, risk_acceptance.id)
             finding.add_note(
                 note_text=(
                     f"This finding :{finding.id} "
                     f"is correlated whit cve {finding.vulnerability_ids} "
-                    f"or vuln_id_from_tool {finding.vuln_id_from_tool}"),
+                    f"or vuln_id_from_tool {finding.vuln_id_from_tool} with risk acceptance {risk_acceptance.id}"),
                 author=get_user(settings.SYSTEM_USER))
             finding_accepted_ids.append(finding.id)
             ra_helper.add_findings_to_risk_acceptance(
                 user=None,
-                risk_acceptance=risk_acceptance_query.first(),
+                risk_acceptance=risk_acceptance,
                 findings=[finding])
     return finding_accepted_ids
