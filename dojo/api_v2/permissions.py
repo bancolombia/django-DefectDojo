@@ -1477,7 +1477,7 @@ class UserHasInputFlowPermission(permissions.BasePermission):
     path_input_flow = re.compile(r"^/api/v2/input_flow/\d+/$")
     path_input_url = re.compile(r"^/api/v2/input_url/\d+/$")
     path_input_scenario = re.compile(r"^/api/v2/input_scenario/\d+/$")
-    path_add_child = re.compile(r"^/api/v2/(input_flow/\d+/add_url|input_url/\d+/add_scenario)/$")
+    path_add_child = re.compile(r"^/api/v2/input_flow/\d+/add_url/$")
 
     def has_permission(self, request, view):
         if UserHasInputFlowPermission.path_input_flow_post.match(request.path):

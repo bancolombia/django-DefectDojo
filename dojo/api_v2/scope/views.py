@@ -283,6 +283,8 @@ class InputFlowViewSet(
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         instance = serializer.save()
+        # Drop the stale urls__scenarios prefetch so the response reflects created/deleted rows
+        instance._prefetched_objects_cache = {}
 
         return http_response.ok(
             message=f"Se actualizó el flujo {instance.flowName} correctamente.",
@@ -373,20 +375,6 @@ class InputURLViewSet(
         kwargs["partial"] = True
         return self.update(request, *args, **kwargs)
 
-    @action(detail=True, methods=["post"], url_path="add_scenario")
-    def add_scenario(self, request, pk=None):
-        url_instance = self.get_object()
-
-        serializer = InputScenarioSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        instance = serializer.save(url=url_instance)
-
-        return http_response.ok(
-            message=f"Se agregó un escenario a la URL {url_instance.url} correctamente.",
-            data=InputScenarioSerializer(instance).data
-        )
-
 @extend_schema(tags=["scope"])
 class InputScenarioViewSet(
     prefetch.PrefetchListMixin,
@@ -400,6 +388,8 @@ class InputScenarioViewSet(
     ).order_by("id")
 
     serializer_class = InputScenarioSerializer
+    # Scenarios are created and deleted through the flow PUT, which syncs each URL's scenario list
+    http_method_names = ["get", "put", "patch", "head", "options"]
 
     filter_backends = (DjangoFilterBackend,)
     parser_classes = (MultiPartParser, FormParser, JSONParser)

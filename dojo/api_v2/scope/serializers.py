@@ -1,6 +1,9 @@
 import logging
 from django.db import transaction
 from rest_framework import serializers
+from rest_framework.exceptions import PermissionDenied
+from dojo.authorization.authorization import user_has_permission
+from dojo.authorization.roles_permissions import Permissions
 from dojo.models import Engagement, Product, Dojo_User
 from dojo.api_v2.scope.models import InputSecret, InputFile, Input, InputEngagement, InputFlow, InputScenario, InputURL
 from dojo.utils import dojo_crypto_encrypt, prepare_for_view
@@ -387,7 +390,8 @@ class InputFlowSerializer(serializers.ModelSerializer):
 
             if urls_data is not None:
                 for url_data in urls_data:
-                    scenarios_data = url_data.pop("scenarios", [])
+                    # None means the key was omitted: leave the URL's scenarios untouched
+                    scenarios_data = url_data.pop("scenarios", None)
                     url_id = url_data.pop("id", None)
 
                     if url_id:
@@ -399,12 +403,21 @@ class InputFlowSerializer(serializers.ModelSerializer):
 
                         url_instance.url = url_data.get("url", url_instance.url)
                         url_instance.save()
+
+                        # The sent list is the full state: scenarios missing from it are deleted
+                        if scenarios_data is not None:
+                            keep_ids = [s["id"] for s in scenarios_data if s.get("id")]
+                            removed = url_instance.scenarios.exclude(id__in=keep_ids)
+                            if removed.exists():
+                                if not user_has_permission(user, instance, Permissions.Input_Flow_Delete):
+                                    raise PermissionDenied("You do not have permission to delete scenarios.")
+                                removed.delete()
                     else:
                         url_instance = InputURL.objects.create(flow=instance, **url_data)
                         if not scenarios_data:
                             create_example_scenario(url_instance, user)
 
-                    for scenario_data in scenarios_data:
+                    for scenario_data in scenarios_data or []:
                         scenario_id = scenario_data.pop("id", None)
 
                         if scenario_id:
