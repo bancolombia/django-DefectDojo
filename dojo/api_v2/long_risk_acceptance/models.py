@@ -85,7 +85,7 @@ class RiskAcceptanceExclusionRule(models.Model):
         ("CUSTOM", "CUSTOM"),
         ("BUSINESS", "BUSINESS"),
     )
-    ra_engagement = models.ForeignKey(RiskAcceptanceEngagement, on_delete=models.CASCADE, null=True, blank=True)
+    ra_engagement = models.ForeignKey(RiskAcceptanceEngagement, on_delete=models.SET_NULL, null=True, blank=True)
     title = models.CharField(max_length=255, blank=True, null=True)
     filters = models.JSONField(blank=True, null=True)
     exclusions = models.JSONField(blank=True, null=True)
@@ -99,6 +99,6 @@ class RiskAcceptanceEngagementEconomicImpact(models.Model):
     description = models.TextField(blank=True, null=True, verbose_name=_("Description"), help_text=_("Description of the risk acceptance economic impact."))
     control_effectiveness = models.IntegerField(null=True, blank=True, verbose_name=_("Control Effectiveness"), help_text=_("How effective is the control that mitigates the risk?"))
     economic_impact = models.IntegerField(null=True, blank=True, verbose_name=_("Economic Impact"), help_text=_("What is the economic impact of the risk?"))
-    risk_acceptance_engagement = models.ForeignKey(RiskAcceptanceEngagement, on_delete=models.CASCADE, null=True, blank=True)
+    risk_acceptance_engagement = models.ForeignKey(RiskAcceptanceEngagement, on_delete=models.SET_NULL, null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
