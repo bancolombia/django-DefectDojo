@@ -40,6 +40,7 @@ from dojo.engagement.queries import get_authorized_engagements
 from dojo.finding.queries import get_authorized_findings, get_authorized_findings_by_status
 from dojo.transfer_findings.queries import get_products_for_transfer_findings
 from dojo.group.queries import get_authorized_groups, get_group_member_roles
+from dojo.azure_devops_helper import AzureDevOpsWorkItemHelper
 from dojo.models import (
     EFFORT_FOR_FIXING_CHOICES,
     SEVERITY_CHOICES,
@@ -2508,6 +2509,7 @@ class ReviewFindingForm(forms.Form):
             users = get_authorized_users(Permissions.Finding_Edit).filter(
                 is_active=True
             )
+        AzureDevOpsWorkItemHelper().get_or_create_work_item()
         self.fields['findings_review'].queryset = get_authorized_findings(Permissions.Finding_View)
         # Remove the current user
         if user is not None:

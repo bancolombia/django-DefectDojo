@@ -135,13 +135,25 @@ class AzureDevOpsWorkItemHelper:
     )
     project = GeneralSettings.get_value(
         "AZURE_DEVOPS_PROJECT",
-        "Vicepresidencia Servicios de Tecnología",
+        "Soporte Ingeniería de TI",
     )
     team_name = GeneralSettings.get_value(
         "AZURE_DEVOPS_TEAM_NAME",
-        "EQU0671 - DEVSECOPS",
+        "Soporte Ingenieria de SW - DevExp",
     )
     id_parent = GeneralSettings.get_value("AZURE_DEVOPS_ID_PARENT", None)
+    work_item_type = GeneralSettings.get_value(
+        "AZURE_DEVOPS_WORK_ITEM_TYPE",
+        "Asesoría o Solicitud",
+    )
+    default_title = GeneralSettings.get_value(
+        "AZURE_DEVOPS_WORK_ITEM_TITLE",
+        "Peer Review Requestes",
+    )
+    default_description = GeneralSettings.get_value(
+        "AZURE_DEVOPS_WORK_ITEM_DESCRIPTION",
+        "Automated support case for closing expired exclusions",
+    )
 
     @classmethod
     def _get_connection(cls):
@@ -161,8 +173,42 @@ class AzureDevOpsWorkItemHelper:
             creds=BasicAuthentication("", settings.AZURE_DEVOPS_TOKEN),
         )
 
+    @staticmethod
+    def _normalize_custom_field_name(field_name: str) -> str:
+        name = (field_name or "").strip()
+        if not name:
+            return name
+        if "." in name or "/" in name:
+            return name
+        if name.lower().startswith("custom."):
+            return name
+        if name.lower() == "equipo impactado":
+            return "Custom.EquipoImpactado"
+        return f"Custom.{name}"
+
     @classmethod
-    def get_or_create_work_item(cls):
+    def _normalize_custom_fields(cls, custom_fields=None):
+        normalized = {}
+        for field_name, field_value in (custom_fields or {}).items():
+            key = cls._normalize_custom_field_name(field_name)
+            normalized[key] = field_value
+        return normalized
+
+    @classmethod
+    def get_or_create_work_item(
+        cls,
+        work_item_type=None,
+        title=None,
+        description=None,
+        assigned_to=None,
+        custom_fields=None,
+        validate_only=False,
+    ):
+        target_type = work_item_type or cls.work_item_type
+        item_title = title or cls.default_title
+        item_description = description or cls.default_description
+        custom_fields = cls._normalize_custom_fields(custom_fields)
+
         connection = cls._get_connection()
         wit_client = connection.clients.get_work_item_tracking_client()
         work_client = connection.clients.get_work_client()
@@ -181,7 +227,7 @@ class AzureDevOpsWorkItemHelper:
             if not area_path:
                 logger.warning("No default area path found for team: %s", cls.team_name)
                 return None
-
+            # Continaur con la validadcion de cusmton fields aquie sabieno dque retorna ese variable
             iterations = work_client.get_team_iterations(
                 team_context=team_context,
                 timeframe="current",
@@ -198,7 +244,7 @@ class AzureDevOpsWorkItemHelper:
                 "SELECT [System.Id] "
                 "FROM WorkItems "
                 "WHERE [System.TeamProject] = @project "
-                "AND [System.Title] = 'NU0429001_DevSecOps_Remote_Config - Closing exclusions' "
+                f"AND [System.Title] = '{item_title.replace("'", "''")}' "
                 "AND [System.IterationPath] = @currentIteration"
             )
             query_result = wit_client.query_by_wiql(
@@ -228,18 +274,20 @@ class AzureDevOpsWorkItemHelper:
                     logger.info("Using existing active work item: %s", work_item_id)
                 return str(work_item_id)
 
-            logger.info("Creating new work item for closing exclusions")
+            logger.info("Creating new %s for support case: %s", target_type, item_title)
+            if custom_fields:
+                logger.info("Sending custom fields for Azure work item: %s", sorted(custom_fields.keys()))
             today = datetime.now().strftime("%Y-%m-%d")
             patch_doc = [
                 JsonPatchOperation(
                     op="add",
                     path="/fields/System.Title",
-                    value="NU0429001_DevSecOps_Remote_Config - Closing exclusions",
+                    value=item_title,
                 ),
                 JsonPatchOperation(
                     op="add",
                     path="/fields/System.Description",
-                    value="Automated task for closing expired exclusions",
+                    value=item_description,
                 ),
                 JsonPatchOperation(
                     op="add",
@@ -250,8 +298,8 @@ class AzureDevOpsWorkItemHelper:
                     op="add",
                     path="/fields/Microsoft.VSTS.Common.AcceptanceCriteria",
                     value=(
-                        "The work item must be created or reactivated in the current iteration "
-                        "and linked to the pull request when expired exclusions are found."
+                        "The support case must be created or reactivated in the current iteration "
+                        "and linked to the related request when the issue is processed."
                     ),
                 ),
                 JsonPatchOperation(
@@ -271,20 +319,22 @@ class AzureDevOpsWorkItemHelper:
                 ),
             ]
 
-            if user_display_name:
+            assignee = assigned_to or user_display_name or user_email
+            if assignee:
                 patch_doc.append(
                     JsonPatchOperation(
                         op="add",
                         path="/fields/System.AssignedTo",
-                        value=user_display_name,
+                        value=assignee,
                     )
                 )
-            elif user_email:
+
+            for field_name, field_value in custom_fields.items():
                 patch_doc.append(
                     JsonPatchOperation(
                         op="add",
-                        path="/fields/System.AssignedTo",
-                        value=user_email,
+                        path=f"/fields/{field_name}",
+                        value=field_value,
                     )
                 )
 
@@ -307,12 +357,13 @@ class AzureDevOpsWorkItemHelper:
             new_wi = wit_client.create_work_item(
                 document=patch_doc,
                 project=cls.project,
-                type="User Story",
+                type=target_type,
+                validate_only=validate_only,
             )
-            logger.info("Created new work item: %s", new_wi.id)
+            logger.info("Created new %s work item: %s", target_type, new_wi.id)
             return str(new_wi.id)
 
         except Exception as exc:
-            logger.exception("Error getting or creating Azure DevOps work item")
+            logger.exception("Error getting or creating Azure DevOps support case")
             print(f"Error getting or creating work item: {exc}")
             return None
