@@ -133,7 +133,7 @@ pycparser==3.12
 pycryptodome==4.2.0
 pycurl==7.49.0
 pydantic==2.14.0
-pydantic_core==2.50.0
+pydantic_core==2.50.2
 PyGithub==2.10.0
 PyJWT==2.15.1
 PyNaCl==1.6.2
