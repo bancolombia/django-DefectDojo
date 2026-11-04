@@ -1,0 +1,2 @@
+CVE ID;Severity;Packages;Package Version;Description;CVSS;Fix Status;Custom Tag;Custom Id
+CVE-2025-1234;high;openssl;3.0.0;Test vulnerability from Cortex XDR;8.1;fixed;"Cortex,Hosts";
