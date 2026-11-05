@@ -161,7 +161,7 @@ social-auth-app-django==5.4.2
 social-auth-core==5.0.2
 soupsieve==3.0.4
 SQLAlchemy==2.1.6
-sqlparse==0.6.0
+sqlparse==0.6.1
 stream-inflate==0.0.43
 stream-unzip==0.0.101
 tinycss2==1.4.0
