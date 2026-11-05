@@ -1,4 +1,5 @@
 import logging
+from functools import cached_property
 from itertools import chain
 
 from django.core.cache import cache
@@ -71,6 +72,12 @@ class DefaultReImporter(BaseImporter, DefaultReImporterOptions):
             import_type=Test_Import.REIMPORT_TYPE,
             **kwargs,
         )
+
+    @cached_property
+    def next_sprint_start_date(self):
+        if azure_devops_sprint_sla_start_date_enabled(self.test):
+            return cache.get("azure_devops_next_sprint_start_date")
+        return None
 
     def process_scan(
         self,
@@ -176,14 +183,6 @@ class DefaultReImporter(BaseImporter, DefaultReImporterOptions):
         at import time
         """
         self.deduplication_algorithm = self.determine_deduplication_algorithm()
-        self.enabled_azure_devops_sprint_sla_start_date = (
-            azure_devops_sprint_sla_start_date_enabled(self.test)
-        )
-        self.next_sprint_start_date = None
-        if self.enabled_azure_devops_sprint_sla_start_date:
-            self.next_sprint_start_date = cache.get(
-                "azure_devops_next_sprint_start_date",
-            )
         # Only process findings with the same service value (or None)
         # Even though the service values is used in the hash_code calculation,
         # we need to make sure there are no side effects such as closing findings
@@ -588,7 +587,7 @@ class DefaultReImporter(BaseImporter, DefaultReImporterOptions):
             # restart the sla start date to the current date, finding.save() will set new sla_expiration_date
             existing_finding.sla_start_date = self.now
 
-        if self.enabled_azure_devops_sprint_sla_start_date and self.next_sprint_start_date:
+        if self.next_sprint_start_date:
             existing_finding.sla_start_date = self.next_sprint_start_date
 
         existing_finding.save(dedupe_option=False)
