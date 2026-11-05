@@ -158,8 +158,9 @@ def revert_cross_approval_exclusion(exclusion, exclude_request_id=None):
         if not finding.is_mitigated:
             finding.active = True
         finding.risk_status = "Risk Active"
+        finding.set_sla_expiration_date()
         finding.notes.add(note)
-        finding.save(update_fields=["active", "risk_status"])
+        finding.save(update_fields=["active", "risk_status", "sla_expiration_date"])
 
 
 def expire_cross_approval_exclusion(exclusion, user):
