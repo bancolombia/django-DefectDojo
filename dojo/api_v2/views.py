@@ -1232,10 +1232,10 @@ class FindingViewSet(
                 generic_fields, column_order = configure_headers_csv(finding, excludes_list, allowed_attributes, fields)
                 writer.writerow(fields)
                 first_row = False
-            else:
-                fields = []
-                configure_values_csv(finding, excludes_list, allowed_foreign_keys, allowed_attributes, fields, EXCEL_CHAR_LIMIT, generic_fields, column_order)
-                writer.writerow(fields)
+
+            fields = []
+            configure_values_csv(finding, excludes_list, allowed_foreign_keys, allowed_attributes, fields, EXCEL_CHAR_LIMIT, generic_fields, column_order)
+            writer.writerow(fields)
 
         return response
 
