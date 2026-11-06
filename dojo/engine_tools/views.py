@@ -89,7 +89,7 @@ def create_finding_exclusion(request: HttpRequest) -> HttpResponse:
             messages.add_message(
                 request,
                 messages.INFO,
-                f"There is already a request in status '{duplicate_finding_exclusions.status}' for this CVE, This will be whitelisted.",
+                f"There is already a request in status '{duplicate_finding_exclusions.status}' for this CVE, This will be {duplicate_finding_exclusions.type}",
                 extra_tags="alert-success")
             relative_url = reverse("finding_exclusion", args=[str(duplicate_finding_exclusions.pk)])
             engagement_ids = duplicate_finding_exclusions.engagements.values_list('id', flat=True)
