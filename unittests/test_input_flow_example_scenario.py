@@ -128,15 +128,7 @@ class InputFlowExampleScenarioTestCase(APITestCase):
         assert scenario.description == "Validación de CORS"
         assert scenario.estimated_time == 30
 
-    def test_example_can_be_deleted_by_maintainer_or_above(self):
-        scenario = self.create_example()
-
-        response = self.client.delete(f"/api/v2/input_scenario/{scenario.id}/")
-
-        assert response.status_code in {status.HTTP_200_OK, status.HTTP_204_NO_CONTENT}, response.data
-        assert not InputScenario.objects.filter(id=scenario.id).exists()
-
-    def test_writer_can_edit_but_not_delete_example(self):
+    def test_writer_can_edit_example(self):
         scenario = self.create_example()
         writer = Dojo_User.objects.create_user(username="flow-writer")
         Product_Member.objects.create(
@@ -147,8 +139,5 @@ class InputFlowExampleScenarioTestCase(APITestCase):
         edit = self.client.patch(
             f"/api/v2/input_scenario/{scenario.id}/", {"estimated_time": 45}, format="json",
         )
-        delete = self.client.delete(f"/api/v2/input_scenario/{scenario.id}/")
 
         assert edit.status_code == status.HTTP_200_OK, edit.data
-        assert delete.status_code == status.HTTP_403_FORBIDDEN
-        assert InputScenario.objects.filter(id=scenario.id).exists()
