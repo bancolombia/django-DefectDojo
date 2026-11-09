@@ -59,6 +59,8 @@ class TwistlockCSVParser:
         data_ami_id = row.get("Ami Id", "")
         data_labels = row.get("Labels", "")
         data_collections = row.get("Collections", "")
+        data_deployment = row.get("Deployment", "")
+        data_container_name = row.get("Container Name", "")
 
         # Build container/image metadata for impact field (Item 3)
         impact_parts = []
@@ -100,6 +102,10 @@ class TwistlockCSVParser:
             impact_parts.append(f"Binaries: {binaries}")
         if custom_labels:
             impact_parts.append(f"Custom Labels: {custom_labels}")
+        if data_deployment:
+            impact_parts.append(f"Deployment: {data_deployment}")
+        if data_container_name:
+            impact_parts.append(f"Container Name: {data_container_name}")
 
         impact_text = "\n".join(impact_parts) if impact_parts else data_severity
 
@@ -177,6 +183,14 @@ class TwistlockCSVParser:
             ),
         )
         finding.unsaved_tags = self.get_tags(row)
+        if data_deployment or data_container_name:
+            from django.utils.html import format_html
+
+            finding.description += format_html(
+                "<p><strong>Deployment:</strong> {}</p><p><strong>Container Name:</strong> {}</p>",
+                data_deployment,
+                data_container_name,
+            )
         finding.description = finding.description.strip()
         if data_vulnerability_id:
             finding.unsaved_vulnerability_ids = [data_vulnerability_id]
