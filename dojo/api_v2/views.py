@@ -59,6 +59,9 @@ from dojo.transfer_findings.serializers import (
     TransferFindingBasicSerializer,
     TransferFindingFindingCreateSerializer,)
 from dojo.finding.serializer import IARecommendationSerializer, FindingBulkUpdateSLAStartDateSerializer
+from dojo.finding.serializer import PrismaEngagementIdentityMigrationSerializer
+from dojo.finding.prisma_images_identity import search_engine_base_url
+from dojo.tasks import bulk_migrate_prisma_ids_task
 from dojo.risk_acceptance.serializers import RiskAcceptanceEmailSerializer
 from dojo.authorization.roles_permissions import Permissions
 from dojo.authorization.authorization import role_has_global_permission, user_has_permission 
@@ -1179,6 +1182,27 @@ class FindingViewSet(
             logger.debug(f"BULK_CLOSE: finish process Success {success}")
             logger.debug(f"BULK_CLOSE: finish process Error {errors}")
             return http_response.ok(data={"success": success, "errors": errors})
+
+    @extend_schema(methods=["POST"], request=PrismaEngagementIdentityMigrationSerializer,
+                   responses={status.HTTP_202_ACCEPTED: OpenApiTypes.OBJECT})
+    @action(detail=False, methods=["post"], url_path="bulk_migrate_prisma_ids")
+    def bulk_migrate_prisma_ids(self, request):
+        payload = PrismaEngagementIdentityMigrationSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        options = payload.validated_data
+        try:
+            search_engine_base_url()
+        except ValueError as error:
+            return Response({"detail": str(error)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        task = bulk_migrate_prisma_ids_task.apply_async(args=(
+            request.user.pk, options["dry_run"], options["after_engagement_id"], options["limit"],
+            options.get("engagement_ids")))
+        logger.info("Prisma images identity migration queued user=%s dry_run=%s task_id=%s",
+                    request.user.pk, options["dry_run"], task.id)
+        return Response({"task_id": task.id, "status": "queued", "dry_run": options["dry_run"],
+                         "message": "Prisma images identity migration is running in the background. "
+                                    "Follow its progress in the application logs."},
+                        status=status.HTTP_202_ACCEPTED)
 
     @extend_schema(
         methods=["GET"],
