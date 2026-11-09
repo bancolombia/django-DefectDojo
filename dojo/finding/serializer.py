@@ -1,6 +1,14 @@
 from rest_framework import serializers
 
 
+class PrismaEngagementIdentityMigrationSerializer(serializers.Serializer):
+    engagement_ids = serializers.ListField(child=serializers.IntegerField(min_value=1), required=False,
+                                           allow_empty=False, max_length=100)
+    after_engagement_id = serializers.IntegerField(min_value=0, default=0)
+    limit = serializers.IntegerField(min_value=1, max_value=50, default=10)
+    dry_run = serializers.BooleanField(default=True)
+
+
 class IARecommendationSerializer(serializers.Serializer):
     status = serializers.CharField(required=False)
     data = serializers.JSONField()
