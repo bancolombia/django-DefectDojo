@@ -89,18 +89,32 @@ def description_fields(document):
     return fields
 
 
-def set_description_field(document, name, value):
+def find_field_paragraph(document, name):
     labels = [label for label in document.find_all("strong")
               if label.get_text(strip=True).casefold() == (name + ":").casefold()]
     if len(labels) > 1 or (labels and labels[0].parent.name != "p"):
         raise ValueError(f"Ambiguous {name} field in description.")
+    return labels[0].parent if labels else None
+
+
+def set_description_field(document, name, value, after=None):
+    existing = find_field_paragraph(document, name)
     paragraph = document.new_tag("p")
     label = document.new_tag("strong")
     label.string = name + ":"
     paragraph.append(label)
     paragraph.append(" " + value)
-    if labels:
-        labels[0].parent.replace_with(paragraph)
+    if after is None:
+        if existing is not None:
+            existing.replace_with(paragraph)
+        else:
+            document.append(paragraph)
+        return
+    if existing is not None:
+        existing.decompose()
+    anchor = find_field_paragraph(document, after)
+    if anchor is not None:
+        anchor.insert_after(paragraph)
     else:
         document.append(paragraph)
 
@@ -160,8 +174,8 @@ def prepare_finding_identity(finding, runtime_images, deployments_by_image):
     if len(encoded) > 3000:
         raise ValueError("New unique_id_from_tool exceeds the 3000-character field limit.")
     set_description_field(document, "Custom Id", identity)
-    set_description_field(document, "Deployment", ",".join(pair[0] for pair in pairs))
-    set_description_field(document, "Container Name", ",".join(pair[1] for pair in pairs))
+    set_description_field(document, "Deployment", ",".join(pair[0] for pair in pairs), after="Namespaces")
+    set_description_field(document, "Container Name", ",".join(pair[1] for pair in pairs), after="Deployment")
     return {"unique_id_from_tool": encoded, "description": str(document), "deployment_count": len(pairs)}
 
 

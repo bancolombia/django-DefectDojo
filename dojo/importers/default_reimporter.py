@@ -153,9 +153,10 @@ class DefaultReImporter(BaseImporter, DefaultReImporterOptions):
         # Update the test progress to reflect that the import has completed
         logger.debug("REIMPORT_SCAN: Updating Test progress")
         self.update_test_progress()
+        include_untouched_in_priority = not self.test.tags.filter(name="ciclo_escaneo").exists()
         findings_for_priority_update = chain(
             new_findings,
-            untouched_findings,
+            untouched_findings if include_untouched_in_priority else [],
         )
         finding_ids = [finding.id for finding in findings_for_priority_update]
         BaseImporter.update_priority_epss_kev.apply_async(args=(finding_ids, self.test.id))

@@ -69,7 +69,8 @@ class TwistlockCSVParser:
         registry = row.get("Registry", "")
         repository = row.get("Repository", "")
         tag = row.get("Tag", "")
-        image_id = row.get("Id", "")
+        digest = row.get("Digest", "")
+        image_id = digest.split("@", 1)[1] if "@" in digest else row.get("Id", "")
         distro = row.get("Distro", "")
 
         if registry:
@@ -137,6 +138,8 @@ class TwistlockCSVParser:
                 data_tag,
                 data_cluster,
                 data_namespaces,
+                data_deployment,
+                data_container_name,
                 data_package_name,
                 data_package_license,
                 data_package_version,
@@ -183,14 +186,6 @@ class TwistlockCSVParser:
             ),
         )
         finding.unsaved_tags = self.get_tags(row)
-        if data_deployment or data_container_name:
-            from django.utils.html import format_html
-
-            finding.description += format_html(
-                "<p><strong>Deployment:</strong> {}</p><p><strong>Container Name:</strong> {}</p>",
-                data_deployment,
-                data_container_name,
-            )
         finding.description = finding.description.strip()
         if data_vulnerability_id:
             finding.unsaved_vulnerability_ids = [data_vulnerability_id]
@@ -225,6 +220,8 @@ class TwistlockCSVParser:
         data_tag,
         data_cluster,
         data_namespaces,
+        data_deployment,
+        data_container_name,
         data_package_name,
         data_package_license,
         data_package_version,
@@ -251,6 +248,15 @@ class TwistlockCSVParser:
         data_ami_id,
         data_labels,
     ):
+        from django.utils.html import format_html
+
+        deployment_html = ""
+        if data_deployment or data_container_name:
+            deployment_html = format_html(
+                "<p><strong>Deployment:</strong> {}</p><p><strong>Container Name:</strong> {}</p>",
+                data_deployment,
+                data_container_name,
+            )
         description = (
             "<p><strong>Description:</strong> "
             + data_description
@@ -262,7 +268,9 @@ class TwistlockCSVParser:
             + str(data_cluster)
             + "</p><p><strong>Namespaces:</strong> "
             + str(data_namespaces)
-            + "</p><p><strong>Vulnerable Package:</strong> "
+            + "</p>"
+            + deployment_html
+            + "<p><strong>Vulnerable Package:</strong> "
             + str(data_package_name)
             + "</p><p><strong>Vulnerable Package License:</strong> "
             + str(data_package_license)
