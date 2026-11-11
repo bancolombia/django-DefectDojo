@@ -1440,7 +1440,7 @@ class FindingViewSet(
                 )
                 if serializer.is_valid():
                     finding.ia_recommendation = serializer.validated_data
-                    finding.save()
+                    finding.save(update_fields=["ia_recommendation"])
                     return http_response.ok(
                         IARecommendationSerializer(finding.ia_recommendation).data)
                 else:
@@ -1459,7 +1459,7 @@ class FindingViewSet(
                             data.get("like_status"))
 
                     finding.ia_recommendation = ia_recommendation_dict
-                    finding.save()
+                    finding.save(update_fields=["ia_recommendation"])
                     return http_response.ok(IARecommendationSerializer(finding.ia_recommendation).data)
                 else:
                     return http_response.error(serializer.errors)
