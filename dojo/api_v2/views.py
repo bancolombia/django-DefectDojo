@@ -60,7 +60,7 @@ from dojo.transfer_findings.serializers import (
     TransferFindingFindingCreateSerializer,)
 from dojo.finding.serializer import IARecommendationSerializer, FindingBulkUpdateSLAStartDateSerializer
 from dojo.finding.serializer import PrismaEngagementIdentityMigrationSerializer
-from dojo.finding.prisma_images_identity import search_engine_base_url
+from dojo.finding.prisma_images_identity import PrismaIdentityMigrationType, search_engine_base_url
 from dojo.tasks import bulk_migrate_prisma_ids_task
 from dojo.risk_acceptance.serializers import RiskAcceptanceEmailSerializer
 from dojo.authorization.roles_permissions import Permissions
@@ -1185,21 +1185,24 @@ class FindingViewSet(
 
     @extend_schema(methods=["POST"], request=PrismaEngagementIdentityMigrationSerializer,
                    responses={status.HTTP_202_ACCEPTED: OpenApiTypes.OBJECT})
-    @action(detail=False, methods=["post"], url_path="bulk_migrate_prisma_ids")
+    @action(detail=False, methods=["post"], url_path="bulk_migrate_prisma_ids", permission_classes=[permissions.IsSuperUser])
     def bulk_migrate_prisma_ids(self, request):
+        """Select migration_type ID for cloud_id or DeploymentContainerName (default) for runtime identity."""
         payload = PrismaEngagementIdentityMigrationSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
         options = payload.validated_data
-        try:
-            search_engine_base_url()
-        except ValueError as error:
-            return Response({"detail": str(error)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        if options["migration_type"] == PrismaIdentityMigrationType.DEPLOYMENT_CONTAINER_NAME:
+            try:
+                search_engine_base_url()
+            except ValueError as error:
+                return Response({"detail": str(error)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         task = bulk_migrate_prisma_ids_task.apply_async(args=(
             request.user.pk, options["dry_run"], options["after_engagement_id"], options["limit"],
-            options.get("engagement_ids")))
-        logger.info("Prisma images identity migration queued user=%s dry_run=%s task_id=%s",
-                    request.user.pk, options["dry_run"], task.id)
+            options.get("engagement_ids"), options["migration_type"]))
+        logger.info("Prisma images identity migration queued user=%s dry_run=%s task_id=%s migration_type=%s",
+                    request.user.pk, options["dry_run"], task.id, options["migration_type"])
         return Response({"task_id": task.id, "status": "queued", "dry_run": options["dry_run"],
+                         "migration_type": options["migration_type"],
                          "message": "Prisma images identity migration is running in the background. "
                                     "Follow its progress in the application logs."},
                         status=status.HTTP_202_ACCEPTED)

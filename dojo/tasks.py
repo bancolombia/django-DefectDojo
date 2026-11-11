@@ -17,7 +17,7 @@ from dojo.notifications.helper import create_notification
 from dojo.utils import calculate_grade, sla_compute_and_notify
 from dojo.validators import resolve_persisted_tags
 from dojo.azure_devops_helper import AzureDevOpsSprintHelper
-from dojo.finding.prisma_images_identity import run_bulk_migration
+from dojo.finding.prisma_images_identity import PrismaIdentityMigrationType, run_bulk_migration
 
 logger = get_task_logger(__name__)
 deduplicationLogger = logging.getLogger("dojo.specific-loggers.deduplication")
@@ -229,10 +229,11 @@ def clear_sessions(*args, **kwargs):
 
 
 @app.task
-def bulk_migrate_prisma_ids_task(user_id, dry_run, after_engagement_id=0, batch_size=10, engagement_ids=None):
+def bulk_migrate_prisma_ids_task(user_id, dry_run, after_engagement_id=0, batch_size=10, engagement_ids=None,
+                                migration_type=PrismaIdentityMigrationType.DEPLOYMENT_CONTAINER_NAME):
     user = User.objects.get(pk=user_id)
     return run_bulk_migration(user, dry_run, after_engagement_id=after_engagement_id,
-                              batch_size=batch_size, engagement_ids=engagement_ids)
+                              batch_size=batch_size, engagement_ids=engagement_ids, migration_type=migration_type)
 
 
 def _get_prisma_scope_tag(finding: Finding) -> str | None:

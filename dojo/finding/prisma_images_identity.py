@@ -8,12 +8,18 @@ import requests
 from bs4 import BeautifulSoup
 from django.conf import settings
 from django.db import transaction
+from django.db.models import TextChoices
 
 from dojo.authorization.roles_permissions import Permissions
 from dojo.finding.queries import get_authorized_findings
 from dojo.models import Engagement, Finding
 
 logger = logging.getLogger(__name__)
+
+
+class PrismaIdentityMigrationType(TextChoices):
+    ID = "ID", "Cloud ID"
+    DEPLOYMENT_CONTAINER_NAME = "DeploymentContainerName", "Deployment and container name"
 
 
 class EngineLookupError(Exception):
@@ -119,6 +125,21 @@ def set_description_field(document, name, value, after=None):
         document.append(paragraph)
 
 
+def normalize_packages(packages):
+    return ",".join(sorted({package.strip() for package in packages.split(",") if package.strip()}))
+
+
+def normalize_suffix_packages(suffix):
+    """Sort the Packages field of "CVE ID,Severity,Packages,Package Version,CVSS,Fix Status".
+
+    Packages may contain commas, so the fixed fields are split from both ends.
+    """
+    cve_id, severity, rest = suffix.split(",", 2)
+    packages, version, cvss, fix_status = rest.rsplit(",", 3)
+    packages = normalize_packages(packages)
+    return ",".join([cve_id, severity, packages, version, cvss, fix_status]), packages
+
+
 def select_deployment_pairs(image, runtime_images, deployments_by_image):
     if image in runtime_images:
         return sorted(set(deployments_by_image.get(image, [])))
@@ -132,7 +153,24 @@ def select_deployment_pairs(image, runtime_images, deployments_by_image):
     return list(next(iter(pair_sets)))
 
 
-def prepare_finding_identity(finding, runtime_images, deployments_by_image):
+def update_impact_deployment_fields(impact, pairs):
+    lines = (impact or "").splitlines(keepends=True)
+    text = "".join(line for line in lines
+                   if ":" not in line
+                   or line.partition(":")[0].strip().casefold() not in {"deployment", "container name"})
+    for name, index in (("Deployment", 0), ("Container Name", 1)):
+        value = ",".join(pair[index] for pair in pairs)
+        if value:
+            if text and not text.endswith(("\n", "\r")):
+                text += "\n"
+            text += f"{name}: {value}"
+    return text
+
+
+def prepare_finding_identity(finding, runtime_images, deployments_by_image,
+                             migration_type=PrismaIdentityMigrationType.DEPLOYMENT_CONTAINER_NAME):
+    if migration_type not in PrismaIdentityMigrationType.values:
+        raise ValueError(f"Unsupported migration type: {migration_type}")
     document = BeautifulSoup(finding.description or "", "html.parser")
     fields = description_fields(document)
     impact = dict(line.partition(":")[::2] for line in (finding.impact or "").splitlines() if ":" in line)
@@ -167,36 +205,54 @@ def prepare_finding_identity(finding, runtime_images, deployments_by_image):
     suffix = decoded[len(matching_prefix):]
     if suffix.count(",") < 5:
         raise ValueError("Existing custom ID does not contain all six vulnerability fields.")
-    pairs = select_deployment_pairs(registry + "/" + repository + ":" + tag, runtime_images, deployments_by_image)
-    pair_values = [value for pair in pairs for value in pair] or ["", ""]
-    identity = prefix + ",".join(pair_values) + "," + suffix
+    suffix, packages = normalize_suffix_packages(suffix)
+    pairs = []
+    if migration_type == PrismaIdentityMigrationType.ID:
+        if not cloud_id:
+            raise ValueError("Cloud Id or Image ID is required for ID migration.")
+        identity = prefix + cloud_id + "," + suffix
+    else:
+        pairs = select_deployment_pairs(registry + "/" + repository + ":" + tag, runtime_images, deployments_by_image)
+        pair_values = [value for pair in pairs for value in pair] or ["", ""]
+        identity = prefix + ",".join(pair_values) + "," + suffix
     encoded = base64.b64encode(identity.encode("utf-8")).decode("ascii")
     if len(encoded) > 3000:
         raise ValueError("New unique_id_from_tool exceeds the 3000-character field limit.")
     set_description_field(document, "Custom Id", identity)
-    set_description_field(document, "Deployment", ",".join(pair[0] for pair in pairs), after="Namespaces")
-    set_description_field(document, "Container Name", ",".join(pair[1] for pair in pairs), after="Deployment")
-    return {"unique_id_from_tool": encoded, "description": str(document), "deployment_count": len(pairs)}
+    if find_field_paragraph(document, "Data Packages") is not None:
+        set_description_field(document, "Data Packages", packages)
+    if migration_type == PrismaIdentityMigrationType.DEPLOYMENT_CONTAINER_NAME:
+        set_description_field(document, "Deployment", ",".join(pair[0] for pair in pairs), after="Namespaces")
+        set_description_field(document, "Container Name", ",".join(pair[1] for pair in pairs), after="Deployment")
+    else:
+        for name in ("Deployment", "Container Name"):
+            paragraph = find_field_paragraph(document, name)
+            if paragraph is not None:
+                paragraph.decompose()
+    return {"unique_id_from_tool": encoded, "description": str(document),
+            "impact": update_impact_deployment_fields(finding.impact, pairs), "deployment_count": len(pairs)}
 
 
-def migrate_engagement(engagement, queryset, client, dry_run):
-    images = client.get_runtime(engagement.name)
-    deployments = client.get_deployments(images)
+def migrate_engagement(engagement, queryset, client, dry_run,
+                       migration_type=PrismaIdentityMigrationType.DEPLOYMENT_CONTAINER_NAME):
+    images = client.get_runtime(engagement.name) if client is not None else []
+    deployments = client.get_deployments(images) if client is not None else {}
     result = {"engagement_id": engagement.pk, "name": engagement.name, "runtime_images": len(images),
               "would_update": 0, "updated": 0, "unchanged": 0, "without_deployments": 0, "skipped": []}
     prepared = []
     for finding in queryset.filter(test__engagement_id=engagement.pk).iterator(chunk_size=500):
         try:
-            values = prepare_finding_identity(finding, images, deployments)
+            values = prepare_finding_identity(finding, images, deployments, migration_type=migration_type)
         except ValueError as error:
             result["skipped"].append({"id": finding.pk, "reason": str(error)})
             continue
-        if values["deployment_count"] == 0:
+        if migration_type == PrismaIdentityMigrationType.DEPLOYMENT_CONTAINER_NAME and values["deployment_count"] == 0:
             result["without_deployments"] += 1
-        if finding.unique_id_from_tool == values["unique_id_from_tool"] and finding.description == values["description"]:
+        if (finding.unique_id_from_tool == values["unique_id_from_tool"]
+                and finding.description == values["description"] and finding.impact == values["impact"]):
             result["unchanged"] += 1
             continue
-        prepared.append((finding.pk, finding.unique_id_from_tool, finding.description, values))
+        prepared.append((finding.pk, finding.unique_id_from_tool, finding.description, finding.impact, values))
     result["would_update"] = len(prepared)
     if dry_run or not prepared:
         return result
@@ -205,16 +261,18 @@ def migrate_engagement(engagement, queryset, client, dry_run):
         locked = {finding.pk: finding for finding in Finding.objects.filter(pk__in=eligible_ids)
                   .select_for_update(of=("self",)).order_by("pk")}
         changed = []
-        for finding_id, old_id, old_description, values in prepared:
+        for finding_id, old_id, old_description, old_impact, values in prepared:
             finding = locked.get(finding_id)
-            if finding is None or finding.unique_id_from_tool != old_id or finding.description != old_description:
+            if (finding is None or finding.unique_id_from_tool != old_id
+                    or finding.description != old_description or finding.impact != old_impact):
                 result["skipped"].append({"id": finding_id, "reason": "Finding changed during migration; retry."})
                 continue
             finding.unique_id_from_tool = values["unique_id_from_tool"]
             finding.description = values["description"]
+            finding.impact = values["impact"]
             changed.append(finding)
         if changed:
-            Finding.objects.bulk_update(changed, ["unique_id_from_tool", "description"], batch_size=500)
+            Finding.objects.bulk_update(changed, ["unique_id_from_tool", "description", "impact"], batch_size=500)
         result["updated"] = len(changed)
     return result
 
@@ -227,7 +285,10 @@ def prisma_images_identity_findings(user):
     ).filter(tags__name="prisma").filter(tags__name="images")
 
 
-def run_bulk_migration(user, dry_run, after_engagement_id=0, batch_size=10, engagement_ids=None):
+def run_bulk_migration(user, dry_run, after_engagement_id=0, batch_size=10, engagement_ids=None,
+                       migration_type=PrismaIdentityMigrationType.DEPLOYMENT_CONTAINER_NAME):
+    if migration_type not in PrismaIdentityMigrationType.values:
+        raise ValueError(f"Unsupported migration type: {migration_type}")
     eligible = prisma_images_identity_findings(user)
     engagements = Engagement.objects.filter(pk__in=eligible.values("test__engagement_id"),
                                             pk__gt=after_engagement_id)
@@ -235,11 +296,12 @@ def run_bulk_migration(user, dry_run, after_engagement_id=0, batch_size=10, enga
         engagements = engagements.filter(pk__in=engagement_ids)
     total = engagements.count()
     totals = {"processed": 0, "would_update": 0, "updated": 0, "unchanged": 0, "skipped": 0, "errors": 0}
-    logger.info("Prisma images identity migration started user=%s dry_run=%s engagements=%s", user.pk, dry_run, total)
+    logger.info("Prisma images identity migration started user=%s dry_run=%s engagements=%s migration_type=%s",
+                user.pk, dry_run, total, migration_type)
     if total == 0:
         return totals
     cursor = after_engagement_id
-    client = EngineImageClient()
+    client = EngineImageClient() if migration_type == PrismaIdentityMigrationType.DEPLOYMENT_CONTAINER_NAME else None
     try:
         while True:
             batch = list(engagements.filter(pk__gt=cursor).order_by("pk")[:batch_size])
@@ -249,7 +311,7 @@ def run_bulk_migration(user, dry_run, after_engagement_id=0, batch_size=10, enga
                 cursor = engagement.pk
                 totals["processed"] += 1
                 try:
-                    result = migrate_engagement(engagement, eligible, client, dry_run)
+                    result = migrate_engagement(engagement, eligible, client, dry_run, migration_type=migration_type)
                 except EngineLookupError as error:
                     totals["errors"] += 1
                     logger.warning("Prisma images identity migration engagement_id=%s failed: %s", engagement.pk, error)
@@ -266,6 +328,7 @@ def run_bulk_migration(user, dry_run, after_engagement_id=0, batch_size=10, enga
                     totals["processed"], total, engagement.pk, result["runtime_images"],
                     result["would_update"], result["updated"], result["unchanged"], len(result["skipped"]))
     finally:
-        client.close()
+        if client is not None:
+            client.close()
     logger.info("Prisma images identity migration finished user=%s dry_run=%s totals=%s", user.pk, dry_run, totals)
     return totals
