@@ -51,7 +51,7 @@ def risk_acceptance_decline(
         finding.active = True
         finding.risk_accepted = False
         finding.risk_status = "Risk Rejected"
-        finding.save()
+        finding.save(update_fields=["accepted_by", "reviewed_by", "active", "risk_accepted", "risk_status"])
         status = "OK"
         message = "Risk Rejected"
         title = f"Rejected request:  {str(risk_acceptance.engagement.product)} : {str(risk_acceptance.engagement.name)}"
@@ -234,7 +234,7 @@ def risk_acceptante_pending(eng: Engagement,
                     finding.reviewed_by = user.username
                     risk_acceptance.reviewed_date = timezone.now()
                     risk_acceptance.save()
-                    finding.save()
+                    finding.save(update_fields=["risk_status", "reviewed_by"])
                     message = "Finding has been marked as reviewed"
                     status_permission["status"] = "OK"
                 elif finding.risk_status == "Risk Reviewed" and user_has_permission_long_risk_acceptance(user, risk_acceptance, product):
@@ -242,6 +242,7 @@ def risk_acceptante_pending(eng: Engagement,
                     risk_acceptance.accepted_date = timezone.now()
                     risk_acceptance.save()
                     risk_accepted_succesfully(finding, risk_acceptance, True)
+                    finding.save(update_fields=["accepted_by"])
                     message = "Finding Accept successfully from risk acceptance."
                     status_permission["status"] = "OK"
 
@@ -258,7 +259,7 @@ def risk_acceptante_pending(eng: Engagement,
                         finding.accepted_by += ", " + user.username
                     if finding.risk_status == "Risk Rejected":
                         finding.risk_status = "Risk Pending"
-                    finding.save()
+                    finding.save(update_fields=["accepted_by", "risk_status"])
                     if status_permission.get("number_of_acceptors_required") == len(
                         get_confirmed_acceptors(finding)
                     ):
@@ -455,7 +456,7 @@ def risk_unaccept(finding):
             finding.risk_accepted = False
             finding.risk_status = "Risk Active"
             finding.acceptances_confirmed = 0
-            finding.save()
+            finding.save(update_fields=["active", "risk_accepted", "risk_status", "acceptances_confirmed"])
         ra_helper.post_jira_comment(finding, ra_helper.unaccepted_message_creator)
 
 
