@@ -34,7 +34,7 @@ defusedxml==0.7.1
 Deprecated==3.0.1
 Django==5.2.17
 django-appconf==1.2.0
-django-auditlog==3.4.1
+django-auditlog==3.4.2
 django-cors-headers==4.9.0
 django-crispy-forms==2.5
 django-crum==0.7.9
