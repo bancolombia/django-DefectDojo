@@ -557,6 +557,8 @@ env = environ.FileAwareEnv(
     DD_LOGO_URL=(str, ""),
     DD_CLIENT_ID_IA=(str, ""),
     DD_CLIENT_SECRET_IA=(str, ""),
+    DD_AWS_BEDROCK_API_KEY=(str, ""),
+    DD_IA_PROVIDER=(str, ""),
 
     # Redis
     DD_USE_CACHE_REDIS=(bool, False),
@@ -2651,6 +2653,9 @@ CLIENT_SECRET_IA = (
     if os.getenv("DD_USE_SECRETS_MANAGER") == "true"
     else env("DD_CLIENT_SECRET_IA")
 )
+
+AWS_BEDROCK_API_KEY = env("DD_AWS_BEDROCK_API_KEY")
+IA_PROVIDER = env("DD_IA_PROVIDER")
 
 # ------------------------------------------------------------------------------
 # CACHE REDIS

@@ -1,6 +1,8 @@
 ﻿import logging
 import requests
+import boto3
 import json
+import os
 import dojo.finding.helper as finding_helper
 from django.utils import timezone
 from typing import List
@@ -11,12 +13,64 @@ from dojo.models import GeneralSettings
 from dojo.api_v2.ia_recommendation.serializers import IaRecommendationSerializer
 from dojo.api_v2.utils import http_response
 from django.conf import settings
+from botocore.exceptions import BotoCoreError, ClientError
 
 
 logger = logging.getLogger(__name__)
 
-@app.task
-def async_get_ia_recommendation(fid, user, save=True):
+def _get_first_aws_bedrock_model_id():
+    control_client = boto3.client("bedrock", region_name=settings.AWS_REGION)
+    profiles = control_client.list_inference_profiles()["inferenceProfileSummaries"]
+    return profiles[0]["inferenceProfileId"]
+
+
+def async_get_aws_bedrock_recommendation(fid, user, save=True):
+    error_response = {
+        "status": "Error",
+        "ia_recommendations": (
+            "At the moment, you can't generate a recommendation for this finding.\n"
+            "Please try again later or with a different finding.🫣"
+        )}
+    ids = [i.strip() for i in str(fid).split(",") if i.strip()]
+    details = "\n\n".join(
+        f"Finding {f.id}: {f.title}\nSeverity: {f.severity}\n"
+        f"Description: {f.description}\nMitigation: {f.mitigation}"
+        for f in Finding.objects.filter(id__in=ids)
+    )
+    prompt = (
+        "Provide remediation recommendations, mitigations and a decision "
+        "for the following security findings:\n\n" + details
+    )
+    logger.debug("IA RECOMMENDATION: get AWS Bedrock recommendation by finding: %s", fid)
+    try:
+        if settings.AWS_BEDROCK_API_KEY:
+            os.environ["AWS_BEARER_TOKEN_BEDROCK"] = settings.AWS_BEDROCK_API_KEY
+        model_id = _get_first_aws_bedrock_model_id()
+        client = boto3.client("bedrock-runtime", region_name=settings.AWS_REGION)
+        response = client.converse(
+            modelId=model_id,
+            messages=[{"role": "user", "content": [{"text": prompt}]}],
+        )
+        text = response["output"]["message"]["content"][0]["text"]
+    except (BotoCoreError, ClientError, KeyError, IndexError) as e:
+        logger.error(" IA RECOMMENDATION: error calling AWS Bedrock: %s", e)
+        return http_response.error(message="Error AWS Bedrock", data=error_response)
+
+    context = None
+    if save:
+        finding = get_object_or_404(Finding, id=fid)
+        finding.ia_recommendation = {"data": {
+            "recommendations": text,
+            "like_status": None,
+            "user": user.username,
+            "last_modified": str(timezone.now().date()),
+        }}
+        finding.save(update_fields=["ia_recommendation"])
+        context = finding_helper.parser_ia_recommendation(finding.ia_recommendation)
+    return http_response.ok(message="OK", data=context)
+
+
+def _async_get_ia_recommendation_marvin(fid, user, save=True):
     version = GeneralSettings.get_value("HOST_IA_RECOMMENDATION_VERSION", "v1")
     error_response = {
     "status": "Ok",
@@ -123,6 +177,14 @@ def async_get_ia_recommendation(fid, user, save=True):
         finding.save(update_fields=["ia_recommendation"])
         context = finding_helper.parser_ia_recommendation(finding.ia_recommendation)
     return http_response.ok(message="OK", data=context) 
+
+@app.task
+def async_get_ia_recommendation(fid, user, save=True):
+    if settings.IA_PROVIDER.strip().upper() == "AWSBEDROCK":
+        return async_get_aws_bedrock_recommendation(fid, user, save)
+    else:
+        return _async_get_ia_recommendation_marvin(fid, user, save)
+
 
 def order_finding_by_rules(findings, max_results=10):
     findings = sorted(findings, key=lambda f: (f.priority, f.sla_expiration_date), reverse=True)
