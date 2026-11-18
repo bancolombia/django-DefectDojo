@@ -13,7 +13,11 @@ from dojo.models import Product
 from dojo.engine_participation.models import (
     HCParticipation,
 )
-from dojo.engine_participation.filters import HCParticipationFilter, HCParticipationHistoryFilter
+from dojo.engine_participation.filters import (
+    HCParticipationFilter,
+    HCParticipationHistoryFilter,
+    HCParticipationMetricsFilter,
+)
 from dojo.engine_participation.forms import (
     HCManualPostulationForm,
     HCParticipationDiscussionForm,
@@ -26,6 +30,7 @@ from dojo.engine_participation.helpers import (
     approve_hc_participation,
     create_manual_hc_postulation,
     get_hc_participation_summary,
+    get_hc_participation_metrics,
     get_hc_current_execution_started_at,
     get_manual_hc_postulation_eligibility_error,
     get_hc_confirm_ingress_postulation_criteria,
@@ -147,6 +152,35 @@ def hc_participation_history(request: HttpRequest) -> HttpResponse:
         "name": "Specialized DevSecOps Tests - Execution History",
         "postulated_requests": postulated_requests,
         "already_in_hc_requests": already_in_hc_requests,
+        "current_execution_started_at": current_execution_started_at,
+    })
+
+
+def hc_participation_metrics(request: HttpRequest) -> HttpResponse:
+    current_execution_started_at = get_hc_current_execution_started_at()
+    scope = request.GET.get("scope") or HCParticipationMetricsFilter.SCOPE_ALL
+
+    hc_requests = HCParticipation.objects.all()
+    if scope != HCParticipationMetricsFilter.SCOPE_ALL:
+        scope = HCParticipationMetricsFilter.SCOPE_CURRENT
+        hc_requests = scope_hc_queryset_to_current_execution(hc_requests)
+
+    filter_data = request.GET.copy()
+    filter_data["scope"] = scope
+    filtered = HCParticipationMetricsFilter(filter_data, queryset=hc_requests)
+
+    add_breadcrumb(
+        title="Specialized DevSecOps Testing Requests - Metrics",
+        top_level=True,
+        request=request
+    )
+
+    return render(request, "dojo/hc_participation/metrics.html", {
+        "filtered": filtered,
+        "name": "Specialized DevSecOps Tests - Metrics",
+        "scope": scope,
+        "metrics": get_hc_participation_metrics(filtered.qs),
+        "hc_summary": get_hc_participation_summary(),
         "current_execution_started_at": current_execution_started_at,
     })
 

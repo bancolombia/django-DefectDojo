@@ -5,7 +5,8 @@ from urllib.parse import urlencode
 import requests
 
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
+from django.db.models.functions import TruncMonth
 from django.conf import settings
 from django.core.cache import cache
 from django.urls import reverse
@@ -42,6 +43,24 @@ HC_PRESELECTED_FLAG_KEY = "is_preselected_for_hc"
 HC_PRIORITIZED_FLAG_KEY = "is_prioritized_for_hc"
 HC_INGRESS_CONFIRMATION_CRITERIA_KEY = "ingress_confirmation_criteria_checked"
 HC_CURRENT_EXECUTION_STARTED_AT_KEY = "HC_CURRENT_EXECUTION_STARTED_AT"
+HC_FINALIZE_POSTULATION_MESSAGE = "Not prioritized for this execution."
+HC_FINALIZE_CONTINUITY_MESSAGE = "The product continues in Specialized DevSecOps Tests."
+HC_FINALIZE_CARRIED_OVER_MESSAGE = (
+    "This product was prioritized (pre-selected) but there was not enough approval quota "
+    "in this execution. A new prioritized request was created for the next execution."
+)
+HC_FINALIZE_MESSAGES = (
+    HC_FINALIZE_POSTULATION_MESSAGE,
+    HC_FINALIZE_CONTINUITY_MESSAGE,
+    HC_FINALIZE_CARRIED_OVER_MESSAGE,
+)
+HC_POSTULATION_RECOMMENDATIONS = ("postulated", "postulated_manually")
+HC_PENDING_AGE_BUCKETS = (
+    ("0-7 days", 0, 7),
+    ("8-30 days", 8, 30),
+    ("31-60 days", 31, 60),
+    ("> 60 days", 61, None),
+)
 
 
 class HCConstants(Enum):
@@ -286,6 +305,153 @@ def get_hc_participation_summary() -> dict:
         "postulated_products": postulated_products,
         "preselected_products": preselected_products,
         "products_in_hc": products_in_hc,
+    }
+
+
+def _percent(numerator: int, denominator: int):
+    if not denominator:
+        return None
+    return round(numerator * 100.0 / denominator, 1)
+
+
+def _percentile(sorted_values: list[float], percentile: float):
+    if not sorted_values:
+        return None
+    index = max(0, min(len(sorted_values) - 1, round(percentile * (len(sorted_values) - 1))))
+    return sorted_values[index]
+
+
+def get_hc_participation_metrics(queryset) -> dict:
+    """Aggregated workflow metrics for an already-filtered HCParticipation queryset.
+
+    Status semantics differ by request type: for postulations Reviewed/Approved mean
+    the product enters SDT, while for already_in_hc requests they mean removal and
+    Rejected means the product continues in SDT.
+    """
+    now = timezone.now()
+    ingress_qs = queryset.filter(recommendation__in=HC_POSTULATION_RECOMMENDATIONS)
+    removal_qs = queryset.filter(recommendation="already_in_hc")
+
+    def _status_counts(qs) -> dict:
+        counts = dict.fromkeys(("Pending", "Reviewed", "Approved", "Rejected", "Cancelled"), 0)
+        for row in qs.values("status").annotate(total=Count("pk")):
+            counts[row["status"]] = row["total"]
+        return counts
+
+    ingress_status = _status_counts(ingress_qs)
+    removal_status = _status_counts(removal_qs)
+
+    ingress_admitted = ingress_status["Reviewed"] + ingress_status["Approved"]
+    ingress_decided = ingress_admitted + ingress_status["Rejected"]
+    removal_approved = removal_status["Reviewed"] + removal_status["Approved"]
+    removal_decided = removal_approved + removal_status["Rejected"]
+
+    decision_logs = HCParticipationLog.objects.filter(
+        hc_participation__in=queryset,
+        current_status__in=("Reviewed", "Rejected"),
+    )
+    auto_closed_ids = set(
+        decision_logs.filter(notes__in=HC_FINALIZE_MESSAGES).values_list("hc_participation_id", flat=True)
+    )
+    ingress_auto_rejected = ingress_qs.filter(status="Rejected", pk__in=auto_closed_ids).count()
+    removal_auto_continued = removal_qs.filter(status="Rejected", pk__in=auto_closed_ids).count()
+
+    # Decision time = creation -> first manual Reviewed/Rejected transition.
+    first_decision_by_request = {}
+    for log in decision_logs.exclude(notes__in=HC_FINALIZE_MESSAGES).select_related(
+        "hc_participation",
+    ).only("changed_at", "hc_participation__uuid", "hc_participation__create_date").order_by("changed_at"):
+        first_decision_by_request.setdefault(log.hc_participation_id, log)
+    decision_days = sorted(
+        max((log.changed_at - log.hc_participation.create_date).total_seconds(), 0) / 86400
+        for log in first_decision_by_request.values()
+    )
+
+    pending_qs = queryset.filter(status="Pending")
+    pending_ages = [(now - create_date).days for create_date in pending_qs.values_list("create_date", flat=True)]
+    pending_aging = []
+    for label, lower, upper in HC_PENDING_AGE_BUCKETS:
+        total = sum(1 for age in pending_ages if age >= lower and (upper is None or age <= upper))
+        pending_aging.append({"label": label, "total": total, "percent": _percent(total, len(pending_ages)) or 0})
+
+    pending_summary = pending_qs.aggregate(
+        unique_products=Count("product_id", distinct=True),
+        high_criticality=Count("pk", filter=Q(business_criticality__in=("high", "very high"))),
+    )
+    pending_summary.update({
+        "avg_age_days": round(sum(pending_ages) / len(pending_ages), 1) if pending_ages else None,
+        "max_age_days": max(pending_ages) if pending_ages else None,
+        "high_criticality_percent": _percent(pending_summary["high_criticality"], len(pending_ages)),
+    })
+
+    criticality_labels = dict(HCParticipation.BUSSINESS_CRITICALITY_CHOICES)
+    criticality_rows = []
+    criticality_data = queryset.values("business_criticality").annotate(
+        total=Count("pk"),
+        pending=Count("pk", filter=Q(status="Pending")),
+        admitted=Count(
+            "pk",
+            filter=Q(recommendation__in=HC_POSTULATION_RECOMMENDATIONS, status__in=("Reviewed", "Approved")),
+        ),
+        products=Count("product", distinct=True),
+    )
+    criticality_order = [key for key, _label in HCParticipation.BUSSINESS_CRITICALITY_CHOICES] + [None]
+    criticality_by_key = {row["business_criticality"] or None: row for row in criticality_data}
+    for key in criticality_order:
+        row = criticality_by_key.get(key)
+        if not row:
+            continue
+        criticality_rows.append({
+            "label": criticality_labels.get(key, "Not defined"),
+            "total": row["total"],
+            "pending": row["pending"],
+            "admitted": row["admitted"],
+            "products": row["products"],
+            "percent": _percent(row["total"], queryset.count()) or 0,
+        })
+
+    monthly = {}
+    for row in queryset.annotate(month=TruncMonth("create_date")).values("month").annotate(total=Count("pk")):
+        monthly.setdefault(row["month"], {"month": row["month"], "created": 0, "decisions": 0})["created"] = row["total"]
+    for row in decision_logs.annotate(month=TruncMonth("changed_at")).values("month").annotate(
+        total=Count("hc_participation", distinct=True),
+    ):
+        monthly.setdefault(row["month"], {"month": row["month"], "created": 0, "decisions": 0})["decisions"] = row["total"]
+    monthly_trend = [monthly[month] for month in sorted(monthly) if month is not None][-12:]
+
+    return {
+        "total_requests": queryset.count(),
+        "unique_products": queryset.values("product_id").distinct().count(),
+        "ingress_total": sum(ingress_status.values()),
+        "auto_postulations": ingress_qs.filter(recommendation="postulated").count(),
+        "manual_postulations": ingress_qs.filter(recommendation="postulated_manually").count(),
+        "removal_total": sum(removal_status.values()),
+        "ingress_status": ingress_status,
+        "removal_status": removal_status,
+        "ingress_admitted": ingress_admitted,
+        "ingress_approval_rate": _percent(ingress_admitted, ingress_decided),
+        "ingress_auto_rejected": ingress_auto_rejected,
+        "ingress_manual_rejected": ingress_status["Rejected"] - ingress_auto_rejected,
+        "removal_approved": removal_approved,
+        "removal_continues": removal_status["Rejected"],
+        "removal_auto_continued": removal_auto_continued,
+        "removal_rate": _percent(removal_approved, removal_decided),
+        "preselected_pending": sum(
+            1 for hc_request in ingress_qs.filter(status="Pending").only("security_posture_data")
+            if is_hc_request_preselected(hc_request)
+        ),
+        "prioritized_carry_over": ingress_qs.filter(
+            **{f"security_posture_data__{HC_PRIORITIZED_FLAG_KEY}": True},
+        ).count(),
+        "pending_total": len(pending_ages),
+        "pending_aging": pending_aging,
+        "pending_summary": pending_summary,
+        "decision_count": len(decision_days),
+        "decision_avg_days": round(sum(decision_days) / len(decision_days), 1) if decision_days else None,
+        "decision_median_days": round(_percentile(decision_days, 0.5), 1) if decision_days else None,
+        "decision_p90_days": round(_percentile(decision_days, 0.9), 1) if decision_days else None,
+        "criticality_rows": criticality_rows,
+        "monthly_trend": monthly_trend,
     }
 
 
@@ -813,12 +979,9 @@ def delete_hc_participation_records_by_date_range(start_date, end_date):
 
 
 def finalize_pending_hc_participation_requests(user):
-    postulation_message = "Not prioritized for this execution."
-    continuity_message = "The product continues in Specialized DevSecOps Tests."
-    carried_over_message = (
-        "This product was prioritized (pre-selected) but there was not enough approval quota "
-        "in this execution. A new prioritized request was created for the next execution."
-    )
+    postulation_message = HC_FINALIZE_POSTULATION_MESSAGE
+    continuity_message = HC_FINALIZE_CONTINUITY_MESSAGE
+    carried_over_message = HC_FINALIZE_CARRIED_OVER_MESSAGE
     finalized_counts = {
         "postulated_rejected": 0,
         "already_in_hc_continues": 0,

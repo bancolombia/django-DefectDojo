@@ -2,7 +2,7 @@ import logging
 
 from django.conf import settings
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
@@ -12,16 +12,98 @@ from dojo.api_v2.engine_participation.serializers import (
     ReturnHCParticipationToPendingRequestSerializer,
 )
 from dojo.api_v2.utils import http_response
+from dojo.engine_participation.filters import HCParticipationMetricsFilter
 from dojo.engine_participation.models import HCParticipation
 from dojo.engine_participation.helpers import (
+    HCConstants,
     delete_hc_participation_records_by_date_range,
     finalize_pending_hc_participation_requests,
+    get_hc_current_execution_started_at,
+    get_hc_participation_metrics,
+    get_hc_participation_summary,
     return_hc_participation_to_pending,
+    scope_hc_queryset_to_current_execution,
     run_hc_participation_evaluation,
     InvalidHCParticipationTransition,
 )
 
 logger = logging.getLogger(__name__)
+
+
+class HCParticipationMetricsAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                "scope",
+                OpenApiTypes.STR,
+                OpenApiParameter.QUERY,
+                enum=["all", "current"],
+                default="all",
+                description="Include all executions or only the current execution.",
+            ),
+            OpenApiParameter("product_name", OpenApiTypes.STR, OpenApiParameter.QUERY),
+            OpenApiParameter("product_type", OpenApiTypes.STR, OpenApiParameter.QUERY),
+            OpenApiParameter(
+                "business_criticality",
+                OpenApiTypes.STR,
+                OpenApiParameter.QUERY,
+                enum=[choice[0] for choice in HCParticipation.BUSSINESS_CRITICALITY_CHOICES],
+            ),
+            OpenApiParameter(
+                "recommendation",
+                OpenApiTypes.STR,
+                OpenApiParameter.QUERY,
+                enum=[choice[0] for choice in HCParticipation.RECOMMENDATION_CHOICES],
+            ),
+            OpenApiParameter("execution_date_after", OpenApiTypes.DATE, OpenApiParameter.QUERY),
+            OpenApiParameter("execution_date_before", OpenApiTypes.DATE, OpenApiParameter.QUERY),
+        ],
+        responses={status.HTTP_200_OK: dict, status.HTTP_400_BAD_REQUEST: dict},
+    )
+    def get(self, request):
+        user = request.user
+        allowed_groups = (
+            HCConstants.REVIEWERS_GROUP.value,
+            HCConstants.APPROVERS_GROUP.value,
+        )
+        if not (user.is_staff or user.is_superuser or user.groups.filter(dojo_group__name__in=allowed_groups).exists()):
+            return http_response.custom_response(
+                code=status.HTTP_403_FORBIDDEN,
+                status="forbidden",
+                message="Only staff, HC reviewers, or HC approvers can view HC participation metrics.",
+                data={},
+            )
+
+        filter_data = request.query_params.copy()
+        scope = filter_data.get("scope") or HCParticipationMetricsFilter.SCOPE_ALL
+        filter_data["scope"] = scope
+
+        hc_requests = HCParticipation.objects.all()
+        if scope == HCParticipationMetricsFilter.SCOPE_CURRENT:
+            hc_requests = scope_hc_queryset_to_current_execution(hc_requests)
+
+        filtered = HCParticipationMetricsFilter(filter_data, queryset=hc_requests)
+        if not filtered.is_valid():
+            errors = {
+                name: [str(error) for error in error_list]
+                for name, error_list in filtered.form.errors.items()
+            }
+            return http_response.bad_request(
+                message="Invalid HC participation metrics filters.",
+                data=errors,
+            )
+
+        return http_response.ok(
+            message="HC participation metrics retrieved successfully.",
+            data={
+                "scope": scope,
+                "current_execution_started_at": get_hc_current_execution_started_at(),
+                "metrics": get_hc_participation_metrics(filtered.qs),
+                "hc_summary": get_hc_participation_summary(),
+            },
+        )
 
 
 class RunHCEvaluationAPIView(APIView):

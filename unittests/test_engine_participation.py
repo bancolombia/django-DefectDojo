@@ -2,6 +2,7 @@
 Tests for HC (Hacking Continuo) Participation module.
 """
 import datetime
+from django.contrib.auth.models import Group
 from django.test import TestCase, override_settings, Client
 from django.urls import reverse
 from rest_framework.authtoken.models import Token
@@ -12,6 +13,7 @@ from dojo.models import (
     Product,
     GeneralSettings,
     Dojo_User,
+    Dojo_Group,
 )
 from dojo.engine_participation.models import (
     HCParticipation,
@@ -36,6 +38,8 @@ from dojo.engine_participation.helpers import (
     is_hc_request_preselected,
     is_hc_request_prioritized,
     get_hc_participation_summary,
+    get_hc_participation_metrics,
+    HCConstants,
     _clear_general_setting_cache,
 )
 
@@ -1221,6 +1225,149 @@ class HCParticipationViewsTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response["Location"], reverse("hc_participations"))
 
+    def test_list_view_links_to_metrics(self):
+        client = Client()
+        client.force_login(self.user)
+
+        response = client.get(reverse("hc_participations"))
+
+        self.assertContains(response, reverse("hc_participation_metrics"))
+
+    def test_metrics_view_includes_history_by_default_and_allows_current_scope(self):
+        boundary = datetime.datetime.now(datetime.timezone.utc)
+        _set_current_execution_started_at_for_test(boundary)
+        HCParticipation.objects.filter(pk=self.hc.pk).update(create_date=boundary - datetime.timedelta(days=1))
+        HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.user,
+        )
+
+        client = Client()
+        client.force_login(self.user)
+
+        for params, expected_scope, expected_count in (
+            ({}, "all", 2),
+            ({"scope": ""}, "all", 2),
+            ({"scope": "all"}, "all", 2),
+            ({"scope": "current"}, "current", 1),
+        ):
+            with self.subTest(params=params):
+                response = client.get(reverse("hc_participation_metrics"), params)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context["scope"], expected_scope)
+                self.assertEqual(response.context["filtered"].form["scope"].value(), expected_scope)
+                self.assertEqual(response.context["metrics"]["total_requests"], expected_count)
+                self.assertContains(response, "Pending requests summary")
+                self.assertNotContains(response, reverse("hc_participation", args=[str(self.hc.pk)]))
+
+
+class HCParticipationMetricsTest(TestCase):
+    """Metrics must interpret statuses per request type and separate automatic closures"""
+    fixtures = ['dojo_testdata.json']
+
+    def setUp(self):
+        self.user = Dojo_User.objects.get(username="admin")
+        self.product = Product.objects.first()
+        _set_available_approvals_for_test(5)
+
+    def _create(self, **kwargs):
+        defaults = {"product": self.product, "recommendation": "postulated", "status": "Pending", "created_by": self.user}
+        defaults.update(kwargs)
+        return HCParticipation.objects.create(**defaults)
+
+    def test_metrics_status_semantics_and_decision_time(self):
+        admitted = self._create()
+        mark_hc_participation_reviewed(admitted, self.user)
+        rejected = self._create(recommendation="postulated_manually")
+        reject_hc_participation(rejected, self.user)
+        removal = self._create(recommendation="already_in_hc")
+        mark_hc_participation_reviewed(removal, self.user)
+        continues = self._create(recommendation="already_in_hc")
+        reject_hc_participation(continues, self.user)
+        self._create()
+        finalize_pending_hc_participation_requests(self.user)
+
+        metrics = get_hc_participation_metrics(HCParticipation.objects.all())
+
+        self.assertEqual(metrics["ingress_admitted"], 1)
+        self.assertEqual(metrics["ingress_manual_rejected"], 1)
+        self.assertEqual(metrics["ingress_auto_rejected"], 1)
+        self.assertEqual(metrics["ingress_approval_rate"], 33.3)
+        self.assertEqual(metrics["removal_approved"], 1)
+        self.assertEqual(metrics["removal_continues"], 1)
+        self.assertEqual(metrics["removal_auto_continued"], 0)
+        self.assertEqual(metrics["manual_postulations"], 1)
+        self.assertEqual(metrics["decision_count"], 4)
+        self.assertEqual(metrics["pending_total"], 0)
+
+    def test_metrics_pending_aging_buckets(self):
+        old = self._create()
+        HCParticipation.objects.filter(pk=old.pk).update(
+            create_date=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=90),
+        )
+        self._create()
+
+        metrics = get_hc_participation_metrics(HCParticipation.objects.all())
+
+        totals = {bucket["label"]: bucket["total"] for bucket in metrics["pending_aging"]}
+        self.assertEqual(totals["0-7 days"], 1)
+        self.assertEqual(totals["> 60 days"], 1)
+        self.assertEqual(metrics["pending_summary"]["max_age_days"], 90)
+        self.assertEqual(metrics["pending_summary"]["avg_age_days"], 45.0)
+
+    def test_pending_summary_includes_all_pending_requests_and_respects_filters(self):
+        now = datetime.datetime.now(datetime.timezone.utc)
+        HCParticipation.objects.bulk_create([
+            HCParticipation(product=self.product, recommendation="postulated", business_criticality="low")
+            for _ in range(200)
+        ])
+        HCParticipation.objects.update(create_date=now - datetime.timedelta(days=10))
+        high = self._create(business_criticality="high")
+        very_high = self._create(business_criticality="very high", recommendation="postulated_manually")
+        decided = self._create(business_criticality="high", status="Approved")
+        for hc, days in ((high, 40), (very_high, 90), (decided, 180)):
+            HCParticipation.objects.filter(pk=hc.pk).update(create_date=now - datetime.timedelta(days=days))
+
+        with patch("dojo.engine_participation.helpers.timezone.now", return_value=now):
+            metrics = get_hc_participation_metrics(HCParticipation.objects.all())
+            filtered_metrics = get_hc_participation_metrics(
+                HCParticipation.objects.filter(recommendation="postulated_manually"),
+            )
+
+        self.assertEqual(metrics["pending_total"], 202)
+        self.assertEqual(metrics["pending_summary"], {
+            "unique_products": 1,
+            "avg_age_days": 10.5,
+            "max_age_days": 90,
+            "high_criticality": 2,
+            "high_criticality_percent": 1.0,
+        })
+        self.assertEqual(filtered_metrics["pending_total"], 1)
+        self.assertEqual(filtered_metrics["pending_summary"], {
+            "unique_products": 1,
+            "avg_age_days": 90.0,
+            "max_age_days": 90,
+            "high_criticality": 1,
+            "high_criticality_percent": 100.0,
+        })
+
+    def test_pending_summary_without_pending_requests(self):
+        self._create(status="Approved", business_criticality="high")
+
+        metrics = get_hc_participation_metrics(HCParticipation.objects.all())
+
+        self.assertEqual(metrics["pending_total"], 0)
+        self.assertEqual(metrics["pending_summary"], {
+            "unique_products": 0,
+            "avg_age_days": None,
+            "max_age_days": None,
+            "high_criticality": 0,
+            "high_criticality_percent": None,
+        })
+
 
 class HCManualPostulationFormTest(TestCase):
     """Tests for HCManualPostulationForm"""
@@ -1991,6 +2138,92 @@ class DeleteHCParticipationRecordsAPIViewTest(TestCase):
         self.assertEqual(response.data["status"], "success")
         self.assertEqual(response.data["data"]["matched_records"], 1)
         self.assertFalse(HCParticipation.objects.filter(pk=hc_in_range.pk).exists())
+
+
+class HCParticipationMetricsAPIViewTest(TestCase):
+    fixtures = ['dojo_testdata.json']
+
+    def setUp(self):
+        self.product = Product.objects.first()
+        HCParticipation.objects.filter(product=self.product).delete()
+        self.url = reverse("api_hc_participation_metrics")
+
+        self.reviewer = Dojo_User.objects.create_user(
+            username="hc_metrics_reviewer",
+            email="hc_metrics_reviewer@test.com",
+            password="testpass123",
+        )
+        self.regular_user = Dojo_User.objects.create_user(
+            username="hc_metrics_regular_user",
+            email="hc_metrics_regular_user@test.com",
+            password="testpass123",
+        )
+        reviewer_group_name = HCConstants.REVIEWERS_GROUP.value
+        auth_group, _created = Group.objects.get_or_create(name=reviewer_group_name)
+        dojo_group, _created = Dojo_Group.objects.get_or_create(
+            name=reviewer_group_name,
+            defaults={"auth_group": auth_group},
+        )
+        if dojo_group.auth_group_id != auth_group.pk:
+            dojo_group.auth_group = auth_group
+            dojo_group.save(update_fields=["auth_group"])
+        self.reviewer.groups.add(auth_group)
+
+    def _client_for(self, user):
+        token, _created = Token.objects.get_or_create(user=user)
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        return client
+
+    def test_requires_authentication_and_restricts_access(self):
+        response = APIClient().get(self.url)
+        self.assertEqual(response.status_code, 403)
+
+        response = self._client_for(self.regular_user).get(self.url)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data["status"], "forbidden")
+
+    def test_reviewer_can_get_metrics_and_filters_are_applied(self):
+        boundary = datetime.datetime.now(datetime.timezone.utc)
+        _set_current_execution_started_at_for_test(boundary)
+        historical_request = HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated_manually",
+            status="Pending",
+            created_by=self.reviewer,
+        )
+        HCParticipation.objects.filter(pk=historical_request.pk).update(
+            create_date=boundary - datetime.timedelta(days=1),
+        )
+        HCParticipation.objects.create(
+            product=self.product,
+            recommendation="postulated",
+            status="Pending",
+            created_by=self.reviewer,
+        )
+
+        client = self._client_for(self.reviewer)
+        response = client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["scope"], "all")
+        self.assertEqual(response.data["data"]["metrics"]["total_requests"], 2)
+
+        current_response = client.get(self.url, {"scope": "current"})
+        self.assertEqual(current_response.status_code, 200)
+        self.assertEqual(current_response.data["data"]["metrics"]["total_requests"], 1)
+
+        filtered_response = client.get(
+            self.url,
+            {"recommendation": "postulated_manually"},
+        )
+        self.assertEqual(filtered_response.status_code, 200)
+        self.assertEqual(filtered_response.data["data"]["metrics"]["total_requests"], 1)
+
+    def test_invalid_filter_returns_bad_request(self):
+        response = self._client_for(self.reviewer).get(self.url, {"scope": "unknown"})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["status"], "bad_request")
 
 
 class FinalizePendingHCParticipationRequestsAPIViewTest(TestCase):

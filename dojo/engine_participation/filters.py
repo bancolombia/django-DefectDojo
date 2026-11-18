@@ -121,3 +121,59 @@ class HCParticipationHistoryFilter(HCParticipationFilter):
 
     class Meta(HCParticipationFilter.Meta):
         fields = HCParticipationFilter.Meta.fields + ["execution_date"]
+
+
+class HCParticipationMetricsFilter(django_filters.FilterSet):
+    """Filters for the metrics view; scope is applied by the view (default: all executions)"""
+
+    SCOPE_CURRENT = "current"
+    SCOPE_ALL = "all"
+
+    scope = django_filters.ChoiceFilter(
+        choices=[(SCOPE_CURRENT, "Current execution"), (SCOPE_ALL, "All executions")],
+        method="filter_scope",
+        empty_label=None,
+        label="Scope",
+    )
+
+    product_name = django_filters.CharFilter(
+        field_name="product__name",
+        lookup_expr="icontains",
+        label="Product Name",
+    )
+
+    product_type = django_filters.CharFilter(
+        field_name="product__prod_type__name",
+        lookup_expr="icontains",
+        label="Product Type",
+    )
+
+    business_criticality = django_filters.ChoiceFilter(
+        choices=HCParticipation.BUSSINESS_CRITICALITY_CHOICES,
+        label="Business Criticality",
+    )
+
+    recommendation = django_filters.ChoiceFilter(
+        choices=HCParticipation.RECOMMENDATION_CHOICES,
+        label="Recommendation",
+    )
+
+    execution_date = HCExecutionDateRangeFilter(
+        field_name="create_date",
+        label="Created Date",
+        widget=HCExecutionDateRangeWidget,
+    )
+
+    class Meta:
+        model = HCParticipation
+        fields = [
+            "scope",
+            "product_name",
+            "product_type",
+            "business_criticality",
+            "recommendation",
+            "execution_date",
+        ]
+
+    def filter_scope(self, queryset, _name, _value):
+        return queryset

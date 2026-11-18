@@ -3,11 +3,17 @@ from django.urls import path
 from dojo.api_v2.engine_participation.views import (
     DeleteHCParticipationRecordsAPIView,
     FinalizePendingHCParticipationRequestsAPIView,
+    HCParticipationMetricsAPIView,
     ReturnHCParticipationToPendingAPIView,
     RunHCEvaluationAPIView,
 )
 
 urlpatterns = [
+    path(
+        "api/v2/engine_participation/metrics/",
+        HCParticipationMetricsAPIView.as_view(),
+        name="api_hc_participation_metrics",
+    ),
     path(
         "api/v2/engine_participation/run-evaluation/",
         RunHCEvaluationAPIView.as_view(),

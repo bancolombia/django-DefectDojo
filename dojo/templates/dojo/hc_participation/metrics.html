@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+{% load event_tags %}
+{% block add_styles %}
+<style>
+    .filters .form-group {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    .filters .form-control {
+        width: 100%;
+        max-width: 500px;
+    }
+    .hc-metric h3 {
+        margin-top: 0;
+    }
+    .hc-metric p {
+        margin-bottom: 0;
+    }
+    .hc-bar {
+        margin-bottom: 0;
+        min-width: 120px;
+    }
+</style>
+{% endblock %}
+{% block content %}
+    {{ block.super }}
+    <div class="row">
+        <div class="col-md-2">
+            <div class="panel panel-default filters">
+                <div class="panel-heading">Filters</div>
+                <form method="get" class="panel-body">
+                    {% for field in filtered.form.visible_fields %}
+                        <div class="form-group">
+                            {{ field.errors }}
+                            <label for="{{ field.auto_id }}" style="display: block;">{{ field.label }}</label>
+                            {% with placeholder="placeholder:"|add:field.label %}
+                                {{ field|addcss:"class:form-control input-sm"|addcss:placeholder }}
+                            {% endwith %}
+                        </div>
+                    {% endfor %}
+                    <div class="text-center">
+                        <input type="submit" class="btn btn-secondary inline top" label="submit" value="Apply"/><br/><br/>
+                        <a href="{% url 'hc_participation_metrics' %}"> [Clear Filters] </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <div class="col-md-10">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <span class="fa-solid fa-chart-bar"></span> {{ name }}
+                    <span class="pull-right">
+                        <a href="{% url 'hc_participations' %}" class="btn btn-secondary btn-sm" style="margin-right: 10px;">
+                            <i class="fa fa-bullseye"></i> Back to current execution
+                        </a>
+                        <a href="{% url 'hc_participation_history' %}" class="btn btn-secondary btn-sm">
+                            <i class="fa fa-clock-rotate-left"></i> Execution History
+                        </a>
+                    </span>
+                </div>
+                <div class="panel-body">
+                    <span class="text-muted small">
+                        <i class="fa fa-info-circle"></i>
+                        {% if scope == "all" %}
+                            Showing metrics for all executions, including current and historical requests.
+                        {% elif current_execution_started_at %}
+                            Showing metrics for the current execution (since {{ current_execution_started_at|date:"d M Y H:i" }}, including pending prioritized carry-over).
+                        {% else %}
+                            No execution boundary has been set yet; showing all requests.
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+
+            <div class="panel panel-default">
+                <div class="panel-heading"><strong>Current SDT capacity</strong> <span class="text-muted small">(always current execution, not affected by filters)</span></div>
+                <div class="panel-body">
+                    <div class="row text-center hc-metric">
+                        <div class="col-sm-3">
+                            <h3 {% if hc_summary.available_approvals < 0 %}style="color: #d11d38;"{% endif %}>{{ hc_summary.available_approvals|default:0 }}</h3>
+                            <p class="text-muted">Available approvals</p>
+                        </div>
+                        <div class="col-sm-3">
+                            <h3>{{ hc_summary.products_in_hc|default:0 }}</h3>
+                            <p class="text-muted">Products in SDT</p>
+                        </div>
+                        <div class="col-sm-3">
+                            <h3>{{ hc_summary.postulated_products|default:0 }}</h3>
+                            <p class="text-muted">Postulated products pending</p>
+                        </div>
+                        <div class="col-sm-3">
+                            <h3>{{ hc_summary.preselected_products|default:0 }}</h3>
+                            <p class="text-muted">Pre-selected products</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel panel-default">
+                <div class="panel-heading"><strong>Overview</strong></div>
+                <div class="panel-body">
+                    <div class="row text-center hc-metric">
+                        <div class="col-sm-2">
+                            <h3>{{ metrics.total_requests }}</h3>
+                            <p class="text-muted">Requests</p>
+                        </div>
+                        <div class="col-sm-2">
+                            <h3>{{ metrics.unique_products }}</h3>
+                            <p class="text-muted">Unique products</p>
+                        </div>
+                        <div class="col-sm-2">
+                            <h3>{{ metrics.auto_postulations }} / {{ metrics.manual_postulations }}</h3>
+                            <p class="text-muted">Automatic / manual postulations</p>
+                        </div>
+                        <div class="col-sm-2">
+                            <h3>{{ metrics.removal_total }}</h3>
+                            <p class="text-muted">Continuity reviews</p>
+                        </div>
+                        <div class="col-sm-2">
+                            <h3>{{ metrics.pending_total }}</h3>
+                            <p class="text-muted">Pending requests</p>
+                        </div>
+                        <div class="col-sm-2">
+                            <h3>{{ metrics.preselected_pending }} / {{ metrics.prioritized_carry_over }}</h3>
+                            <p class="text-muted">Pre-selected pending / prioritized carry-over</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="panel panel-default">
+                        <div class="panel-heading"><strong>Ingress (postulations)</strong></div>
+                        <table id="hc-metrics-ingress" class="table table-condensed table-striped">
+                            <tbody>
+                                <tr><td>Pending</td><td class="text-right">{{ metrics.ingress_status.Pending }}</td></tr>
+                                <tr><td>Approved entry (reviewed)</td><td class="text-right">{{ metrics.ingress_status.Reviewed }}</td></tr>
+                                <tr><td>Approved</td><td class="text-right">{{ metrics.ingress_status.Approved }}</td></tr>
+                                <tr><td>Rejected by analyst</td><td class="text-right">{{ metrics.ingress_manual_rejected }}</td></tr>
+                                <tr><td>Closed automatically (not prioritized / carried over)</td><td class="text-right">{{ metrics.ingress_auto_rejected }}</td></tr>
+                                <tr><td>Cancelled</td><td class="text-right">{{ metrics.ingress_status.Cancelled }}</td></tr>
+                                <tr>
+                                    <td><strong>Ingress approval rate</strong> <span class="text-muted small">(admitted / decided)</span></td>
+                                    <td class="text-right"><strong>{% if metrics.ingress_approval_rate is not None %}{{ metrics.ingress_approval_rate }}%{% else %}-{% endif %}</strong></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="panel panel-default">
+                        <div class="panel-heading"><strong>Continuity (already in SDT)</strong></div>
+                        <table id="hc-metrics-removal" class="table table-condensed table-striped">
+                            <tbody>
+                                <tr><td>Pending</td><td class="text-right">{{ metrics.removal_status.Pending }}</td></tr>
+                                <tr><td>Removal approved</td><td class="text-right">{{ metrics.removal_approved }}</td></tr>
+                                <tr><td>Continues in SDT</td><td class="text-right">{{ metrics.removal_continues }}</td></tr>
+                                <tr><td class="text-muted">&nbsp;&nbsp;of which closed automatically</td><td class="text-right text-muted">{{ metrics.removal_auto_continued }}</td></tr>
+                                <tr><td>Cancelled</td><td class="text-right">{{ metrics.removal_status.Cancelled }}</td></tr>
+                                <tr>
+                                    <td><strong>Removal rate</strong> <span class="text-muted small">(removed / decided)</span></td>
+                                    <td class="text-right"><strong>{% if metrics.removal_rate is not None %}{{ metrics.removal_rate }}%{% else %}-{% endif %}</strong></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="panel panel-default">
+                        <div class="panel-heading"><strong>Decision time</strong> <span class="text-muted small">(creation to first analyst decision, excludes automatic closures)</span></div>
+                        <div class="panel-body">
+                            <div class="row text-center hc-metric">
+                                <div class="col-xs-3">
+                                    <h3>{{ metrics.decision_count }}</h3>
+                                    <p class="text-muted">Decisions</p>
+                                </div>
+                                <div class="col-xs-3">
+                                    <h3>{{ metrics.decision_avg_days|default_if_none:"-" }}</h3>
+                                    <p class="text-muted">Average (days)</p>
+                                </div>
+                                <div class="col-xs-3">
+                                    <h3>{{ metrics.decision_median_days|default_if_none:"-" }}</h3>
+                                    <p class="text-muted">Median (days)</p>
+                                </div>
+                                <div class="col-xs-3">
+                                    <h3>{{ metrics.decision_p90_days|default_if_none:"-" }}</h3>
+                                    <p class="text-muted">P90 (days)</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="panel panel-default">
+                        <div class="panel-heading"><strong>Pending requests aging</strong></div>
+                        <table id="hc-metrics-aging" class="table table-condensed">
+                            <tbody>
+                                {% for bucket in metrics.pending_aging %}
+                                    <tr>
+                                        <td style="width: 25%;">{{ bucket.label }}</td>
+                                        <td>
+                                            <div class="progress hc-bar">
+                                                <div class="progress-bar {% if forloop.last %}progress-bar-danger{% elif forloop.counter == 3 %}progress-bar-warning{% endif %}" role="progressbar" style="width: {{ bucket.percent|stringformat:'s' }}%;"></div>
+                                            </div>
+                                        </td>
+                                        <td class="text-right" style="width: 10%;">{{ bucket.total }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel panel-default table-responsive">
+                <div class="panel-heading"><strong>Business criticality</strong></div>
+                <table id="hc-metrics-criticality" class="table table-condensed table-striped">
+                    <thead>
+                        <tr>
+                            <th>Criticality</th>
+                            <th>Distribution</th>
+                            <th class="text-right">Requests</th>
+                            <th class="text-right">Products</th>
+                            <th class="text-right">Pending</th>
+                            <th class="text-right">Admitted to SDT</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in metrics.criticality_rows %}
+                            <tr>
+                                <td>{{ row.label }}</td>
+                                <td>
+                                    <div class="progress hc-bar">
+                                        <div class="progress-bar" role="progressbar" style="width: {{ row.percent|stringformat:'s' }}%;"></div>
+                                    </div>
+                                </td>
+                                <td class="text-right">{{ row.total }}</td>
+                                <td class="text-right">{{ row.products }}</td>
+                                <td class="text-right">{{ row.pending }}</td>
+                                <td class="text-right">{{ row.admitted }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="6" class="text-center text-muted">No data.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="panel panel-default table-responsive">
+                <div class="panel-heading"><strong>Monthly trend</strong> <span class="text-muted small">(last 12 months with activity)</span></div>
+                <table id="hc-metrics-trend" class="table table-condensed table-striped">
+                    <thead>
+                        <tr>
+                            <th>Month</th>
+                            <th class="text-right">Requests created</th>
+                            <th class="text-right">Requests decided</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in metrics.monthly_trend %}
+                            <tr>
+                                <td>{{ row.month|date:"M Y" }}</td>
+                                <td class="text-right">{{ row.created }}</td>
+                                <td class="text-right">{{ row.decisions }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="3" class="text-center text-muted">No data.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="panel panel-default">
+                <div class="panel-heading"><strong>Pending requests summary</strong> <span class="text-muted small">(all pending requests matching the selected filters)</span></div>
+                <div class="panel-body">
+                    <div class="row text-center hc-metric">
+                        <div class="col-sm-3">
+                            <h3>{{ metrics.pending_summary.unique_products }}</h3>
+                            <p class="text-muted">Unique products pending</p>
+                        </div>
+                        <div class="col-sm-3">
+                            <h3>{{ metrics.pending_summary.avg_age_days|default_if_none:"-" }}</h3>
+                            <p class="text-muted">Average age (days)</p>
+                        </div>
+                        <div class="col-sm-3">
+                            <h3>{{ metrics.pending_summary.max_age_days|default_if_none:"-" }}</h3>
+                            <p class="text-muted">Maximum age (days)</p>
+                        </div>
+                        <div class="col-sm-3">
+                            <h3>{{ metrics.pending_summary.high_criticality }} / {% if metrics.pending_summary.high_criticality_percent is not None %}{{ metrics.pending_summary.high_criticality_percent }}%{% else %}-{% endif %}</h3>
+                            <p class="text-muted">High / very high criticality requests</p>
+                        </div>
+                    </div>
+                    <p class="text-muted small" style="margin-top: 15px;">Age is measured in completed days since request creation. Criticality percentage is relative to all pending requests matching the selected filters.</p>
+                    {% if not metrics.pending_total %}
+                        <p class="text-center text-muted">No pending requests.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
