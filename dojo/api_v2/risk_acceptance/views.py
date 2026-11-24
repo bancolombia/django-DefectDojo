@@ -24,7 +24,7 @@ from dojo.risk_acceptance.risk_pending import (
     get_user_with_permission_key)
 from dojo.risk_acceptance.notification import Notification as NotificationRiskAcceptance
 from dojo.risk_acceptance.serializers import RiskAcceptanceEmailSerializer
-from dojo.api_v2.risk_acceptance.serializers import RiskAcceptanceToNotesSerializer
+from dojo.api_v2.risk_acceptance.serializers import RiskAcceptanceToNotesSerializer, RiskAcceptanceRetriveSerializer    
 from dojo.api_v2.views import PrefetchDojoModelViewSet
 from dojo.models import Risk_Acceptance, Notes
 from dojo.risk_acceptance.queries import get_authorized_risk_acceptances
@@ -51,6 +51,11 @@ class RiskAcceptanceViewSet(
         IsAuthenticated,
         permissions.UserHasRiskAcceptancePermission,
     )
+
+    def get_serializer(self, *args, **kwargs):
+        if self.action == "retrieve":
+            return RiskAcceptanceRetriveSerializer(*args, **kwargs)
+        return super().get_serializer(*args, **kwargs)
 
     def create(self, request, *args, **kwargs):
         serializers  = self.serializer_class(data=request.data, context={"request": request})
