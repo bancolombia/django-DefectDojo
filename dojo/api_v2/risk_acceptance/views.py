@@ -24,7 +24,7 @@ from dojo.risk_acceptance.risk_pending import (
     get_user_with_permission_key)
 from dojo.risk_acceptance.notification import Notification as NotificationRiskAcceptance
 from dojo.risk_acceptance.serializers import RiskAcceptanceEmailSerializer
-from dojo.api_v2.risk_acceptance.serializers import RiskAcceptanceToNotesSerializer, RiskAcceptanceRetriveSerializer    
+from dojo.api_v2.risk_acceptance.serializers import RiskAcceptanceToNotesSerializer
 from dojo.api_v2.views import PrefetchDojoModelViewSet
 from dojo.models import Risk_Acceptance, Notes
 from dojo.risk_acceptance.queries import get_authorized_risk_acceptances
@@ -52,10 +52,22 @@ class RiskAcceptanceViewSet(
         permissions.UserHasRiskAcceptancePermission,
     )
 
-    def get_serializer(self, *args, **kwargs):
-        if self.action == "retrieve":
-            return RiskAcceptanceRetriveSerializer(*args, **kwargs)
-        return super().get_serializer(*args, **kwargs)
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="prefetch",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                description=(
+                    "Prefetch relationships separated by commas. "
+                    "Ej: prefetch=accepted_findings,notes,owner,engagement_set"
+                ),
+                required=False,
+            ),
+        ],
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
 
     def create(self, request, *args, **kwargs):
         serializers  = self.serializer_class(data=request.data, context={"request": request})
@@ -82,13 +94,26 @@ class RiskAcceptanceViewSet(
         return super().destroy(request, pk=pk)
 
     def get_queryset(self):
-        return (
+        qs = (
             get_authorized_risk_acceptances(Permissions.Risk_Acceptance)
-            .prefetch_related(
-                "notes", "engagement_set", "owner", "accepted_findings",
-            )
             .distinct().order_by("-id")
         )
+
+        # Mantener comportamiento actual por defecto
+        default_prefetch = {"notes", "engagement_set", "owner", "accepted_findings"}
+
+        prefetch_param = self.request.query_params.get("prefetch")
+        if prefetch_param:
+            requested = {item.strip() for item in prefetch_param.split(",") if item.strip()}
+            allowed = {"notes", "engagement_set", "owner", "accepted_findings"}
+            selected_prefetch = requested & allowed
+        else:
+            selected_prefetch = default_prefetch
+
+        if selected_prefetch:
+            qs = qs.prefetch_related(*selected_prefetch)
+
+        return qs
     
     @action(
             methods=["POST"],
