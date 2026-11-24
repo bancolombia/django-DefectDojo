@@ -32,4 +32,6 @@ urlpatterns = [
         name="metrics_panel_tenable"),
     re_path(r'^metrics/ia$', views.ia_metrics,
         name="ia_metrics"),
+    re_path(r'^metrics/input-flow$', views.metrics_input_flow,
+            name="metrics_input_flow"),
 ]
