@@ -58,8 +58,9 @@ def get_group_member_roles():
 
 def get_users_for_group(group_name):
     if group_name in GeneralSettings.get_value("GROUPS_SECURITY_PEER_REVIEW", []):
-        group_members = Dojo_Group_Member.objects.filter(group__name=group_name).values_list("user", flat=True)[1]
-    group_members = Dojo_Group_Member.objects.filter(group__name=group_name).values_list("user", flat=True)
+        group_members = [Dojo_Group_Member.objects.filter(group__name=group_name).values_list("user", flat=True)[1]]
+    else:
+        group_members = Dojo_Group_Member.objects.filter(group__name=group_name).values_list("user", flat=True)
     return Dojo_User.objects.filter(id__in=group_members)
 
 def get_users_for_group_by_role(group_name, role):

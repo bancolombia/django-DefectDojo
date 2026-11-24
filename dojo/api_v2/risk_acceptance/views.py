@@ -52,6 +52,23 @@ class RiskAcceptanceViewSet(
         permissions.UserHasRiskAcceptancePermission,
     )
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="prefetch",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                description=(
+                    "Prefetch relationships separated by commas. "
+                    "Ej: prefetch=accepted_findings,notes,owner,engagement_set"
+                ),
+                required=False,
+            ),
+        ],
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+
     def create(self, request, *args, **kwargs):
         serializers  = self.serializer_class(data=request.data, context={"request": request})
         serializers.is_valid(raise_exception=True)
@@ -77,13 +94,26 @@ class RiskAcceptanceViewSet(
         return super().destroy(request, pk=pk)
 
     def get_queryset(self):
-        return (
+        qs = (
             get_authorized_risk_acceptances(Permissions.Risk_Acceptance)
-            .prefetch_related(
-                "notes", "engagement_set", "owner", "accepted_findings",
-            )
             .distinct().order_by("-id")
         )
+
+        # Mantener comportamiento actual por defecto
+        default_prefetch = {"notes", "engagement_set", "owner", "accepted_findings"}
+
+        prefetch_param = self.request.query_params.get("prefetch")
+        if prefetch_param:
+            requested = {item.strip() for item in prefetch_param.split(",") if item.strip()}
+            allowed = {"notes", "engagement_set", "owner", "accepted_findings"}
+            selected_prefetch = requested & allowed
+        else:
+            selected_prefetch = default_prefetch
+
+        if selected_prefetch:
+            qs = qs.prefetch_related(*selected_prefetch)
+
+        return qs
     
     @action(
             methods=["POST"],
