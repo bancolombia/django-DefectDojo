@@ -158,6 +158,7 @@ class Permissions(IntEnum):
     Metrics_Panel_Admin = 2710
     Metrics_Scan_Cycle = 2711  
     Ia_Metrics = 2712
+    Metrics_Input_Flow = 2713
 
     Transfer_Finding_View = 2801
     Transfer_Finding_Edit = 2802
@@ -657,6 +658,7 @@ def get_roles_with_permissions():
             Permissions.Metrics_DevSecOps,
             Permissions.Metrics_Panel_Admin,
             Permissions.Ia_Metrics,
+            Permissions.Metrics_Input_Flow,
             Permissions.Metrics_Scan_Cycle,
             Permissions.Transfer_Finding_View,
             Permissions.Transfer_Finding_Edit,
@@ -731,6 +733,7 @@ def get_roles_with_permissions():
             Permissions.Engagement_Delete,
             Permissions.Risk_Acceptance,
             Permissions.Test_View,
+            Permissions.Metrics_Input_Flow,
             Permissions.Test_Add,
             Permissions.Test_Edit,
             Permissions.Test_Delete,
@@ -892,6 +895,7 @@ def get_roles_with_permissions():
             Permissions.Transfer_Finding_Finding_Reject,
             Permissions.Metrics_Panel_Admin,
             Permissions.Ia_Metrics,
+            Permissions.Metrics_Input_Flow,
             Permissions.Metrics_Scan_Cycle,
             Permissions.Finding_Add_Recommendation,
             Permissions.Finding_Remediation_Add,
@@ -933,6 +937,7 @@ def get_roles_with_permissions():
             Permissions.Metrics_Panel_Admin,
             Permissions.Ia_Metrics,
             Permissions.Metrics_Scan_Cycle,
+            Permissions.Metrics_Input_Flow,
             Permissions.Finding_Add_Recommendation,
             Permissions.Finding_Remediation_Add,
             Permissions.Transfer_Finding_Add,
@@ -977,6 +982,7 @@ def get_roles_with_permissions():
             Permissions.Metrics_Panel_Admin,
             Permissions.Ia_Metrics,
             Permissions.Metrics_Scan_Cycle,
+            Permissions.Metrics_Input_Flow,
             Permissions.Risk_Acceptance_Send_Email,
             Permissions.Risk_Acceptance_Refresh_Permission_key,
             Permissions.Input_View,
