@@ -1721,7 +1721,7 @@ class TestImportSerializer(serializers.ModelSerializer):
         return test_import
 
 
-class RiskAcceptanceSerializer(serializers.ModelSerializer):
+class RiskAcceptanceSerializer(PermissionPayloadMixin, serializers.ModelSerializer):
     path = serializers.SerializerMethodField()
     name = serializers.CharField(required=True)
     long_term_acceptance = serializers.BooleanField(default=False)
@@ -1752,6 +1752,7 @@ class RiskAcceptanceSerializer(serializers.ModelSerializer):
     notes = serializers.PrimaryKeyRelatedField(many=True, queryset=Notes.objects.all(), required=False)
     created = serializers.DateTimeField(read_only=True)
     updated = serializers.DateTimeField(read_only=True)
+    permission_registry = Permissions.get_engagement_permissions()
 
 
     def create(self, validated_data):
