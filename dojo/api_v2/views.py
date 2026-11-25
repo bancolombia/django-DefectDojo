@@ -1887,7 +1887,7 @@ class ComponentViewSet(viewsets.ModelViewSet):
         permissions.UserHasComponentPermission,)
 
     def get_queryset(self):
-        queryset = Component.objects.all()
+        queryset = Component.objects.select_related("engagement__product__prod_type")
         engagement_id = self.request.GET.get('engagement_id')
         if engagement_id:
             queryset = queryset.filter(engagement_id=engagement_id)
