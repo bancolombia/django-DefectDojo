@@ -991,7 +991,7 @@ def get_reviewers_for_finding(finding):
             Permissions.Finding_Code_Review,
             role,
         )
-        group_users = get_users_for_group(f"Reviewers_{role.name}")
+        group_users = get_users_for_group(f"Reviewers_{role}")
         users = permission_users | group_users
     elif tag_name:
         users = get_users_for_group(f"Reviewers_{tag_name}")
