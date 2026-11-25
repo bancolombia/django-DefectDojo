@@ -3,7 +3,7 @@ import sys
 
 from rest_framework.serializers import ModelSerializer
 
-from dojo.models import FileUpload
+from dojo.models import FileUpload, Finding
 
 from . import utils
 
@@ -12,6 +12,7 @@ SERIALIZER_DEFS_MODULE = "dojo.api_v2.serializers"
 
 preferred_serializers = {
     FileUpload: "FileSerializer",
+    Finding: "FindingSerializer"
 }
 
 
