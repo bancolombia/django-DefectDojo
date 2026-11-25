@@ -974,7 +974,9 @@ def get_group_reviewers_for_finding(finding):
 
         reviewer_role_tag = settings.DD_REVIEWERS_ROLE_TAG[tag.name]
         role = Roles(int(reviewer_role_tag)) if reviewer_role_tag != "-1" else None
-        tag_name = tag.name
+        if role:
+            role = role.name
+            tag_name = tag.name
         break
     return role, tag_name
 

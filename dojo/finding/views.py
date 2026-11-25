@@ -1713,7 +1713,7 @@ def request_finding_review(request, fid):
             logger.debug(f"Asking {reviewers_string} for review")
             finding_ids = [f.id for f in findings]
             role, tag_name = finding_helper.get_group_reviewers_for_finding(findings[0])
-            groups = ["Reviewers_" + role.name, "Reviewers_" + tag_name]
+            groups = ["Reviewers_" + role, "Reviewers_" + tag_name]
             grops_validation = GeneralSettings.get_value("GROUPS_SECURITY_PEER_REVIEW", ["Reviewers_Maintainer"])
             if set(groups) & set(grops_validation):
                 create_azure_work_item_task.apply_async(args=(
@@ -1810,7 +1810,7 @@ def clear_finding_review(request, fid):
     # the review or one of the users requested to provide the review, then
     # do not allow the user to clear the review.
     role, tag_name = finding_helper.get_group_reviewers_for_finding(finding)
-    groups = [f"Reviewers_{role.name}", f"Reviewers_{tag_name}"]
+    groups = [f"Reviewers_{role}", f"Reviewers_{tag_name}"]
     if user in get_users_for_group(groups[0]) | get_users_for_group(groups[1]):
        pass 
     elif user != finding.review_requested_by and user not in finding.reviewers.all():
