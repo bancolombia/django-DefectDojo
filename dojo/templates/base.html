@@ -596,6 +596,13 @@
                                                         </a>
                                                     </li>
                                                 {% endif %}
+                                                {% if "Metrics_Input_Flow"|has_global_permission %}
+                                                    <li>
+                                                        <a rel="noopener noreferrer" href="{% url 'metrics_input_flow' %}">
+                                                            {% trans "Metrics Input Flow" %}
+                                                        </a>
+                                                    </li>
+                                                {% endif %}
                                             </ul>
                                             <!-- /.nav-second-level -->
                                         </li>

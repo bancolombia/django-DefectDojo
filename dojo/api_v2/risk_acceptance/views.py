@@ -24,8 +24,9 @@ from dojo.risk_acceptance.risk_pending import (
     get_user_with_permission_key)
 from dojo.risk_acceptance.notification import Notification as NotificationRiskAcceptance
 from dojo.risk_acceptance.serializers import RiskAcceptanceEmailSerializer
+from dojo.api_v2.risk_acceptance.serializers import RiskAcceptanceToNotesSerializer
 from dojo.api_v2.views import PrefetchDojoModelViewSet
-from dojo.models import Risk_Acceptance
+from dojo.models import Risk_Acceptance, Notes
 from dojo.risk_acceptance.queries import get_authorized_risk_acceptances
 from dojo.risk_acceptance.helper import remove_finding_from_risk_acceptance
 from dojo.filters import ApiRiskAcceptanceFilter 
@@ -50,6 +51,23 @@ class RiskAcceptanceViewSet(
         IsAuthenticated,
         permissions.UserHasRiskAcceptancePermission,
     )
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="prefetch",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                description=(
+                    "Prefetch relationships separated by commas. "
+                    "Ej: prefetch=accepted_findings,notes,owner,engagement_set"
+                ),
+                required=False,
+            ),
+        ],
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
 
     def create(self, request, *args, **kwargs):
         serializers  = self.serializer_class(data=request.data, context={"request": request})
@@ -76,13 +94,26 @@ class RiskAcceptanceViewSet(
         return super().destroy(request, pk=pk)
 
     def get_queryset(self):
-        return (
+        qs = (
             get_authorized_risk_acceptances(Permissions.Risk_Acceptance)
-            .prefetch_related(
-                "notes", "engagement_set", "owner", "accepted_findings",
-            )
             .distinct().order_by("-id")
         )
+
+        # Mantener comportamiento actual por defecto
+        default_prefetch = {"notes", "engagement_set", "owner", "accepted_findings"}
+
+        prefetch_param = self.request.query_params.get("prefetch")
+        if prefetch_param:
+            requested = {item.strip() for item in prefetch_param.split(",") if item.strip()}
+            allowed = {"notes", "engagement_set", "owner", "accepted_findings"}
+            selected_prefetch = requested & allowed
+        else:
+            selected_prefetch = default_prefetch
+
+        if selected_prefetch:
+            qs = qs.prefetch_related(*selected_prefetch)
+
+        return qs
     
     @action(
             methods=["POST"],
@@ -169,3 +200,51 @@ class RiskAcceptanceViewSet(
                     product_type=product_type.name
                 )
             raise ApiError.internal_server_error(detail=str(e))
+
+    @extend_schema(
+        methods=["POST"],
+        request=serializers.AddNewNoteOptionSerializer,
+        responses={status.HTTP_201_CREATED: serializers.NoteSerializer},
+    )
+    @action(detail=True, methods=["get", "post"])
+    def notes(self, request, pk=None):
+        risk_acceptance = self.get_object()
+        if request.method == "POST":
+            new_note = serializers.AddNewNoteOptionSerializer(
+                data=request.data,
+            )
+            if new_note.is_valid():
+                entry = new_note.validated_data["entry"]
+                private = new_note.validated_data.get("private", False)
+                note_type = new_note.validated_data.get("note_type", None)
+            else:
+                return Response(
+                    new_note.errors, status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            notes = risk_acceptance.notes.filter(note_type=note_type).first()
+            if notes and note_type and note_type.is_single:
+                return Response("Only one instance of this note_type allowed on an engagement.", status=status.HTTP_400_BAD_REQUEST)
+
+            author = request.user
+            notes = Notes(
+                entry=entry,
+                author=author,
+                private=private,
+                note_type=note_type,
+            )
+            notes.save()
+            risk_acceptance.notes.add(notes)
+
+            serialized_note = serializers.NoteSerializer(
+                {"author": author, "entry": entry, "private": private},
+            )
+            return Response(
+                serialized_note.data, status=status.HTTP_201_CREATED,
+            )
+        notes = risk_acceptance.notes.all()
+
+        serialized_notes = RiskAcceptanceToNotesSerializer(
+            {"risk_acceptance": risk_acceptance, "notes": notes},
+        )
+        return Response(serialized_notes.data, status=status.HTTP_200_OK)
