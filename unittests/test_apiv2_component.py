@@ -39,8 +39,8 @@ class ComponentApiTest(APITestCase):
         self.assertEqual(response.data, expected)
 
     def test_null_engagement_name_is_returned(self):
-        self.engagement.name = None
-        self.engagement.save(update_fields=["name"])
+        # Bypass the pre-save signal that replaces empty names with the start date.
+        Engagement.objects.filter(pk=self.engagement.pk).update(name=None)
         response = self.client.get(reverse("components-detail", args=[self.component.id]))
         self.assertEqual(response.status_code, 200)
         self.assertIsNone(response.data["engagement_name"])
