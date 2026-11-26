@@ -965,8 +965,8 @@ def bulk_edit_finding(findings, *args, **kwargs):
 
 def get_group_reviewers_for_finding(finding):
     """Get the role and tag name for group reviewers based on finding tags."""
-    role = None
-    tag_name = None
+    role = ""
+    tag_name = ""
 
     for tag in finding.tags.all():
         if tag.name not in settings.DD_REVIEWERS_ROLE_TAG:
