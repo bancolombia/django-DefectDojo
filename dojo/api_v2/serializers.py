@@ -3570,9 +3570,17 @@ class AnnouncementSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(msg)
             raise
 
+class ComponentFilterSerializer(serializers.Serializer):
+    product_id = serializers.IntegerField(min_value=1, required=False)
+    engagement_id = serializers.IntegerField(min_value=1, required=False)
+
+
 class ComponentSerializer(serializers.ModelSerializer):
-    engagement_id = serializers.IntegerField()
+    engagement_id = serializers.PrimaryKeyRelatedField(
+        source="engagement", queryset=Engagement.objects.all(),
+    )
     engagement_name = serializers.CharField(source="engagement.name", read_only=True, allow_null=True)
+    product_id = serializers.IntegerField(source="engagement.product_id", read_only=True)
     product_name = serializers.CharField(source="engagement.product.name", read_only=True)
     product_type_name = serializers.CharField(source="engagement.product.prod_type.name", read_only=True)
 
@@ -3580,43 +3588,39 @@ class ComponentSerializer(serializers.ModelSerializer):
         model = Component
         fields = [
             'id', 'name', 'version', 'date', 'engagement_id',
-            'engagement_name', 'product_name', 'product_type_name',
+            'engagement_name', 'product_id', 'product_name', 'product_type_name',
         ]
 
     def validate(self, data):
-        name = data.get("name")
-        version = data.get("version")
-        engagement_id = data.get("engagement_id")
+        instance = self.instance
+        engagement = data.get("engagement", instance.engagement if instance else None)
+        name = data.get("name", instance.name if instance else "")
+        version = data.get("version", instance.version if instance else "")
 
-        if Component.objects.filter(name=name, version=version, engagement_id=engagement_id).exists():
-            raise ValidationError({
+        if (
+            instance and engagement != instance.engagement
+            and not user_has_permission(self.context["request"].user, engagement, Permissions.Component_Add)
+        ):
+            raise PermissionDenied
+
+        duplicates = Component.objects.filter(name=name, version=version, engagement=engagement)
+        if instance:
+            duplicates = duplicates.exclude(pk=instance.pk)
+        if duplicates.exists():
+            raise serializers.ValidationError({
                 "detail": _("A component with this name, version, and engagement_id already exists.")
             })
 
         return data
 
     def create(self, validated_data):
-        engagement_id = validated_data.pop("engagement_id")
-        engagement = Engagement.objects.get(id=engagement_id)
         try:
-            component = Component.objects.create(engagement=engagement, **validated_data)
+            component = super().create(validated_data)
         except IntegrityError:
             raise serializers.ValidationError(
                 "A component with this name, version, and engagement_id already exists."
             )
         return component
-
-    def update(self, instance, validated_data):
-        engagement_id = validated_data.pop('engagement_id', None)
-        if engagement_id:
-            instance.engagement = Engagement.objects.get(id=engagement_id)
-        
-        instance.name = validated_data.get('name', instance.name)
-        instance.version = validated_data.get('version', instance.version)
-        instance.save()
-        
-        return instance
-
 
 class NotificationWebhooksSerializer(serializers.ModelSerializer):
     class Meta:
