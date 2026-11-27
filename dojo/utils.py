@@ -2,6 +2,7 @@ import binascii
 import calendar as tcalendar
 import hashlib
 import importlib
+import json
 import logging
 import mimetypes
 import os
@@ -2980,7 +2981,7 @@ def validate_type_file(file, allowed_exts):
         if ext not in allowed_exts:
             raise ValidationError("File extension not allowed.")
 
-        allowed_types = ['image/jpg', 'image/png', 'application/pdf']
+        allowed_types = ['image/jpg', 'image/png', 'application/pdf', 'application/json']
         if file.content_type not in allowed_types:
             logger.error("Type of content not allowed")
 
@@ -2992,6 +2993,8 @@ def validate_type_file(file, allowed_exts):
                     file.seek(0)
             elif ext == '.pdf':
                 validate_pdf(file)
+            elif ext == '.json':
+                json.load(file)
             file.seek(0)
         except Exception:
             raise ValidationError("Server error")

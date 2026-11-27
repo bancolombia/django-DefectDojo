@@ -23,3 +23,23 @@
         </div>
     </form>
 {% endblock %}
+
+{% block postscript %}
+    {{ block.super }}
+    <script>
+        $(document).ready(function () {
+            function toggleRetest() {
+                const enabled = $("#id_retest").is(":checked");
+
+                $("#id_flows").closest(".form-group").toggle(enabled);
+                $("#id_flows").prop("disabled", !enabled);
+
+                $("#id_hackers").closest(".form-group").toggle(enabled);
+                $("#id_hackers").prop("disabled", !enabled);
+            }
+
+            $("#id_retest").on("change", toggleRetest);
+            toggleRetest();
+        });
+    </script>
+{% endblock %}

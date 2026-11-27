@@ -2478,8 +2478,28 @@ class ReviewFindingForm(forms.Form):
     proof_file = forms.FileField(
         label="Proof/Evidence",
         required=False,
-        help_text="Attach proof or evidence files for the review request (JPG, PNG, PDF, MP4, WEBM, AVI, MOV, or MKV)",
-        widget=forms.widgets.FileInput(attrs={"accept": ".jpg,.png,.pdf,.mp4,.webm,.avi,.mov,.mkv"}),
+        help_text="Attach proof or evidence files for the review request (JPG, PNG, PDF, MP4, WEBM, AVI, MOV, MKV, or JSON)",
+        widget=forms.widgets.FileInput(attrs={"accept": ".jpg,.png,.pdf,.mp4,.webm,.avi,.mov,.mkv,.json"}),
+    )
+    retest = forms.BooleanField(
+        required=False,
+        initial=False,
+        label="Retest",
+        help_text="Enable retest options.",
+    )
+    flows = forms.ModelMultipleChoiceField(
+        queryset=InputFlow.objects.none(),
+        required=False,
+        label="Input flows",
+        widget=forms.widgets.SelectMultiple(),
+        help_text="Select the input flows for retest.",
+    )
+    hackers = forms.ModelMultipleChoiceField(
+        queryset=Dojo_User.objects.none(),
+        required=False,
+        label="Hackers",
+        widget=forms.widgets.SelectMultiple(),
+        help_text="Select the hackers for retest.",
     )
     allow_all_reviewers = forms.BooleanField(
         disabled=True,
@@ -2498,11 +2518,17 @@ class ReviewFindingForm(forms.Form):
         # Get the list of users
         if finding is not None:
             users, __, __ = helper_f.get_reviewers_for_finding(finding)
+            self.fields["flows"].queryset = InputFlow.objects.filter(
+                engagement=finding.test.engagement
+            ).order_by("flowName")
         else:
             users = get_authorized_users(Permissions.Finding_Edit).filter(
                 is_active=True
             )
         self.fields['findings_review'].queryset = get_authorized_findings(Permissions.Finding_View)
+        self.fields["hackers"].queryset = get_users_for_group(
+            "Reviewers_devsecops_hacker"
+        ).filter(is_active=True)
         # Remove the current user
         if user is not None:
             users = users.exclude(id=user.id)
@@ -2524,12 +2550,15 @@ class ReviewFindingForm(forms.Form):
         if len(cleaned_data.get("reviewers", [])) == 0:
             msg = "Please select at least one user from the reviewers list"
             raise ValidationError(msg)
+        if not cleaned_data.get("retest"):
+            cleaned_data["flows"] = InputFlow.objects.none()
+            cleaned_data["hackers"] = Dojo_User.objects.none()
         return cleaned_data
 
     def clean_proof_file(self):
         file = self.cleaned_data.get("proof_file")
         if file is not None:
-            validate_type_file(file, [".jpg", ".png", ".pdf", ".mp4", ".webm", ".avi", ".mov", ".mkv"])
+            validate_type_file(file, [".jpg", ".png", ".pdf", ".mp4", ".webm", ".avi", ".mov", ".mkv", ".json"])
         return file
 
     class Meta:
