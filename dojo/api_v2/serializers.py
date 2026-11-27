@@ -1721,7 +1721,7 @@ class TestImportSerializer(serializers.ModelSerializer):
         return test_import
 
 
-class RiskAcceptanceSerializer(serializers.ModelSerializer):
+class RiskAcceptanceSerializer(PermissionPayloadMixin, serializers.ModelSerializer):
     path = serializers.SerializerMethodField()
     name = serializers.CharField(required=True)
     long_term_acceptance = serializers.BooleanField(default=False)
@@ -1752,6 +1752,7 @@ class RiskAcceptanceSerializer(serializers.ModelSerializer):
     notes = serializers.PrimaryKeyRelatedField(many=True, queryset=Notes.objects.all(), required=False)
     created = serializers.DateTimeField(read_only=True)
     updated = serializers.DateTimeField(read_only=True)
+    permission_registry = Permissions.get_engagement_permissions()
 
 
     def create(self, validated_data):
@@ -3571,10 +3572,16 @@ class AnnouncementSerializer(serializers.ModelSerializer):
 
 class ComponentSerializer(serializers.ModelSerializer):
     engagement_id = serializers.IntegerField()
+    engagement_name = serializers.CharField(source="engagement.name", read_only=True, allow_null=True)
+    product_name = serializers.CharField(source="engagement.product.name", read_only=True)
+    product_type_name = serializers.CharField(source="engagement.product.prod_type.name", read_only=True)
 
     class Meta:
         model = Component
-        fields = ['id', 'name', 'version', 'date', 'engagement_id']
+        fields = [
+            'id', 'name', 'version', 'date', 'engagement_id',
+            'engagement_name', 'product_name', 'product_type_name',
+        ]
 
     def validate(self, data):
         name = data.get("name")

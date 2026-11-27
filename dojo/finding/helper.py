@@ -965,8 +965,8 @@ def bulk_edit_finding(findings, *args, **kwargs):
 
 def get_group_reviewers_for_finding(finding):
     """Get the role and tag name for group reviewers based on finding tags."""
-    role = None
-    tag_name = None
+    role = ""
+    tag_name = ""
 
     for tag in finding.tags.all():
         if tag.name not in settings.DD_REVIEWERS_ROLE_TAG:
@@ -974,7 +974,9 @@ def get_group_reviewers_for_finding(finding):
 
         reviewer_role_tag = settings.DD_REVIEWERS_ROLE_TAG[tag.name]
         role = Roles(int(reviewer_role_tag)) if reviewer_role_tag != "-1" else None
-        tag_name = tag.name
+        if role:
+            role = role.name
+            tag_name = tag.name
         break
     return role, tag_name
 
@@ -989,7 +991,7 @@ def get_reviewers_for_finding(finding):
             Permissions.Finding_Code_Review,
             role,
         )
-        group_users = get_users_for_group(f"Reviewers_{role.name}")
+        group_users = get_users_for_group(f"Reviewers_{role}")
         users = permission_users | group_users
     elif tag_name:
         users = get_users_for_group(f"Reviewers_{tag_name}")

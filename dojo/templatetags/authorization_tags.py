@@ -82,7 +82,7 @@ def group_has_configuration_permission(group, codename):
 def user_can_clear_peer_review(finding, user):
     finding_under_review = finding.under_review
     role, tag_name = get_group_reviewers_for_finding(finding)
-    groups = [f"Reviewers_{role.name}", f"Reviewers_{tag_name}"]
+    groups = [f"Reviewers_{role}", f"Reviewers_{tag_name}"]
     users = get_users_for_group(groups[0]) | get_users_for_group(groups[1])
     user_requesting_review = False
     if user == finding.review_requested_by or user in users:
