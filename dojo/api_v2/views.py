@@ -1901,6 +1901,29 @@ class ComponentViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         serializer.save()
 
+    @extend_schema(
+        parameters=[serializers.ComponentFilterSerializer],
+        responses={status.HTTP_200_OK: serializers.ComponentSerializer(many=True)},
+    )
+    @action(detail=False, methods=["get"], url_path="filter")
+    def filter_components(self, request):
+        """List authorized components, optionally filtering by product and engagement."""
+        filters = serializers.ComponentFilterSerializer(data=request.query_params)
+        filters.is_valid(raise_exception=True)
+
+        queryset = self.filter_queryset(self.get_queryset()).filter(
+            engagement__in=get_authorized_engagements(Permissions.Component_View),
+        )
+        if product_id := filters.validated_data.get("product_id"):
+            queryset = queryset.filter(engagement__product_id=product_id)
+        if engagement_id := filters.validated_data.get("engagement_id"):
+            queryset = queryset.filter(engagement_id=engagement_id)
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            return self.get_paginated_response(self.get_serializer(page, many=True).data)
+        return Response(self.get_serializer(queryset, many=True).data)
+
 
 # Authorization: configuration
 class JiraInstanceViewSet(
